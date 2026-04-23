@@ -17,6 +17,8 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
+import javax.swing.KeyStroke;
+import javax.swing.AbstractAction;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
@@ -58,6 +60,7 @@ public class ReminderTabPanel extends JPanel {
 		super(new BorderLayout());
 		this.modeController = modeController;
 		reminderList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		installArrowKeyConsumption();
 		reminderList.setCellRenderer(new DefaultListCellRenderer() {
 			private static final long serialVersionUID = 1L;
 
@@ -146,6 +149,43 @@ public class ReminderTabPanel extends JPanel {
 		}
 		Controller.getCurrentController().getSelection().selectAsTheOnlyOneSelected(node);
 		Controller.getCurrentModeController().getMapController().centerNode(node);
+		reminderList.requestFocusInWindow();
+	}
+
+	private void installArrowKeyConsumption() {
+		reminderList.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_UP, 0), "reminder.up");
+		reminderList.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_DOWN, 0), "reminder.down");
+		reminderList.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_LEFT, 0), "reminder.left");
+		reminderList.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_RIGHT, 0), "reminder.right");
+		reminderList.getActionMap().put("reminder.up", new AbstractAction() {
+			private static final long serialVersionUID = 1L;
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				int index = reminderList.getSelectedIndex();
+				if (index > 0) {
+					reminderList.setSelectedIndex(index - 1);
+					reminderList.ensureIndexIsVisible(index - 1);
+				}
+			}
+		});
+		reminderList.getActionMap().put("reminder.down", new AbstractAction() {
+			private static final long serialVersionUID = 1L;
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				int index = reminderList.getSelectedIndex();
+				int max = items.getSize() - 1;
+				if (index < max) {
+					reminderList.setSelectedIndex(index + 1);
+					reminderList.ensureIndexIsVisible(index + 1);
+				}
+			}
+		});
+		AbstractAction keepFocusAction = new AbstractAction() {
+			private static final long serialVersionUID = 1L;
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				// consume left/right to avoid map navigation
+			}
+		};
+		reminderList.getActionMap().put("reminder.left", keepFocusAction);
+		reminderList.getActionMap().put("reminder.right", keepFocusAction);
 	}
 
 	private void reloadReminders() {
