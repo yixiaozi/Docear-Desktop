@@ -122,6 +122,7 @@ import org.freeplane.view.swing.features.filepreview.ViewerController;
 import org.freeplane.view.swing.features.nodehistory.NodeHistory;
 import org.freeplane.view.swing.features.progress.mindmapmode.ProgressFactory;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
+import org.freeplane.view.swing.features.time.mindmapmode.ReminderTabPanel;
 import org.freeplane.view.swing.map.ShowNotesInMapAction;
 import org.freeplane.view.swing.map.attribute.AttributePanelManager;
 import org.freeplane.view.swing.map.attribute.EditAttributesAction;
@@ -160,6 +161,7 @@ public class MModeControllerFactory {
 		    JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 		UITools.setScrollbarIncrement(styleScrollPane);
 		final JComponent tabs = (JComponent) modeController.getUserInputListenerFactory().getToolBar("/format").getComponent(1);
+		tabs.add("\u63d0\u9192", new ReminderTabPanel(modeController));
 		tabs.add(TextUtils.getText("format_panel"), styleScrollPane);
 		new AttributePanelManager(modeController);
 		new HierarchicalIcons();
