@@ -31,6 +31,7 @@ import javax.swing.AbstractAction;
 import javax.swing.KeyStroke;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.event.TreeModelEvent;
 import javax.swing.event.TreeModelListener;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
@@ -598,9 +599,119 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 
 	public class TreeModelProxy implements TreeModel {
 		private final WorkspaceModel model;
+		private final List<TreeModelListener> proxyListeners;
+		/**
+		 * Receives low-level events from {@link #model} and re-dispatches them to
+		 * {@link JTree} listeners. When a search filter is active, the proxy exposes a
+		 * <em>different</em> child count/order than the source model, so raw
+		 * {@code treeNodesInserted/Removed/Changed} from the model carry indices for the
+		 * <em>unfiltered</em> list and will corrupt the tree UI (blank lines, extra rows).
+		 * In that case we translate to {@code treeStructureChanged} for the affected path.
+		 */
+		private final TreeModelListener modelRelay;
 
 		public TreeModelProxy(WorkspaceModel model) {
 			this.model = model;
+			this.proxyListeners = new ArrayList<TreeModelListener>();
+			this.modelRelay = new TreeModelListener() {
+				@Override
+				public void treeNodesChanged(TreeModelEvent e) {
+					relayEvent(e, 0);
+				}
+				@Override
+				public void treeNodesInserted(TreeModelEvent e) {
+					relayEvent(e, 1);
+				}
+				@Override
+				public void treeNodesRemoved(TreeModelEvent e) {
+					relayEvent(e, 2);
+				}
+				@Override
+				public void treeStructureChanged(TreeModelEvent e) {
+					relayEvent(e, 3);
+				}
+			};
+		}
+
+		private void relayEvent(TreeModelEvent e, int eventKind) {
+			List<TreeModelListener> copy;
+			synchronized (proxyListeners) {
+				copy = new ArrayList<TreeModelListener>(proxyListeners);
+			}
+			if (copy.isEmpty()) {
+				return;
+			}
+			if (TreeView.this.hasSearchFilter()) {
+				clearFilterCaches();
+				TreePath path = eventPathToRefresh(e);
+				if (path == null) {
+					return;
+				}
+				TreeModelEvent refresh = new TreeModelEvent(this, path);
+				for (TreeModelListener l : copy) {
+					l.treeStructureChanged(refresh);
+				}
+				runAfterModelChangeWhileFiltering();
+			} else {
+				TreeModelEvent out = withProxySource(e);
+				for (TreeModelListener l : copy) {
+					switch (eventKind) {
+					case 0: l.treeNodesChanged(out); break;
+					case 1: l.treeNodesInserted(out); break;
+					case 2: l.treeNodesRemoved(out); break;
+					case 3: l.treeStructureChanged(out); break;
+					}
+				}
+			}
+		}
+
+		private void runAfterModelChangeWhileFiltering() {
+			SwingUtilities.invokeLater(new Runnable() {
+				@Override
+				public void run() {
+					if (!TreeView.this.hasSearchFilter()) {
+						return;
+					}
+					clearFilterCaches();
+					TreeView.this.expandVisiblePaths();
+					TreeView.this.mTree.revalidate();
+					TreeView.this.mTree.repaint();
+				}
+			});
+		}
+
+		private TreePath eventPathToRefresh(TreeModelEvent e) {
+			TreePath p = e.getTreePath();
+			if (p == null) {
+				if (e.getPath() != null) {
+					p = new TreePath(e.getPath());
+				}
+			}
+			if (p == null) {
+				Object r = getRoot();
+				if (r != null) {
+					p = new TreePath(r);
+				}
+			}
+			return p;
+		}
+
+		/**
+		 * JTree and default handlers often assume {@code TreeModelEvent#getSource()} is
+		 * the same instance as the tree's {@code TreeModel} (this proxy), not the backing
+		 * {@link WorkspaceModel}.
+		 */
+		private TreeModelEvent withProxySource(TreeModelEvent e) {
+			TreePath path = e.getTreePath();
+			if (path == null) {
+				if (e.getPath() != null) {
+					path = new TreePath(e.getPath());
+				}
+			}
+			if (e.getChildIndices() == null && e.getChildren() == null) {
+				return new TreeModelEvent(this, path);
+			}
+			return new TreeModelEvent(this, path, e.getChildIndices(), e.getChildren());
 		}
 
 		public Object getRoot() {
@@ -664,11 +775,23 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		}
 
 		public void addTreeModelListener(TreeModelListener l) {
-			this.model.addTreeModelListener(l);
+			synchronized (proxyListeners) {
+				if (proxyListeners.isEmpty()) {
+					this.model.addTreeModelListener(modelRelay);
+				}
+				if (!proxyListeners.contains(l)) {
+					proxyListeners.add(l);
+				}
+			}
 		}
 
 		public void removeTreeModelListener(TreeModelListener l) {
-			this.model.removeTreeModelListener(l);
+			synchronized (proxyListeners) {
+				proxyListeners.remove(l);
+				if (proxyListeners.isEmpty()) {
+					this.model.removeTreeModelListener(modelRelay);
+				}
+			}
 		}
 
 	}

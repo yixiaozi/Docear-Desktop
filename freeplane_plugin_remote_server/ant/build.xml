@@ -54,6 +54,7 @@
 
 	<target name="resolve" description="retrieve dependencies with ivy" depends="install-ivy">
 		<mkdir dir="report" />		    
+		<ivy:settings file="${basedir}/../freeplane_plugin_remote_shared/ivy/ivysettings.xml" />
 		<ivy:retrieve />
 		<!--<ivy:report todir="report" />-->
 	</target>
