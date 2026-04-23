@@ -4,6 +4,8 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Window;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.URL;
@@ -31,6 +33,7 @@ import org.freeplane.features.mode.ModeController;
 import org.pushingpixels.flamingo.api.common.icon.ImageWrapperResizableIcon;
 import org.pushingpixels.flamingo.api.common.icon.ResizableIcon;
 import org.pushingpixels.flamingo.api.ribbon.JRibbon;
+import org.pushingpixels.flamingo.api.ribbon.RibbonTask;
 import org.pushingpixels.flamingo.internal.ui.ribbon.appmenu.JRibbonApplicationMenuButton;
 
 
@@ -51,6 +54,7 @@ public class RibbonBuilder {
 	private RibbonMapChangeAdapter changeAdapter;
 
 	private RibbonActionEventHandler raeHandler;
+	private boolean hoverTabSwitchInstalled = false;
 	
 	public RibbonBuilder(ModeController mode, JRibbon ribbon) {
 		structure = new StructureTree();
@@ -136,9 +140,55 @@ public class RibbonBuilder {
 				Thread.currentThread().setContextClassLoader(contextClassLoader);
 			}
 		}
+		installHoverTabSwitch();
 		f.setMinimumSize(new Dimension(640,240));
 		f.pack();
 		
+	}
+
+	private void installHoverTabSwitch() {
+		if (hoverTabSwitchInstalled) {
+			return;
+		}
+		ribbon.addMouseMotionListener(new MouseMotionAdapter() {
+			@Override
+			public void mouseMoved(MouseEvent e) {
+				final Component c = SwingUtilities.getDeepestComponentAt(ribbon, e.getX(), e.getY());
+				if (c == null) {
+					return;
+				}
+				final String className = c.getClass().getName();
+				if (!className.contains("RibbonTaskToggleButton")) {
+					return;
+				}
+				final String taskTitle = getTaskTitleFromComponent(c);
+				if (taskTitle == null) {
+					return;
+				}
+				selectTaskByTitle(taskTitle);
+			}
+		});
+		hoverTabSwitchInstalled = true;
+	}
+
+	private String getTaskTitleFromComponent(Component c) {
+		try {
+			return String.valueOf(c.getClass().getMethod("getText").invoke(c));
+		}
+		catch (Exception ignore) {
+			return null;
+		}
+	}
+
+	private void selectTaskByTitle(String taskTitle) {
+		final int taskCount = ribbon.getTaskCount();
+		for (int i = 0; i < taskCount; i++) {
+			final RibbonTask task = ribbon.getTask(i);
+			if (task != null && taskTitle.equals(task.getTitle())) {
+				ribbon.setSelectedTask(task);
+				return;
+			}
+		}
 	}
 	
 	public boolean isEnabled() {

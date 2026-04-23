@@ -24,6 +24,9 @@ public class RootContributor extends ARibbonContributor {
 	public void contribute(RibbonBuildContext context, ARibbonContributor parent) {
 		ribbon.removeAllTaskbarComponents();
 		ribbon.removeAllTasks();
+		ribbon.setApplicationMenu(null);
+		tasks.clear();
+		taskbar.clear();
 		context.processChildren(context.getCurrentPath(), this);
 		
 		Collections.sort(tasks, comparator);

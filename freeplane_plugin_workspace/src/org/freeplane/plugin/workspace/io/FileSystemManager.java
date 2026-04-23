@@ -519,6 +519,9 @@ public class FileSystemManager {
 		}
 
 		public boolean accept(File pathname) {
+			if (filtering && isHiddenPath(pathname)) {
+				return false;
+			}
 			if(filtering && pathname.getName().startsWith(".") && !pathname.getName().equals("."+ResourceController.getResourceController().getProperty("workspace.profile"))) {
 				return false;
 			}
@@ -541,6 +544,9 @@ public class FileSystemManager {
 		}
 
 		public boolean accept(File pathname) {
+			if (filtering && isHiddenPath(pathname)) {
+				return false;
+			}
 			if(filtering && pathname.getName().startsWith(".")) {
 				return false;
 			}
@@ -550,6 +556,15 @@ public class FileSystemManager {
 				}
 				return this.extraFilter.accept(pathname);
 			}
+			return false;
+		}
+	}
+
+	private boolean isHiddenPath(final File pathname) {
+		try {
+			return pathname != null && pathname.isHidden();
+		}
+		catch (SecurityException e) {
 			return false;
 		}
 	}

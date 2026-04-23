@@ -29,6 +29,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import javax.swing.JOptionPane;
+import javax.swing.UIManager;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.ShowSelectionAsRectangleAction;
@@ -133,6 +134,7 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 			final String lookandfeel = System.getProperty("lookandfeel", applicationResourceController
 			    .getProperty("lookandfeel"));
 			FrameController.setLookAndFeel(lookandfeel);
+			UIManager.put("RibbonUI", "org.freeplane.core.ui.ribbon.ZeroTaskbarRibbonUI");
 			final JRibbonFrame frame = new JRibbonFrame("Freeplane");
 			frame.setName(UITools.MAIN_FREEPLANE_FRAME);
 			splash = new FreeplaneSplashModern(frame);
