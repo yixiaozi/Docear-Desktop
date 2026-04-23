@@ -92,7 +92,9 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 	private final Map<AWorkspaceTreeNode, Boolean> visibleNodeCache = new HashMap<AWorkspaceTreeNode, Boolean>();
 	private final Map<AWorkspaceTreeNode, List<AWorkspaceTreeNode>> visibleChildrenCache = new HashMap<AWorkspaceTreeNode, List<AWorkspaceTreeNode>>();
 	private boolean allFoldersPreloaded = false;
-	
+	/** Expanded paths captured when entering search; restored when search is cleared so auto-expanded matches do not stick. */
+	private List<TreePath> expansionSnapshotBeforeSearch;
+
 	public TreeView() {
 		this.setLayout(new BorderLayout());
 
@@ -200,7 +202,11 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 
 	private void applySearchFilter(boolean forceFullPreload) {
 		final String raw = m_display != null ? m_display.getText() : "";
+		final boolean hadSearchBefore = hasSearchFilter();
 		final String normalized = normalize(raw);
+		if (!hadSearchBefore && normalized.length() > 0) {
+			expansionSnapshotBeforeSearch = captureExpandedPaths();
+		}
 		searchQuery = normalized;
 		updateSearchHighlight();
 		if (sourceModel != null) {
@@ -223,7 +229,13 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 			expandVisiblePaths();
 		}
 		else {
-			restoreExpandedState();
+			if (expansionSnapshotBeforeSearch != null) {
+				restoreExpansionSnapshot();
+				expansionSnapshotBeforeSearch = null;
+			}
+			else {
+				restoreExpandedState();
+			}
 		}
 		mTree.revalidate();
 		mTree.repaint();
@@ -294,6 +306,44 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 	private void collapseAllRows() {
 		for (int row = mTree.getRowCount() - 1; row >= 0; row--) {
 			mTree.collapseRow(row);
+		}
+	}
+
+	private List<TreePath> captureExpandedPaths() {
+		List<TreePath> list = new ArrayList<TreePath>();
+		TreeModel tm = mTree.getModel();
+		if (tm == null) {
+			return list;
+		}
+		Object root = tm.getRoot();
+		if (root == null) {
+			return list;
+		}
+		Enumeration<TreePath> desc = mTree.getExpandedDescendants(new TreePath(root));
+		if (desc != null) {
+			while (desc.hasMoreElements()) {
+				list.add(desc.nextElement());
+			}
+		}
+		return list;
+	}
+
+	private void restoreExpansionSnapshot() {
+		List<TreePath> paths = expansionSnapshotBeforeSearch;
+		if (paths == null || paths.isEmpty()) {
+			restoreExpandedState();
+			return;
+		}
+		try {
+			for (TreePath tp : paths) {
+				if (tp != null) {
+					mTree.expandPath(tp);
+				}
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn(e);
+			restoreExpandedState();
 		}
 	}
 
