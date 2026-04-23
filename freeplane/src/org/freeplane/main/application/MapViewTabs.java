@@ -135,8 +135,7 @@ class MapViewTabs implements IMapViewChangeListener {
 			}
 		}
 		mTabbedPaneMapViews.add(pNewMap);
-		final String title1 = pNewMap.getName();
-		final String title = title1;
+		final String title = formatTabTitle(pNewMap.getName());
 		mTabbedPane.addTab(title, new JPanel());
 		mTabbedPane.setSelectedIndex(mTabbedPane.getTabCount() - 1);
 		setTabsVisible();
@@ -162,11 +161,21 @@ class MapViewTabs implements IMapViewChangeListener {
 				final Component pMapView = (Component) evt.getSource();
 				for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 					if (mTabbedPaneMapViews.get(i) == pMapView) {
-						mTabbedPane.setTitleAt(i, pMapView.getName());
+						mTabbedPane.setTitleAt(i, formatTabTitle(pMapView.getName()));
 					}
 				}
 			}
 		});
+	}
+
+	private String formatTabTitle(String title) {
+		if (title == null) {
+			return "";
+		}
+		if (title.toLowerCase().endsWith(".mm")) {
+			return title.substring(0, title.length() - 3);
+		}
+		return title;
 	}
 
 	public void beforeViewChange(final Component pOldMapView, final Component pNewMapView) {

@@ -124,7 +124,7 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		mTree.addKeyListener(getInputController());
 		mTree.setRowHeight(18);
 		mTree.setLargeModel(false);
-		mTree.setShowsRootHandles(false);
+		mTree.setShowsRootHandles(true);
 		mTree.setRootVisible(false);
 		mTree.setEditable(true);
 		
@@ -399,6 +399,11 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		if (!hasSearchFilter()) {
 			return getRawChildren(parent);
 		}
+		if (parent instanceof AFolderNode && matchesNode(parent)) {
+			// If a folder itself matches, show its direct children (one level).
+			ensureFolderChildrenLoaded(parent);
+			return getRawChildren(parent);
+		}
 		List<AWorkspaceTreeNode> cached = visibleChildrenCache.get(parent);
 		if (cached != null) {
 			return cached;
@@ -412,6 +417,23 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		}
 		visibleChildrenCache.put(parent, visibleChildren);
 		return visibleChildren;
+	}
+
+	private void ensureFolderChildrenLoaded(AWorkspaceTreeNode node) {
+		if (node == null) {
+			return;
+		}
+		try {
+			if (node.getChildCount() > 0) {
+				return;
+			}
+			if (node instanceof FolderFileNode || node instanceof FolderLinkNode) {
+				node.refresh();
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn(e);
+		}
 	}
 
 	private List<AWorkspaceTreeNode> getRawChildren(AWorkspaceTreeNode parent) {
