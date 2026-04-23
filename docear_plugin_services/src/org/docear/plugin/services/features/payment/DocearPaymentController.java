@@ -20,8 +20,8 @@ public class DocearPaymentController extends ADocearServiceFeature {
 	
 	@Override
 	protected void installDefaults(ModeController modeController) {
-		payPalBanner = new PayPalBanner();
-		payPalBanner.init(modeController);
+		// Disable donation banner in customized build.
+		payPalBanner = null;
 		
 	}
 

@@ -110,7 +110,10 @@ public class WorkspaceDocearServiceConnectionBar extends JToolBar {
 		connectionState = state;
 		this.removeAll();
 		if(state == CONNECTION_STATE.NO_CREDENTIALS) {
-			this.add(lblNoCredentials);
+			// Hide registration prompt in customized build.
+			revalidate();
+			repaint();
+			return;
 		}
 		else {
 			add(button);

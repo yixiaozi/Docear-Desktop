@@ -744,6 +744,19 @@ public class MMapController extends MapController {
 	 * @deprecated -- use MMapIO*/
 	@Deprecated
     public boolean restoreCurrentMap() throws FileNotFoundException, IOException, URISyntaxException, XMLException {
+    	return restoreCurrentMap(null);
+	}
+
+	public boolean restoreCurrentMapPreservingSelection() throws FileNotFoundException, IOException, URISyntaxException, XMLException {
+		String selectedNodeId = null;
+		final NodeModel selectedNode = getSelectedNode();
+		if (selectedNode != null) {
+			selectedNodeId = selectedNode.createID();
+		}
+		return restoreCurrentMap(selectedNodeId);
+	}
+
+	private boolean restoreCurrentMap(final String selectedNodeId) throws FileNotFoundException, IOException, URISyntaxException, XMLException {
 	    final Controller controller = Controller.getCurrentController();
         final MapModel map = controller.getMap();
         final URL url = map.getURL();
@@ -762,13 +775,30 @@ public class MMapController extends MapController {
 			return false;
 		Controller.getCurrentController().getViewController().setWaitingCursor(true);
 		try{
-			final MapModel newModel = new MMapModel();
+			final MMapModel newModel = new MMapModel();
 			((MFileManager)MFileManager.getController()).loadAndLock(alternativeURL, newModel);
 			newModel.setURL(url);
 			newModel.setSaved(alternativeURL.equals(url));
+			final File currentFile = newModel.getFile();
+			if (currentFile != null && currentFile.exists()) {
+				newModel.setKnownFileTimestamp(currentFile.lastModified());
+			}
+			newModel.setExternalModificationDetected(false);
 			fireMapCreated(newModel);
 			controller.close(true);
+			final File reloadedFile = newModel.getFile();
+			if (reloadedFile != null && reloadedFile.canWrite()) {
+				// The old model may still hold the lock during reload; clear this stale read-only state.
+				newModel.setReadOnly(false);
+			}
 			newMapView(newModel);
+			newModel.scheduleTimerForAutomaticSaving();
+			if (selectedNodeId != null) {
+				final NodeModel selectedNode = newModel.getNodeForID(selectedNodeId);
+				if (selectedNode != null) {
+					select(selectedNode);
+				}
+			}
 			return true;
 		}
 		finally {

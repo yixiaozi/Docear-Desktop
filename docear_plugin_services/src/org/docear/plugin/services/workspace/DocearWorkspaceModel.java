@@ -6,7 +6,7 @@ import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 
 public class DocearWorkspaceModel extends WorkspaceModel {
 
-	private static final int XTRA_NODES = 3;
+	private static final int XTRA_NODES = 0;
 
 	public void removeProject(AWorkspaceProject project) {
 		if(project == null) {

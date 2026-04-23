@@ -13,7 +13,13 @@ public class ProjectRootCreator extends AWorkspaceNodeCreator {
 	}
 
 	public AWorkspaceTreeNode getNode(XMLElement data) {		
-		ProjectRootNode node = new ProjectRootNode();
+		ProjectRootNode node;
+		try {
+			node = (ProjectRootNode) Class.forName("org.docear.plugin.core.workspace.node.DocearProjectRootNode").getDeclaredConstructor().newInstance();
+		}
+		catch (Throwable t) {
+			node = new ProjectRootNode();
+		}
 		String name = data.getAttribute("name", "project");
 		String id = data.getAttribute("id", null);
 		String version = data.getAttribute("version", "freeplane 1.0");

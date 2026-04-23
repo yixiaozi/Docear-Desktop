@@ -4,7 +4,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.text.Collator;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -20,6 +25,7 @@ import org.docear.plugin.core.workspace.creator.LinkTypeLiteratureAnnotationsCre
 import org.docear.plugin.core.workspace.creator.LinkTypeMyPublicationsCreator;
 import org.docear.plugin.core.workspace.creator.LinkTypeReferencesCreator;
 import org.docear.plugin.core.workspace.model.DocearWorkspaceProject;
+import org.docear.plugin.core.workspace.node.DocearProjectRootNode;
 import org.docear.plugin.core.workspace.node.FolderTypeLibraryNode;
 import org.docear.plugin.core.workspace.node.FolderTypeLiteratureRepositoryNode;
 import org.docear.plugin.core.workspace.node.LinkTypeIncomingNode;
@@ -43,6 +49,7 @@ import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 
 public class DocearProjectLoader extends ProjectLoader {	
+	private static final String MY_FILES_LABEL = "\u6211\u7684\u6587\u4ef6";
 	private FolderTypeLibraryCreator folderTypeLibraryCreator;
 	private FolderTypeLiteratureRepositoryCreator folderTypeLiteratureRepositoryCreator;
 	private FolderTypeLiteratureRepositoryPathCreator folderTypeLiteratureRepositoryPathCreator;
@@ -134,12 +141,14 @@ public class DocearProjectLoader extends ProjectLoader {
 			if(projectSettings.exists()) {
 				getDefaultResultProcessor().setProject(project);
 				load(projectSettings.toURI());
+				removeDefaultProjectNodes((DocearWorkspaceProject) project);
 				project.setLoaded();
 				return LOAD_RETURN_TYPE.EXISTING_PROJECT;
 			}
 			else {
 				createDefaultProject((DocearWorkspaceProject)project);
 				((ProjectRootNode)project.getModel().getRoot()).setVersion(DocearWorkspaceProject.CURRENT_PROJECT_VERSION.getVersionString());
+				removeDefaultProjectNodes((DocearWorkspaceProject) project);
 				project.setLoaded();
 				return LOAD_RETURN_TYPE.NEW_PROJECT;
 			}
@@ -149,6 +158,121 @@ public class DocearProjectLoader extends ProjectLoader {
 		}
 		finally {
 			LogUtils.info("project "+project.getProjectName()+" loaded in: "+(System.currentTimeMillis()-time));
+		}
+	}
+
+	private void removeDefaultProjectNodes(DocearWorkspaceProject project) {
+		if (project == null || project.getModel() == null || project.getModel().getRoot() == null) {
+			return;
+		}
+		ProjectRootNode root = (ProjectRootNode) project.getModel().getRoot();
+		List<AWorkspaceTreeNode> toRemove = new ArrayList<AWorkspaceTreeNode>();
+		String draftsLabel = TextUtils.getText("org.freeplane.plugin.workspace.nodes.folderlinknode.drafts.label", "");
+		for (int i = 0; i < root.getChildCount(); i++) {
+			AWorkspaceTreeNode child = root.getChildAt(i);
+			if (child instanceof FolderTypeLibraryNode
+					|| child instanceof FolderTypeLiteratureRepositoryNode
+					|| child instanceof LinkTypeReferencesNode) {
+				toRemove.add(child);
+				continue;
+			}
+			if (child instanceof FolderLinkNode && draftsLabel.equals(child.getName())) {
+				toRemove.add(child);
+			}
+		}
+		for (AWorkspaceTreeNode node : toRemove) {
+			try {
+				project.getModel().removeNodeFromParent(node);
+			}
+			catch (Exception e) {
+				LogUtils.warn("Could not remove default node " + node + ": " + e.getMessage());
+			}
+		}
+		ensureMyFilesNode(project, root);
+		sortProjectRootNodes(project, root);
+	}
+
+	private void ensureMyFilesNode(DocearWorkspaceProject project, ProjectRootNode root) {
+		List<FolderTypeMyFilesNode> myFilesNodes = new ArrayList<FolderTypeMyFilesNode>();
+		for (int i = 0; i < root.getChildCount(); i++) {
+			if (root.getChildAt(i) instanceof FolderTypeMyFilesNode) {
+				FolderTypeMyFilesNode node = (FolderTypeMyFilesNode) root.getChildAt(i);
+				node.setName(MY_FILES_LABEL);
+				myFilesNodes.add(node);
+			}
+		}
+		if (myFilesNodes.size() > 1) {
+			for (int i = 1; i < myFilesNodes.size(); i++) {
+				try {
+					project.getModel().removeNodeFromParent(myFilesNodes.get(i));
+				}
+				catch (Exception e) {
+					LogUtils.warn("Could not remove duplicate My files node: " + e.getMessage());
+				}
+			}
+		}
+		if (!myFilesNodes.isEmpty()) {
+			return;
+		}
+		try {
+			root.initiateMyFile(project);
+			for (int i = 0; i < root.getChildCount(); i++) {
+				if (root.getChildAt(i) instanceof FolderTypeMyFilesNode) {
+					root.getChildAt(i).setName(MY_FILES_LABEL);
+					break;
+				}
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("Could not create My files node: " + e.getMessage());
+		}
+	}
+
+	private void sortProjectRootNodes(DocearWorkspaceProject project, ProjectRootNode root) {
+		FolderTypeMyFilesNode myFilesNode = null;
+		List<AWorkspaceTreeNode> others = new ArrayList<AWorkspaceTreeNode>();
+		for (int i = 0; i < root.getChildCount(); i++) {
+			AWorkspaceTreeNode child = root.getChildAt(i);
+			if (child instanceof FolderTypeMyFilesNode) {
+				if (myFilesNode == null) {
+					myFilesNode = (FolderTypeMyFilesNode) child;
+				}
+			}
+			else {
+				others.add(child);
+			}
+		}
+		final Collator collator = Collator.getInstance(Locale.getDefault());
+		Collections.sort(others, new Comparator<AWorkspaceTreeNode>() {
+			public int compare(AWorkspaceTreeNode o1, AWorkspaceTreeNode o2) {
+				String n1 = o1 == null || o1.getName() == null ? "" : o1.getName();
+				String n2 = o2 == null || o2.getName() == null ? "" : o2.getName();
+				return collator.compare(n1, n2);
+			}
+		});
+
+		List<AWorkspaceTreeNode> ordered = new ArrayList<AWorkspaceTreeNode>();
+		if (myFilesNode != null) {
+			ordered.add(myFilesNode);
+		}
+		ordered.addAll(others);
+
+		for (AWorkspaceTreeNode node : ordered) {
+			try {
+				project.getModel().cutNodeFromParent(node);
+			}
+			catch (Exception e) {
+				LogUtils.warn("Could not detach node for sorting: " + e.getMessage());
+			}
+		}
+		for (int i = 0; i < ordered.size(); i++) {
+			AWorkspaceTreeNode node = ordered.get(i);
+			try {
+				project.getModel().insertNodeTo(node, root, i, false);
+			}
+			catch (Exception e) {
+				LogUtils.warn("Could not reinsert sorted node: " + e.getMessage());
+			}
 		}
 	}
 	
@@ -165,7 +289,7 @@ public class DocearProjectLoader extends ProjectLoader {
 			home.mkdirs();
 		}
 		DocearProjectSettings settings = (DocearProjectSettings) project.getExtensions(DocearProjectSettings.class);
-		ProjectRootNode root = new ProjectRootNode();
+		DocearProjectRootNode root = new DocearProjectRootNode();
 		root.setProjectID(project.getProjectID());				
 		root.setModel(project.getModel());
 		root.setName(home.getName());

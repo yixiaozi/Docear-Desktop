@@ -440,14 +440,25 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 		final File[] revisions = findFileRevisions(file, MFileManager.backupDir(file), mode);
 		if(revisions.length == 0 && mode == AlternativeFileMode.AUTOSAVE)
 			return file;
-		final FileRevisionsDialog newerFileRevisionsFoundDialog = new FileRevisionsDialog(file, revisions, mode);
-		final File selectedFile = newerFileRevisionsFoundDialog.getSelectedFile();
+		final File selectedFile = getNewestRevision(file, revisions);
 		if(file.equals(selectedFile)){
 			boolean success = file.setLastModified(System.currentTimeMillis());
 			if (!success)
 				LogUtils.warn("Unable to set the last modification time for " + file);
 		}
 		return selectedFile;
+	}
+
+	private File getNewestRevision(final File currentFile, final File[] revisions) {
+		File newest = currentFile;
+		long newestTime = currentFile.lastModified();
+		for (File revision : revisions) {
+			if (revision != null && revision.exists() && revision.lastModified() > newestTime) {
+				newest = revision;
+				newestTime = revision.lastModified();
+			}
+		}
+		return newest;
 	}
 
 	/**@deprecated -- use MMapIO*/
@@ -790,6 +801,10 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 				map.setSaved(true);
 			}
 			writeToFile(map, file);
+			if (!isInternal && file != null && file.exists()) {
+				map.setKnownFileTimestamp(file.lastModified());
+				map.setExternalModificationDetected(false);
+			}
 			map.scheduleTimerForAutomaticSaving();
 			return true;
 		}
@@ -859,6 +874,9 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 		try {
 			final URL url = Compat.fileToUrl(file);
 			setURL(map, url);
+			if (map instanceof MMapModel && file != null && file.exists()) {
+				((MMapModel) map).setKnownFileTimestamp(file.lastModified());
+			}
 		}
 		catch (final MalformedURLException e) {
 			LogUtils.severe(e);

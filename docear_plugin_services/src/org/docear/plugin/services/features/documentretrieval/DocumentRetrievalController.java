@@ -21,14 +21,11 @@ import org.docear.plugin.core.util.CoreUtils;
 import org.docear.plugin.services.ADocearServiceFeature;
 import org.docear.plugin.services.ServiceController;
 import org.docear.plugin.services.features.documentretrieval.documentsearch.view.DocumentSearchView;
-import org.docear.plugin.services.features.documentretrieval.documentsearch.workspace.ShowDocumentSearchNode;
 import org.docear.plugin.services.features.documentretrieval.model.DocumentEntries;
 import org.docear.plugin.services.features.documentretrieval.model.DocumentModelNode;
 import org.docear.plugin.services.features.documentretrieval.model.DocumentsModel;
 import org.docear.plugin.services.features.documentretrieval.recommendations.view.RecommendationsView;
-import org.docear.plugin.services.features.documentretrieval.recommendations.workspace.ShowRecommendationsNode;
 import org.docear.plugin.services.features.documentretrieval.view.DocumentView;
-import org.docear.plugin.services.features.documentretrieval.workspace.DownloadFolderNode;
 import org.docear.plugin.services.features.io.DocearConnectionProvider;
 import org.docear.plugin.services.features.io.DocearServiceResponse;
 import org.docear.plugin.services.features.io.DocearServiceResponse.Status;
@@ -50,10 +47,6 @@ import org.freeplane.n3.nanoxml.IXMLReader;
 import org.freeplane.n3.nanoxml.StdXMLReader;
 import org.freeplane.n3.nanoxml.XMLParserFactory;
 import org.freeplane.plugin.workspace.URIUtils;
-import org.freeplane.plugin.workspace.WorkspaceController;
-import org.freeplane.plugin.workspace.mindmapmode.FileFolderDropHandler;
-import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
-import org.freeplane.plugin.workspace.nodes.FolderLinkNode;
 
 public abstract class DocumentRetrievalController extends ADocearServiceFeature {
 	private static Object mutex = new Object();
@@ -64,7 +57,6 @@ public abstract class DocumentRetrievalController extends ADocearServiceFeature 
 	private static IActionEventListener aeListener = new RibbonActionEventListener(); 
 
 	private File downloadsFolder;
-	private FolderLinkNode downloadsNode;
 	
 	protected int documentsAvailable;
 	private Integer documentsSetId;
@@ -341,43 +333,35 @@ public abstract class DocumentRetrievalController extends ADocearServiceFeature 
 	}
 	
 	public URI getDownloadsFolder() {
+		ensureDownloadsFolder();
 		return downloadsFolder.toURI();
 	}
 	
 	public void refreshDownloadsFolder() {
-		WorkspaceController.getCurrentModeExtension().getView().expandPath(downloadsNode.getTreePath());
-		downloadsNode.refresh();
 	}
 
 	@Override
 	protected void installDefaults(ModeController modeController) {
-		AWorkspaceTreeNode wsRoot = WorkspaceController.getModeExtension(modeController).getModel().getRoot();
-		wsRoot.insertChildNode(new ShowDocumentSearchNode(), 0);
-		wsRoot.insertChildNode(new ShowRecommendationsNode(), 1);		
-		downloadsNode = new DownloadFolderNode();
-		updateDownloadNode();
-		wsRoot.insertChildNode(downloadsNode,2);
+		ensureDownloadsFolder();
 		UserAccountController.getController().addUserAccountChangeListener(new IUserAccountChangeListener() {
 			
 			public void activated(UserAccountChangeEvent event) {
 				if(event.getUser() instanceof DocearUser) {
 					try {
-					updateDownloadNode();
-					downloadsNode.refresh();
+						ensureDownloadsFolder();
 					}
 					catch (Exception e) {
-						LogUtils.warn("Could not switch download folder node: "+ e.getMessage());
+						LogUtils.warn("Could not switch download folder: "+ e.getMessage());
 					}
 				}
 			}
 			
 			public void aboutToDeactivate(UserAccountChangeEvent event) {}
 		});
-		WorkspaceController.getModeExtension(modeController).getView().getTransferHandler().registerNodeDropHandler(DownloadFolderNode.class, new FileFolderDropHandler());
 		modeController.getUserInputListenerFactory().getRibbonBuilder().getRibbonActionEventHandler().addListener(aeListener);
 	}
 
-	private void updateDownloadNode() {
+	private void ensureDownloadsFolder() {
 		downloadsFolder = new File( URIUtils.getFile(ServiceController.getController().getUserSettingsHome()),"downloads");
 		if(!downloadsFolder.exists()) {
 			try {
@@ -387,7 +371,6 @@ public abstract class DocumentRetrievalController extends ADocearServiceFeature 
 				LogUtils.warn("Exception in org.docear.plugin.services.features.recommendations.RecommendationsController.updateDownloadNode():"+ e.getMessage());
 			}
 		}
-		downloadsNode.setPath(downloadsFolder.toURI());
 	}
 	
 	public int getDocumentsAvailable() {

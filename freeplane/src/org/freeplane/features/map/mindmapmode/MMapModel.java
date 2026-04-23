@@ -41,6 +41,8 @@ public class MMapModel extends MapModel {
 	private LockManager lockManager;
 	private Timer timerForAutomaticSaving;
 	private int titleNumber = 0;
+	private long knownFileTimestamp;
+	private boolean externalModificationDetected;
 
 	/**
 	 * The current version and all other version that don't need XML update for
@@ -56,6 +58,8 @@ public class MMapModel extends MapModel {
 				scheduleTimerForAutomaticSaving();
 			}
 		});
+		knownFileTimestamp = 0L;
+		externalModificationDetected = false;
 	}
 
 	@Override
@@ -107,6 +111,10 @@ public class MMapModel extends MapModel {
 		if (!(UrlManager.getController() instanceof MFileManager)) {
 			return;
 		}
+		if (getTimerForAutomaticSaving() != null) {
+			getTimerForAutomaticSaving().cancel();
+			setTimerForAutomaticSaving(null);
+		}
 		final int numberOfTempFiles = Integer.parseInt(ResourceController.getResourceController().getProperty(
 		    "number_of_different_files_for_automatic_save"));
 		if (numberOfTempFiles == 0) {
@@ -114,11 +122,12 @@ public class MMapModel extends MapModel {
 		}
 		final boolean filesShouldBeDeletedAfterShutdown = ResourceController.getResourceController()
 		    .getBooleanProperty("delete_automatic_saves_at_exit");
-		final int delay = Integer.parseInt(ResourceController.getResourceController().getProperty(
+		final int configuredDelay = Integer.parseInt(ResourceController.getResourceController().getProperty(
 		    "time_for_automatic_save"));
-		if (delay == 0) {
+		if (configuredDelay == 0) {
 			return;
 		}
+		final int delay = Math.max(300, configuredDelay);
 		final boolean useSingleBackupDirectory = ResourceController.getResourceController().getBooleanProperty(
 		    "single_backup_directory");
 		final String singleBackupDirectory = ResourceController.getResourceController()
@@ -135,5 +144,21 @@ public class MMapModel extends MapModel {
 
 	void setTimerForAutomaticSaving(final Timer timerForAutomaticSaving) {
 		this.timerForAutomaticSaving = timerForAutomaticSaving;
+	}
+
+	public long getKnownFileTimestamp() {
+		return knownFileTimestamp;
+	}
+
+	public void setKnownFileTimestamp(long knownFileTimestamp) {
+		this.knownFileTimestamp = knownFileTimestamp;
+	}
+
+	public boolean isExternalModificationDetected() {
+		return externalModificationDetected;
+	}
+
+	public void setExternalModificationDetected(boolean externalModificationDetected) {
+		this.externalModificationDetected = externalModificationDetected;
 	}
 }

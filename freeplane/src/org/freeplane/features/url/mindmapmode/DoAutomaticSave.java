@@ -29,6 +29,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.map.mindmapmode.MMapModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
@@ -61,6 +62,10 @@ public class DoAutomaticSave extends TimerTask {
 
 	@Override
 	public void run() {
+		final MMapModel mModel = (MMapModel) model;
+		if (handleExternalChange(mModel)) {
+			return;
+		}
 		/* Map is dirty enough? */
 		if (model.getNumberOfChangesSinceLastSave() == changeState) {
 			return;
@@ -71,7 +76,6 @@ public class DoAutomaticSave extends TimerTask {
 			return;
 		}
 		try {
-			cancel();
 			Controller.getCurrentController().getViewController().invokeAndWait(new Runnable() {
 
 				public void run() {
@@ -101,11 +105,23 @@ public class DoAutomaticSave extends TimerTask {
 						if (tempFile == null) {
 							return;
 						}
+						final MFileManager fileManager = (MFileManager) UrlManager.getController();
+						if (!mModel.isExternalModificationDetected()) {
+							final File originalFile = mModel.getFile();
+							if (originalFile != null && originalFile.exists() && originalFile.canWrite()
+							        && fileManager.saveInternal(mModel, originalFile, true /*=internal call*/)) {
+								modeController.getMapController().setSaved(mModel, true);
+								mModel.setKnownFileTimestamp(originalFile.lastModified());
+								mModel.setExternalModificationDetected(false);
+								modeController.getController().getViewController()
+								    .out(TextUtils.format("automatically_save_message", originalFile));
+								return;
+							}
+						}
 						if (filesShouldBeDeletedAfterShutdown) {
 							tempFile.deleteOnExit();
 						}
-						((MFileManager) UrlManager.getController())
-						    .saveInternal((MMapModel) model, tempFile, true /*=internal call*/);
+						fileManager.saveInternal(mModel, tempFile, true /*=internal call*/);
 						modeController.getController().getViewController()
 						    .out(TextUtils.format("automatically_save_message", tempFile));
 					}
@@ -118,5 +134,52 @@ public class DoAutomaticSave extends TimerTask {
 		catch (final Exception e) {
 			LogUtils.severe(e);
 		}
+	}
+
+	private boolean handleExternalChange(final MMapModel mModel) {
+		try {
+			final File file = mModel.getFile();
+			if (file == null) {
+				return false;
+			}
+			if (!file.exists()) {
+				return false;
+			}
+			final long actualTimestamp = file.lastModified();
+			final long knownTimestamp = mModel.getKnownFileTimestamp();
+			if (knownTimestamp <= 0L) {
+				mModel.setKnownFileTimestamp(actualTimestamp);
+				return false;
+			}
+			if (actualTimestamp <= knownTimestamp) {
+				return false;
+			}
+			if (model.getNumberOfChangesSinceLastSave() == 0 && Controller.getCurrentController().getMap() == model) {
+				EventQueue.invokeLater(new Runnable() {
+					public void run() {
+						try {
+							final ModeController currentModeController = Controller.getCurrentModeController();
+							if (currentModeController instanceof MModeController) {
+								((MMapController) ((MModeController) currentModeController).getMapController()).restoreCurrentMapPreservingSelection();
+							}
+						}
+						catch (Exception e) {
+							LogUtils.warn(e);
+						}
+					}
+				});
+				return true;
+			}
+			if (!mModel.isExternalModificationDetected()) {
+				Controller.getCurrentController().getViewController().out(
+				    TextUtils.getText("external_map_change_detected_skip_auto_save"));
+				mModel.setExternalModificationDetected(true);
+			}
+			return true;
+		}
+		catch (Exception e) {
+			LogUtils.warn(e);
+		}
+		return false;
 	}
 }

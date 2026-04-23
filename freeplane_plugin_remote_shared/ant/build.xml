@@ -51,6 +51,7 @@
 
 
 	<target name="resolve" description="retrieve dependencies with ivy" depends="install-ivy">
+		<ivy:settings file="${basedir}/ivy/ivysettings.xml" />
 		<ivy:retrieve />
 	</target>
 
@@ -115,4 +116,5 @@
 	</target>
 
 </project>
+
 

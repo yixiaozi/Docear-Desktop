@@ -105,6 +105,7 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		mTree.addKeyListener(getInputController());
 		mTree.setRowHeight(18);
 		mTree.setShowsRootHandles(false);
+		mTree.setRootVisible(false);
 		mTree.setEditable(true);
 		
 		this.transferHandler = WorkspaceTransferHandler.configureDragAndDrop(mTree);

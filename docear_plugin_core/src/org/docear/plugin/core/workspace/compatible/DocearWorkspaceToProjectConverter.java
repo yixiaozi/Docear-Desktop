@@ -17,6 +17,7 @@ import org.docear.plugin.core.workspace.creator.LinkTypeLiteratureAnnotationsCre
 import org.docear.plugin.core.workspace.creator.LinkTypeMyPublicationsCreator;
 import org.docear.plugin.core.workspace.creator.LinkTypeReferencesCreator;
 import org.docear.plugin.core.workspace.model.DocearWorkspaceProject;
+import org.docear.plugin.core.workspace.node.DocearProjectRootNode;
 import org.docear.plugin.core.workspace.node.FolderTypeLibraryNode;
 import org.docear.plugin.core.workspace.node.FolderTypeLiteratureRepositoryNode;
 import org.docear.plugin.core.workspace.node.LinkTypeIncomingNode;
@@ -107,7 +108,7 @@ public class DocearWorkspaceToProjectConverter {
 		if (this.projectRootCreator == null) {
 			this.projectRootCreator = new AWorkspaceNodeCreator() {
 				public AWorkspaceTreeNode getNode(XMLElement data) {
-					ProjectRootNode node = new ProjectRootNode();
+					DocearProjectRootNode node = new DocearProjectRootNode();
 					String name = data.getAttribute("name", "project");
 					String id = data.getAttribute("id", null);
 					String version = DocearWorkspaceProject.CURRENT_PROJECT_VERSION.getVersionString();
