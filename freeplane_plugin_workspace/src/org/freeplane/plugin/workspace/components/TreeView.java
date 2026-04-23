@@ -6,23 +6,36 @@ import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Graphics;
 import java.awt.event.ComponentListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.io.File;
 import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.JButton;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.AbstractAction;
+import javax.swing.KeyStroke;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.event.TreeModelListener;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreeModel;
-import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
@@ -39,6 +52,7 @@ import org.freeplane.plugin.workspace.handler.DefaultNodeTypeIconManager;
 import org.freeplane.plugin.workspace.handler.INodeTypeIconManager;
 import org.freeplane.plugin.workspace.listener.DefaultTreeExpansionListener;
 import org.freeplane.plugin.workspace.listener.DefaultWorkspaceSelectionListener;
+import org.freeplane.plugin.workspace.io.IFileSystemRepresentation;
 import org.freeplane.plugin.workspace.mindmapmode.DefaultFileDropHandler;
 import org.freeplane.plugin.workspace.mindmapmode.FileFolderDropHandler;
 import org.freeplane.plugin.workspace.mindmapmode.InputController;
@@ -72,6 +86,11 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 	private ExpandedStateHandler expandedStateHandler;
 	private boolean paintingEnabled;
 	private WorkspaceNodeSelectionHandler nodeSelectionHandler;
+	private WorkspaceModel sourceModel;
+	private String searchQuery = "";
+	private final Map<AWorkspaceTreeNode, Boolean> visibleNodeCache = new HashMap<AWorkspaceTreeNode, Boolean>();
+	private final Map<AWorkspaceTreeNode, List<AWorkspaceTreeNode>> visibleChildrenCache = new HashMap<AWorkspaceTreeNode, List<AWorkspaceTreeNode>>();
+	private boolean allFoldersPreloaded = false;
 	
 	public TreeView() {
 		this.setLayout(new BorderLayout());
@@ -104,6 +123,7 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		mTree.addMouseMotionListener(getInputController());
 		mTree.addKeyListener(getInputController());
 		mTree.setRowHeight(18);
+		mTree.setLargeModel(false);
 		mTree.setShowsRootHandles(false);
 		mTree.setRootVisible(false);
 		mTree.setEditable(true);
@@ -115,7 +135,304 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		workspaceBox = Box.createVerticalBox();
 		workspaceBox.add(new JScrollPane(mTree));		
 		this.add(workspaceBox, BorderLayout.CENTER);
+		this.add(createSearchPanel(), BorderLayout.NORTH);
 		
+	}
+
+	private Component createSearchPanel() {
+		JPanel searchPanel = new JPanel(new BorderLayout(4, 0));
+		searchPanel.setBorder(BorderFactory.createEmptyBorder(2, view_margin, 2, view_margin));
+		final JLabel searchLabel = new JLabel("\u641c\u7d22:");
+		searchLabel.setToolTipText("\u70b9\u51fb\u6267\u884c\u641c\u7d22");
+		searchPanel.add(searchLabel, BorderLayout.WEST);
+		m_display = new JTextField();
+		m_display.getDocument().addDocumentListener(new DocumentListener() {
+			public void removeUpdate(DocumentEvent e) {
+				handleClearedSearchInput();
+			}
+			public void insertUpdate(DocumentEvent e) {
+				handleClearedSearchInput();
+			}
+			public void changedUpdate(DocumentEvent e) {
+				handleClearedSearchInput();
+			}
+		});
+		m_display.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "workspace.search.apply");
+		m_display.getActionMap().put("workspace.search.apply", new AbstractAction() {
+			private static final long serialVersionUID = 1L;
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				applySearchFilter(true);
+			}
+		});
+		m_display.addActionListener(new java.awt.event.ActionListener() {
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				applySearchFilter(true);
+			}
+		});
+		searchPanel.add(m_display, BorderLayout.CENTER);
+		JButton searchButton = new JButton("\u641c\u7d22");
+		searchButton.addActionListener(new java.awt.event.ActionListener() {
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				applySearchFilter(true);
+			}
+		});
+		searchPanel.add(searchButton, BorderLayout.EAST);
+		searchLabel.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				applySearchFilter(true);
+				m_display.requestFocusInWindow();
+			}
+		});
+		return searchPanel;
+	}
+
+	private void handleClearedSearchInput() {
+		if (m_display == null) {
+			return;
+		}
+		String normalized = normalize(m_display.getText());
+		if (normalized.length() == 0 && hasSearchFilter()) {
+			applySearchFilter(false);
+		}
+	}
+
+	private void applySearchFilter(boolean forceFullPreload) {
+		final String raw = m_display != null ? m_display.getText() : "";
+		final String normalized = normalize(raw);
+		searchQuery = normalized;
+		updateSearchHighlight();
+		if (sourceModel != null) {
+			mTree.setModel(new TreeModelProxy(sourceModel));
+		}
+		if (hasSearchFilter()) {
+			if (forceFullPreload) {
+				refreshTopLevelProjects();
+				allFoldersPreloaded = false;
+				preloadAllFolderNodes(false);
+			}
+			else if (!allFoldersPreloaded) {
+				preloadAllFolderNodes(false);
+			}
+		}
+		clearFilterCaches();
+		collapseAllRows();
+		mTree.treeDidChange();
+		if (searchQuery.length() > 0) {
+			expandVisiblePaths();
+		}
+		else {
+			restoreExpandedState();
+		}
+		mTree.revalidate();
+		mTree.repaint();
+	}
+
+	private void refreshTopLevelProjects() {
+		if (sourceModel == null) {
+			return;
+		}
+		Object root = sourceModel.getRoot();
+		if (!(root instanceof AWorkspaceTreeNode)) {
+			return;
+		}
+		List<AWorkspaceTreeNode> projects = getRawChildren((AWorkspaceTreeNode) root);
+		for (AWorkspaceTreeNode project : projects) {
+			try {
+				project.refresh();
+			}
+			catch (Exception e) {
+				LogUtils.warn(e);
+			}
+		}
+	}
+
+	private void updateSearchHighlight() {
+		if (mTree.getCellRenderer() instanceof WorkspaceNodeRenderer) {
+			((WorkspaceNodeRenderer) mTree.getCellRenderer()).setHighlightQuery(searchQuery);
+		}
+	}
+
+	private void preloadAllFolderNodes(boolean refreshExistingNodes) {
+		if (sourceModel == null) {
+			return;
+		}
+		Object root = sourceModel.getRoot();
+		if (!(root instanceof AWorkspaceTreeNode)) {
+			return;
+		}
+		try {
+			preloadAllFolderNodesRecursive((AWorkspaceTreeNode) root, refreshExistingNodes);
+			allFoldersPreloaded = true;
+		}
+		catch (Exception e) {
+			LogUtils.warn(e);
+		}
+	}
+
+	private void preloadAllFolderNodesRecursive(AWorkspaceTreeNode node, boolean refreshExistingNodes) {
+		if (node == null) {
+			return;
+		}
+		if (node instanceof FolderFileNode || node instanceof FolderLinkNode) {
+			try {
+				if (refreshExistingNodes || node.getChildCount() == 0) {
+					node.refresh();
+				}
+			}
+			catch (Exception e) {
+				LogUtils.warn(e);
+			}
+		}
+		List<AWorkspaceTreeNode> children = getRawChildren(node);
+		for (AWorkspaceTreeNode child : children) {
+			preloadAllFolderNodesRecursive(child, refreshExistingNodes);
+		}
+	}
+
+	private void collapseAllRows() {
+		for (int row = mTree.getRowCount() - 1; row >= 0; row--) {
+			mTree.collapseRow(row);
+		}
+	}
+
+	private void restoreExpandedState() {
+		try {
+			TreeModel treeModel = mTree.getModel();
+			Object root = treeModel != null ? treeModel.getRoot() : null;
+			if (root instanceof AWorkspaceTreeNode) {
+				getExpandedStateHandler().setExpandedStates(((AWorkspaceTreeNode) root).getModel(), true);
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn(e);
+		}
+	}
+
+	private void expandVisiblePaths() {
+		TreeModel treeModel = mTree.getModel();
+		if (treeModel == null) {
+			return;
+		}
+		Object root = treeModel.getRoot();
+		if (!(root instanceof AWorkspaceTreeNode)) {
+			return;
+		}
+		expandVisiblePathsRecursive((AWorkspaceTreeNode) root);
+	}
+
+	private void expandVisiblePathsRecursive(AWorkspaceTreeNode node) {
+		List<AWorkspaceTreeNode> children = getVisibleChildren(node);
+		if (children.isEmpty()) {
+			return;
+		}
+		mTree.expandPath(node.getTreePath());
+		for (AWorkspaceTreeNode child : children) {
+			expandVisiblePathsRecursive(child);
+		}
+	}
+
+	private void clearFilterCaches() {
+		visibleNodeCache.clear();
+		visibleChildrenCache.clear();
+	}
+
+	private boolean hasSearchFilter() {
+		return searchQuery != null && searchQuery.length() > 0;
+	}
+
+	private String normalize(String value) {
+		return value == null ? "" : value.trim().toLowerCase(Locale.ENGLISH);
+	}
+
+	private boolean containsQuery(String text) {
+		if (text == null) {
+			return false;
+		}
+		return normalize(text).indexOf(searchQuery) >= 0;
+	}
+
+	private boolean matchesNode(AWorkspaceTreeNode node) {
+		if (containsQuery(node.getName())) {
+			return true;
+		}
+		if (node instanceof IFileSystemRepresentation) {
+			try {
+				File file = ((IFileSystemRepresentation) node).getFile();
+				if (file != null) {
+					if (containsQuery(file.getName())) {
+						return true;
+					}
+					// Keep search responsive: rely on in-memory node/file names.
+				}
+			}
+			catch (Exception e) {
+				LogUtils.warn(e);
+			}
+		}
+		return false;
+	}
+
+	private boolean isNodeVisible(AWorkspaceTreeNode node) {
+		if (!hasSearchFilter()) {
+			return true;
+		}
+		Boolean cached = visibleNodeCache.get(node);
+		if (cached != null) {
+			return cached.booleanValue();
+		}
+		boolean visible = matchesNode(node);
+		if (!visible) {
+			List<AWorkspaceTreeNode> children = getRawChildren(node);
+			for (AWorkspaceTreeNode child : children) {
+				if (isNodeVisible(child)) {
+					visible = true;
+					break;
+				}
+			}
+		}
+		visibleNodeCache.put(node, Boolean.valueOf(visible));
+		return visible;
+	}
+
+	private List<AWorkspaceTreeNode> getVisibleChildren(AWorkspaceTreeNode parent) {
+		if (!hasSearchFilter()) {
+			return getRawChildren(parent);
+		}
+		List<AWorkspaceTreeNode> cached = visibleChildrenCache.get(parent);
+		if (cached != null) {
+			return cached;
+		}
+		List<AWorkspaceTreeNode> visibleChildren = new ArrayList<AWorkspaceTreeNode>();
+		List<AWorkspaceTreeNode> children = getRawChildren(parent);
+		for (AWorkspaceTreeNode child : children) {
+			if (isNodeVisible(child)) {
+				visibleChildren.add(child);
+			}
+		}
+		visibleChildrenCache.put(parent, visibleChildren);
+		return visibleChildren;
+	}
+
+	private List<AWorkspaceTreeNode> getRawChildren(AWorkspaceTreeNode parent) {
+		List<AWorkspaceTreeNode> children = new ArrayList<AWorkspaceTreeNode>();
+		if (parent == null) {
+			return children;
+		}
+		try {
+			boolean useSourceModel = sourceModel != null && parent == sourceModel.getRoot();
+			int count = useSourceModel ? sourceModel.getChildCount(parent) : parent.getChildCount();
+			for (int i = 0; i < count; i++) {
+				Object child = useSourceModel ? sourceModel.getChild(parent, i) : parent.getChildAt(i);
+				if (child instanceof AWorkspaceTreeNode) {
+					children.add((AWorkspaceTreeNode) child);
+				}
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn(e);
+		}
+		return children;
 	}
 	
 	public void addBottomBanner(Component comp) {
@@ -222,18 +539,23 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 	
 	public void refreshView() {
 		paintingEnabled = true;
+		clearFilterCaches();
 		getExpandedStateHandler().setExpandedStates(((AWorkspaceTreeNode)mTree.getModel().getRoot()).getModel(), true);
+		if (hasSearchFilter()) {
+			expandVisiblePaths();
+		}
 		repaint();
 	}
 	
 	public void setModel(WorkspaceModel model) {
-		if(model instanceof TreeModel) {
-			mTree.setModel((TreeModel) model);
-		}
-		else {
-			mTree.setModel(new TreeModelProxy(model));
-		}
+		sourceModel = model;
+		mTree.setModel(new TreeModelProxy(model));
 		getExpandedStateHandler().registerModel(model);
+		allFoldersPreloaded = false;
+		clearFilterCaches();
+		if (hasSearchFilter()) {
+			expandVisiblePaths();
+		}
 	}
 	
 	public WorkspaceTransferHandler getTransferHandler() {
@@ -266,16 +588,35 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 
 		public Object getChild(Object parent, int index) {
 			if(parent == null) return null;
-			return ((AWorkspaceTreeNode) parent).getChildAt(index);			
+			if (!hasSearchFilter()) {
+				return model.getChild(parent, index);
+			}
+			if (!(parent instanceof AWorkspaceTreeNode)) {
+				return model.getChild(parent, index);
+			}
+			List<AWorkspaceTreeNode> children = getVisibleChildren((AWorkspaceTreeNode) parent);
+			if (index < 0 || index >= children.size()) {
+				throw new ArrayIndexOutOfBoundsException(index);
+			}
+			return children.get(index);			
 		}
 
 		public int getChildCount(Object parent) {
 			if(parent == null) return 0;
-			return ((AWorkspaceTreeNode) parent).getChildCount();
+			if (!hasSearchFilter()) {
+				return model.getChildCount(parent);
+			}
+			if (!(parent instanceof AWorkspaceTreeNode)) {
+				return model.getChildCount(parent);
+			}
+			return getVisibleChildren((AWorkspaceTreeNode) parent).size();
 		}
 
 		public boolean isLeaf(Object node) {
-			return ((AWorkspaceTreeNode) node).isLeaf();
+			if (!hasSearchFilter()) {
+				return model.isLeaf(node);
+			}
+			return getChildCount(node) == 0;
 		}
 
 		public void valueForPathChanged(TreePath path, Object newValue) {
@@ -290,7 +631,14 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		}
 
 		public int getIndexOfChild(Object parent, Object child) {
-			return ((AWorkspaceTreeNode) parent).getIndex((TreeNode) child);
+			if (!hasSearchFilter()) {
+				return model.getIndexOfChild(parent, child);
+			}
+			if (!(parent instanceof AWorkspaceTreeNode) || !(child instanceof AWorkspaceTreeNode)) {
+				return model.getIndexOfChild(parent, child);
+			}
+			List<AWorkspaceTreeNode> children = getVisibleChildren((AWorkspaceTreeNode) parent);
+			return children.indexOf(child);
 		}
 
 		public void addTreeModelListener(TreeModelListener l) {

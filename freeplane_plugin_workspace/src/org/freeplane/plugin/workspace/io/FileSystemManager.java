@@ -522,6 +522,9 @@ public class FileSystemManager {
 			if (filtering && isHiddenPath(pathname)) {
 				return false;
 			}
+			if (filtering && pathname != null && pathname.getName().startsWith("~")) {
+				return false;
+			}
 			if(filtering && pathname.getName().startsWith(".") && !pathname.getName().equals("."+ResourceController.getResourceController().getProperty("workspace.profile"))) {
 				return false;
 			}
@@ -545,6 +548,9 @@ public class FileSystemManager {
 
 		public boolean accept(File pathname) {
 			if (filtering && isHiddenPath(pathname)) {
+				return false;
+			}
+			if (filtering && pathname != null && pathname.getName().startsWith("~")) {
 				return false;
 			}
 			if(filtering && pathname.getName().startsWith(".")) {

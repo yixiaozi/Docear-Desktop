@@ -5,8 +5,6 @@ import java.awt.Component;
 import java.awt.datatransfer.ClipboardOwner;
 
 import javax.swing.BorderFactory;
-import javax.swing.Icon;
-import javax.swing.ImageIcon;
 import javax.swing.JLabel;
 import javax.swing.JTree;
 import javax.swing.UIManager;
@@ -17,19 +15,15 @@ import org.freeplane.plugin.workspace.dnd.DnDController;
 import org.freeplane.plugin.workspace.dnd.IWorspaceClipboardOwner;
 import org.freeplane.plugin.workspace.io.IFileSystemRepresentation;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
-import org.freeplane.plugin.workspace.nodes.AFolderNode;
 
 public class WorkspaceNodeRenderer extends DefaultTreeCellRenderer {
 
 	private int highlightedRow = -1;
+	private String highlightQuery = "";
 	/**
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private static final Icon DEFAULT_ICON = new ImageIcon(WorkspaceNodeRenderer.class.getResource("/images/16x16/text-x-preview.png"));
-	private static final Icon DEFAULT_FOLDER_CLOSED_ICON = new ImageIcon(WorkspaceNodeRenderer.class.getResource("/images/16x16/folder-blue.png"));
-	private static final Icon DEFAULT_FOLDER_OPEN_ICON = new ImageIcon(WorkspaceNodeRenderer.class.getResource("/images/16x16/folder-blue_open.png"));
-	
 	public WorkspaceNodeRenderer() {
 		
 	}
@@ -50,7 +44,8 @@ public class WorkspaceNodeRenderer extends DefaultTreeCellRenderer {
 					label.setBorder(BorderFactory.createLineBorder(label.getForeground(), 1));
 				}
 			}
-			label.setText(node.getName());
+			label.setText(formatHighlightedText(node.getName()));
+			label.setIcon(null);
 			if(isCut(node)) {
 				//WORKSPACE - ToDo: make the item transparent (including the icon?)
 				int alpha = new Double(255 * 0.5).intValue();
@@ -86,23 +81,39 @@ public class WorkspaceNodeRenderer extends DefaultTreeCellRenderer {
 	 * @param value
 	 */
 	protected void setNodeIcon(DefaultTreeCellRenderer renderer, AWorkspaceTreeNode wsNode) {
-		renderer.setOpenIcon(DEFAULT_FOLDER_OPEN_ICON);
-		renderer.setClosedIcon(DEFAULT_FOLDER_CLOSED_ICON);
-		
-		if(wsNode.setIcons(renderer)) {
-			return;
-		}		
-		if(!wsNode.isLeaf() || wsNode instanceof AFolderNode) {
-			renderer.setLeafIcon(DEFAULT_FOLDER_CLOSED_ICON);
-		} 
-		else {
-			renderer.setLeafIcon(DEFAULT_ICON);
-		}
-		
-		
+		renderer.setOpenIcon(null);
+		renderer.setClosedIcon(null);
+		renderer.setLeafIcon(null);
 	}
 	
 	public void highlightRow(int row) {
 		this.highlightedRow = row;
+	}
+
+	public void setHighlightQuery(String query) {
+		this.highlightQuery = query == null ? "" : query.trim().toLowerCase();
+	}
+
+	private String formatHighlightedText(String original) {
+		if (original == null) {
+			return "";
+		}
+		if (highlightQuery.length() == 0) {
+			return original;
+		}
+		String lower = original.toLowerCase();
+		int matchIndex = lower.indexOf(highlightQuery);
+		if (matchIndex < 0) {
+			return original;
+		}
+		int matchEnd = matchIndex + highlightQuery.length();
+		String before = escapeHtml(original.substring(0, matchIndex));
+		String match = escapeHtml(original.substring(matchIndex, matchEnd));
+		String after = escapeHtml(original.substring(matchEnd));
+		return "<html>" + before + "<font color='#d11a2a'>" + match + "</font>" + after + "</html>";
+	}
+
+	private String escapeHtml(String text) {
+		return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 }
