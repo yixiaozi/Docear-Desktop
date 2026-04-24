@@ -154,7 +154,12 @@ public class DoAutomaticSave extends TimerTask {
 			if (actualTimestamp <= knownTimestamp) {
 				return false;
 			}
+			if (mModel.isExternalModificationDetected()) {
+				return true;
+			}
 			if (model.getNumberOfChangesSinceLastSave() == 0 && Controller.getCurrentController().getMap() == model) {
+				mModel.setExternalModificationDetected(true);
+				mModel.setKnownFileTimestamp(actualTimestamp);
 				EventQueue.invokeLater(new Runnable() {
 					public void run() {
 						try {
@@ -165,6 +170,9 @@ public class DoAutomaticSave extends TimerTask {
 						}
 						catch (Exception e) {
 							LogUtils.warn(e);
+						}
+						finally {
+							mModel.setExternalModificationDetected(false);
 						}
 					}
 				});

@@ -209,7 +209,10 @@ public class ReminderTabPanel extends JPanel {
 	private void collectReminderItems(NodeModel node, List<ReminderItem> out) {
 		ReminderExtension extension = ReminderExtension.getExtension(node);
 		if (extension != null && extension.getRemindUserAt() > 0) {
-			out.add(new ReminderItem(node, extension.getRemindUserAt(), TextController.getController().getPlainTextContent(node)));
+			final String plainText = TextController.getController().getPlainTextContent(node);
+			if (!"bin".equalsIgnoreCase(plainText == null ? "" : plainText.trim())) {
+				out.add(new ReminderItem(node, extension.getRemindUserAt(), plainText));
+			}
 		}
 		for (NodeModel child : node.getChildren()) {
 			collectReminderItems(child, out);

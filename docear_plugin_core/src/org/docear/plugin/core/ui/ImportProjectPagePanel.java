@@ -9,6 +9,7 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
+import java.util.List;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -183,6 +184,27 @@ public class ImportProjectPagePanel extends AWizardPage {
 	/***********************************************************************************
 	 * METHODS
 	 **********************************************************************************/
+
+	/**
+	 * Same as {@link org.freeplane.plugin.workspace.WorkspacePathUtils#resolveWorkspaceRootDirectory};
+	 * inlined here because this module compiles against a fixed workspace API jar.
+	 */
+	private static File resolveWorkspaceRootForListing(final File raw) {
+		if (raw == null) {
+			return null;
+		}
+		final File absolute = raw.getAbsoluteFile();
+		try {
+			if (absolute.exists()) {
+				return absolute.getCanonicalFile();
+			}
+		}
+		catch (IOException e) {
+			LogUtils.warn(e);
+		}
+		return absolute;
+	}
+
 	private void setImportHome(String path) {
 		txtImportHome.setText(path);
 		updateProjectVersions();
@@ -193,6 +215,39 @@ public class ImportProjectPagePanel extends AWizardPage {
 			return WorkspaceController.getDefaultProjectHome();
 		}
 		return new File(txtImportHome.getText()).toURI();
+	}
+
+	/**
+	 * True if the wizard selection is the same workspace project as one already loaded,
+	 * including the same folder reached via a junction/symlink (different {@link URI}).
+	 */
+	private boolean isSelectedImportProjectAlreadyInWorkspace() {
+		final Object selected = lstVersions.getSelectedValue();
+		if (!(selected instanceof VersionItem)) {
+			return false;
+		}
+		final AWorkspaceProject importProject = ((VersionItem) selected).getProject();
+		if (WorkspaceController.getCurrentModel().getProject(importProject.getProjectID()) != null) {
+			return true;
+		}
+		try {
+			final File importHome = URIUtils.getAbsoluteFile(importProject.getProjectHome());
+			if (importHome == null) {
+				return false;
+			}
+			final String importCanon = importHome.getCanonicalPath();
+			final List<AWorkspaceProject> loaded = WorkspaceController.getCurrentModel().getProjects();
+			for (int i = 0; i < loaded.size(); i++) {
+				final File loadedHome = URIUtils.getAbsoluteFile(loaded.get(i).getProjectHome());
+				if (loadedHome != null && importCanon.equals(loadedHome.getCanonicalPath())) {
+					return true;
+				}
+			}
+		}
+		catch (IOException e) {
+			LogUtils.warn(e);
+		}
+		return false;
 	}
 
 	private void enableControls(WizardSession context) {
@@ -214,7 +269,7 @@ public class ImportProjectPagePanel extends AWizardPage {
 				}
 			}
 			else {
-				if(WorkspaceController.getCurrentModel().getProject(((VersionItem) lstVersions.getSelectedValue()).getProject().getProjectID()) != null) {
+				if (isSelectedImportProjectAlreadyInWorkspace()) {
 					lblWarning.setText(TextUtils.getText("docear.setup.wizard.import.warn3"));
 					lblWarning.setVisible(true);
 					context.getNextButton().setEnabled(false);
@@ -235,13 +290,23 @@ public class ImportProjectPagePanel extends AWizardPage {
 	}
 	
 	private void updateProjectVersions() {
-		File home = new File(txtImportHome.getText());
+		final String pathText = txtImportHome.getText().trim();
+		final File logicalHome;
+		final File homeForListing;
+		if (pathText.length() == 0) {
+			logicalHome = new File(txtImportHome.getText());
+			homeForListing = logicalHome;
+		}
+		else {
+			logicalHome = new File(pathText).getAbsoluteFile();
+			homeForListing = resolveWorkspaceRootForListing(logicalHome);
+		}
 		getModel().clear();
 		lstVersions.getSelectionModel().clearSelection();
 		
-		File _data = new File(home, "_data");
+		File _data = new File(homeForListing, "_data");
 		if(_data.exists()) {
-			readVersions(_data);		
+			readVersions(_data, logicalHome);
 		}
 		lookForIncompatibles();
 		if(getModel().getSize() > 0) {
@@ -250,27 +315,36 @@ public class ImportProjectPagePanel extends AWizardPage {
 		enableControls(cachedContext);
 	}
 	
-	private void readVersions(File home) {
-		for(File folder : home.listFiles(new FileFilter() {			
+	/**
+	 * @param _dataDir     {@code _data} folder (often under a canonical path so listing works on junctions)
+	 * @param projectHome  directory the user chose as project root (keep symlink path in the workspace URI)
+	 */
+	private void readVersions(File _dataDir, File projectHome) {
+		final File[] folders = _dataDir.listFiles(new FileFilter() {
 			public boolean accept(File pathname) {
 				if(pathname.isDirectory()) {
 					return true;
 				}
 				return false;
 			}
-			})) {
-			
+		});
+		if (folders == null) {
+			LogUtils.warn("Could not list project versions directory (junction/symlink or I/O): " + _dataDir.getAbsolutePath());
+			return;
+		}
+		for (int i = 0; i < folders.length; i++) {
+			File folder = folders[i];
 			File settings = new File(folder, "settings.xml");
 			if(settings.exists()) {
-				AWorkspaceProject project = AWorkspaceProject.create(folder.getName(), home.getParentFile().toURI());
+				AWorkspaceProject project = AWorkspaceProject.create(folder.getName(), projectHome.toURI());
 				String item = new TempProjectLoader().getMetaInfo(project);
 				if(item == null) {
 					continue;
 				}
-				//see issue #113
-				if(WorkspaceController.getCurrentModel().getProject(project.getProjectID()) == null) {
-					getModel().addItem(new VersionItem(project, item, new Date(settings.lastModified())));
-				}
+				// List all versions here; enableControls() blocks "Finish" with warn3 if this
+				// project is already loaded (same ID). Omitting rows when the project was opened
+				// via another path (e.g. real path vs junction) left the list empty — see symlink/junction roots.
+				getModel().addItem(new VersionItem(project, item, new Date(settings.lastModified())));
 			}
 		}
 	}

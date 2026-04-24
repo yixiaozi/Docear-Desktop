@@ -35,6 +35,7 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
+import org.freeplane.plugin.workspace.WorkspacePathUtils;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
 import org.freeplane.plugin.workspace.model.IResultProcessor;
 import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
@@ -169,12 +170,22 @@ public class ImportProjectDialogPanel extends JPanel {
 	}
 
 	protected void updateProjectVersions() {
-		File home = new File(txtProjectPath.getText());
+		final String trimmed = txtProjectPath.getText().trim();
+		final File logicalHome;
+		final File homeForListing;
+		if (trimmed.length() == 0) {
+			logicalHome = new File(txtProjectPath.getText());
+			homeForListing = logicalHome;
+		}
+		else {
+			logicalHome = new File(trimmed).getAbsoluteFile();
+			homeForListing = WorkspacePathUtils.resolveWorkspaceRootDirectory(logicalHome);
+		}
 		getComboBoxModel().clear();
 		
-		File _data = new File(home, "_data");
+		File _data = new File(homeForListing, "_data");
 		if(_data.exists()) {
-			readVersions(_data);		
+			readVersions(_data, logicalHome);		
 		}
 		enableControlls(getComboBoxModel().getSize() > 0);
 	}
@@ -200,7 +211,7 @@ public class ImportProjectDialogPanel extends JPanel {
 				}
 			}
 			else {
-				if(WorkspaceController.getCurrentModel().getProject(getComboBoxModel().getSelectedItem().getProject().getProjectID()) != null) {
+				if (isImportProjectAlreadyInWorkspace(getComboBoxModel().getSelectedItem().getProject())) {
 					lblWarn.setText(TextUtils.getText(ImportProjectDialogPanel.class.getSimpleName().toLowerCase(Locale.ENGLISH)+".warn3"));
 					lblWarn.setVisible(true);
 					confirmButton.setEnabled(false);					
@@ -215,22 +226,24 @@ public class ImportProjectDialogPanel extends JPanel {
 	}
 	
 
-	private void readVersions(File home) {
-		for(File folder : home.listFiles(new FileFilter() {			
+	private void readVersions(File _dataDir, File projectHome) {
+		final File[] folders = _dataDir.listFiles(new FileFilter() {
 			public boolean accept(File pathname) {
 				if(pathname.isDirectory()) {
 					return true;
 				}
 				return false;
 			}
-			})) {
-			
+		});
+		if (folders == null) {
+			LogUtils.warn("Could not list project versions directory (junction/symlink or I/O): " + _dataDir.getAbsolutePath());
+			return;
+		}
+		for (int i = 0; i < folders.length; i++) {
+			File folder = folders[i];
 			File settings = new File(folder, "settings.xml");
 			if(settings.exists()) {
-				AWorkspaceProject project /*= WorkspaceController.getProjectFromCache(folder.getName()); 
-				if(project == null) {
-					project*/ = AWorkspaceProject.create(folder.getName(), home.getParentFile().toURI());
-				//}
+				AWorkspaceProject project = AWorkspaceProject.create(folder.getName(), projectHome.toURI());
 				String item = new TempProjectLoader().getMetaInfo(project);
 				if(item == null) {
 					continue;
@@ -238,6 +251,33 @@ public class ImportProjectDialogPanel extends JPanel {
 				getComboBoxModel().addItem(new VersionItem(project, item, new Date(settings.lastModified())));
 			}
 		}
+	}
+
+	private boolean isImportProjectAlreadyInWorkspace(final AWorkspaceProject importProject) {
+		if (importProject == null) {
+			return false;
+		}
+		if (WorkspaceController.getCurrentModel().getProject(importProject.getProjectID()) != null) {
+			return true;
+		}
+		try {
+			final File importHome = URIUtils.getAbsoluteFile(importProject.getProjectHome());
+			if (importHome == null) {
+				return false;
+			}
+			final String importCanon = importHome.getCanonicalPath();
+			final List<AWorkspaceProject> loaded = WorkspaceController.getCurrentModel().getProjects();
+			for (int i = 0; i < loaded.size(); i++) {
+				final File loadedHome = URIUtils.getAbsoluteFile(loaded.get(i).getProjectHome());
+				if (loadedHome != null && importCanon.equals(loadedHome.getCanonicalPath())) {
+					return true;
+				}
+			}
+		}
+		catch (IOException e) {
+			LogUtils.warn(e);
+		}
+		return false;
 	}
 	
 	protected ProjectVersionsModel getComboBoxModel() {

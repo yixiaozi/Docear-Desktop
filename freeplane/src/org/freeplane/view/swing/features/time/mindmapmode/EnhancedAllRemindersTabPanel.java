@@ -104,7 +104,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 	}
 
 	private final JButton refreshButton = new JButton("\u5237\u65b0");
-	private final JLabel statusLabel = new JLabel("\u626b\u63cf\u51c6\u5907\u4e2d");
+	private final JLabel statusLabel = new JLabel("\u63d0\u9192\u603b\u6570: 0");
 	private final JTree tree = new JTree(new DefaultMutableTreeNode("\u5168\u90e8\u63d0\u9192"));
 	private final DateFormat dayFormat = new SimpleDateFormat("ddE", Locale.CHINA);
 	private final DateFormat monthFormat = new SimpleDateFormat("MM", Locale.CHINA);
@@ -209,7 +209,6 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			rescanRequested = true;
 			return;
 		}
-		statusLabel.setText("\u6b63\u5728\u540e\u53f0\u626b\u63cf\u5168\u90e8\u5bfc\u56fe\u63d0\u9192...");
 		activeWorker = new SwingWorker() {
 			protected Object doInBackground() throws Exception {
 				List files = collectAllMindmapFiles();
@@ -228,7 +227,6 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 				for (int i = 0; i < chunks.size(); i++) {
 					ScanChunk chunk = (ScanChunk) chunks.get(i);
 					mergeChunk(chunk);
-					statusLabel.setText("\u6b63\u5728\u626b\u63cf: " + chunk.scanned + "/" + chunk.total + " \u6587\u4ef6, \u63d0\u9192: " + remindersByKey.size());
 				}
 				rebuildTreeFromCache();
 			}
@@ -322,7 +320,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		for (int i = 0; i < children.length; i++) {
 			File file = children[i];
 			if (file.isDirectory()) {
-				if (!file.isHidden()) {
+				if (!file.isHidden() && !file.getName().startsWith(".")) {
 					collectMindmapFilesRecursive(file, out);
 				}
 			}

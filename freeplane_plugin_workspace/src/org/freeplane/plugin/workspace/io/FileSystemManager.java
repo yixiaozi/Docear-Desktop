@@ -553,6 +553,9 @@ public class FileSystemManager {
 			if (filtering && pathname != null && pathname.getName().startsWith("~")) {
 				return false;
 			}
+			if (filtering && pathname != null && pathname.getName().toLowerCase().endsWith(".drawio.png")) {
+				return false;
+			}
 			if(filtering && pathname.getName().startsWith(".")) {
 				return false;
 			}
