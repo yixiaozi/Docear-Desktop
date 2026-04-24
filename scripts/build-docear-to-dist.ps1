@@ -14,7 +14,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $antPath = Join-Path $repoRoot "tools\apache-ant-1.10.14\bin\ant.bat"
 $buildFile = Join-Path $repoRoot "docear_framework\ant\build.xml"
 $distDir = Join-Path $repoRoot "docear_framework\dist"
-$targetDir = "E:\Develop\dist"
+$targetDir = "E:\Temp\DocearDist"
 
 $candidates = @(
     "C:\Program Files\Eclipse Adoptium\jdk-8.0.482.8-hotspot",
