@@ -857,6 +857,9 @@ public class MonitoringWorker extends SwingWorker<Map<AnnotationID, Collection<I
 			tempResult.addAll(Arrays.asList(monitorFiles));
 		}	
 		for(File file : tempResult){
+			if(file.getName().contains("冲突副本")){
+				continue;
+			}
 			result.add(file.toURI());
 		}
 		if(readSubDirectories){

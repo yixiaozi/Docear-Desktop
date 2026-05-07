@@ -9,6 +9,9 @@ public class DirectoryFileFilter extends ADocearFileFilter {
 
     public boolean accept(File file) {
         if(file.isDirectory()){
+            if(file.getName().startsWith(".")){
+                return false;
+            }
             List<String> subfolders = getStringList(DocearController.getPropertiesController().getProperty("docear_subdirs_to_ignore", null));
             for(String subfolder : subfolders){
                 if(file.getName().equals(subfolder)){

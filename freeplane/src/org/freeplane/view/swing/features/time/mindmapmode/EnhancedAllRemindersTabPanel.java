@@ -326,7 +326,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			}
 			else {
 				String lower = file.getName().toLowerCase();
-				if (lower.endsWith(".mm") && !file.getName().startsWith("~")) {
+				if (lower.endsWith(".mm") && !file.getName().startsWith("~") && !file.getName().contains("冲突副本")) {
 					out.add(file);
 				}
 			}
