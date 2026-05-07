@@ -86,7 +86,7 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 		info.append("freeplane_version = ");
 		info.append(FreeplaneVersion.getVersion());
 		String revision = FreeplaneVersion.getVersion().getRevision();
-		
+
 		info.append("; freeplane_xml_version = ");
 		info.append(FreeplaneVersion.XML_VERSION);
 		if(! revision.equals("")){
@@ -138,9 +138,7 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 			final JRibbonFrame frame = new JRibbonFrame("Freeplane");
 			frame.setName(UITools.MAIN_FREEPLANE_FRAME);
 			splash = new FreeplaneSplashModern(frame);
-			if (!System.getProperty("org.freeplane.nosplash", "false").equals("true")) {
-				splash.setVisible(true);
-			}
+			//splash.setVisible(false);
 			final MMapViewController mapViewController = new MMapViewController(controller);
 			viewController = new ApplicationViewController(controller, mapViewController, frame);
 			System.setSecurityManager(new FreeplaneSecurityManager());
@@ -213,15 +211,19 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 			    final Options options = CommandLineParser.parse(args);
 				loadMaps(options.getFilesToOpenAsArray());
 				viewController.init(Controller.getCurrentController());
-				splash.toBack();
+				if (splash != null) {
+					splash.toBack();
+				}
 				final Frame frame = viewController.getFrame();
 				final int extendedState = frame.getExtendedState();
 				frame.setVisible(true);
 				if (extendedState != frame.getExtendedState()) {
 					frame.setExtendedState(extendedState);
 				}
-				splash.dispose();
-				splash = null;
+				if (splash != null) {
+					splash.dispose();
+					splash = null;
+				}
 				frame.toFront();
 				startupFinished = true;
 		        System.setProperty("nonInteractive", Boolean.toString(options.isNonInteractive()));
@@ -235,7 +237,7 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
             }
 		});
 	}
-	
+
 	private void loadMaps( final String[] args) {
 		final Controller controller = Controller.getCurrentController();
 		final boolean alwaysLoadLastMaps = ResourceController.getResourceController().getBooleanProperty(
@@ -266,14 +268,14 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 //		}
 //		controller.selectMode(MModeController.MODENAME);
 //		final MModeController modeController = (MModeController) controller.getModeController();
-		 
+
 		//MFileManager.getController(modeController).newMapFromDefaultTemplate();
-		
+
 	}
-	
+
 	public void loadMapsLater(final String[] args){
 	    EventQueue.invokeLater(new Runnable() {
- 
+
             public void run() {
                 if(startupFinished && EventQueue.isDispatchThread()){
                     loadMaps(Controller.getCurrentController(), args);
@@ -297,7 +299,7 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
         frame.toFront();
         frame.requestFocus();
     }
-    
+
     private boolean loadMaps(final Controller controller, final String[] args) {
         boolean fileLoaded = false;
 		for (int i = 0; i < args.length; i++) {
