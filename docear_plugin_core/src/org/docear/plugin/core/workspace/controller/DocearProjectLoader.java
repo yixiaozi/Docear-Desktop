@@ -23,14 +23,12 @@ import org.docear.plugin.core.workspace.creator.FolderTypeLiteratureRepositoryPa
 import org.docear.plugin.core.workspace.creator.LinkTypeIncomingCreator;
 import org.docear.plugin.core.workspace.creator.LinkTypeLiteratureAnnotationsCreator;
 import org.docear.plugin.core.workspace.creator.LinkTypeMyPublicationsCreator;
-import org.docear.plugin.core.workspace.creator.LinkTypeReferencesCreator;
 import org.docear.plugin.core.workspace.model.DocearWorkspaceProject;
 import org.docear.plugin.core.workspace.node.DocearProjectRootNode;
 import org.docear.plugin.core.workspace.node.FolderTypeLibraryNode;
 import org.docear.plugin.core.workspace.node.FolderTypeLiteratureRepositoryNode;
 import org.docear.plugin.core.workspace.node.LinkTypeIncomingNode;
 import org.docear.plugin.core.workspace.node.LinkTypeLiteratureAnnotationsNode;
-import org.docear.plugin.core.workspace.node.LinkTypeReferencesNode;
 import org.docear.plugin.core.workspace.node.LiteratureRepositoryPathNode;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
@@ -57,7 +55,6 @@ public class DocearProjectLoader extends ProjectLoader {
 	private LinkTypeIncomingCreator linkTypeIncomingCreator;
 	private LinkTypeLiteratureAnnotationsCreator linkTypeLiteratureAnnotationsCreator;
 	private LinkTypeMyPublicationsCreator linkTypeMyPublicationsCreator;
-	private LinkTypeReferencesCreator linkTypeReferencesCreator;
 	private IResultProcessor resultProcessor;
 	
 
@@ -80,7 +77,6 @@ public class DocearProjectLoader extends ProjectLoader {
 		registerTypeCreator(ProjectLoader.WSNODE_LINK, LinkTypeIncomingCreator.LINK_TYPE_INCOMING, getLinkTypeIncomingCreator());
 		registerTypeCreator(ProjectLoader.WSNODE_LINK, LinkTypeLiteratureAnnotationsCreator.LINK_TYPE_LITERATUREANNOTATIONS, getLinkTypeLiteratureAnnotationsCreator());
 		registerTypeCreator(ProjectLoader.WSNODE_LINK, LinkTypeMyPublicationsCreator.LINK_TYPE_MYPUBLICATIONS, getLinkTypeMyPublicationsCreator());
-		registerTypeCreator(ProjectLoader.WSNODE_LINK, LinkTypeReferencesCreator.LINK_TYPE_REFERENCES, getLinkTypeReferencesCreator());
 	}
 	
 	private AWorkspaceNodeCreator getFolderTypeLiteratureRepositoryPathCreator() {
@@ -127,13 +123,6 @@ public class DocearProjectLoader extends ProjectLoader {
 		return linkTypeMyPublicationsCreator;
 	}
 
-	private LinkTypeReferencesCreator getLinkTypeReferencesCreator() {
-		if (linkTypeReferencesCreator == null) {
-			linkTypeReferencesCreator = new LinkTypeReferencesCreator();
-		}
-		return linkTypeReferencesCreator;
-	}
-	
 	public synchronized LOAD_RETURN_TYPE loadProject(AWorkspaceProject project) throws IOException {
 		long time = System.currentTimeMillis();
 		try {
@@ -171,8 +160,7 @@ public class DocearProjectLoader extends ProjectLoader {
 		for (int i = 0; i < root.getChildCount(); i++) {
 			AWorkspaceTreeNode child = root.getChildAt(i);
 			if (child instanceof FolderTypeLibraryNode
-					|| child instanceof FolderTypeLiteratureRepositoryNode
-					|| child instanceof LinkTypeReferencesNode) {
+					|| child instanceof FolderTypeLiteratureRepositoryNode) {
 				toRemove.add(child);
 				continue;
 			}
@@ -377,29 +365,7 @@ public class DocearProjectLoader extends ProjectLoader {
 		}		
 		project.addExtension(FolderTypeLiteratureRepositoryNode.class, litRepoNode);
 		
-		LinkTypeReferencesNode defaultRef = new LinkTypeReferencesNode();
-		//use default bib file
-		if(settings != null && settings.getBibTeXLibraryPath() != null) {
-			File file = URIUtils.getFile(settings.getBibTeXLibraryPath());
-			defaultRef.setName(file.getName());
-			defaultRef.setLinkURI(project.getRelativeURI(settings.getBibTeXLibraryPath()));
-		}
-		else {
-			defaultRef.setName(TextUtils.getText(FolderTypeMyFilesNode.class.getPackage().getName().toLowerCase(Locale.ENGLISH)+".refnode.name"));
-			String bibName = "default";
-			if(settings != null && settings.getProjectName() != null) {
-				bibName = settings.getProjectName();
-			}
-			defaultRef.setLinkURI(URIUtils.createURI(libPath.toString()+"/"+bibName+".bib"));
-		}
-		defaultRef.setSystem(true);
 		
-		if(settings != null && settings.includeDemoFiles()) {
-			LogUtils.info("copy docear tutorial files");
-			copyDemoFiles(project, URIUtils.getAbsoluteFile(defaultRef.getLinkURI()), (settings.getBibTeXLibraryPath() == null));
-		}
-		
-		project.getModel().addNodeTo(defaultRef, root);
 		
 		root.initiateMyFile(project);
 		
@@ -546,13 +512,7 @@ public class DocearProjectLoader extends ProjectLoader {
 						parent.getModel().addNodeTo(node, parent);			
 					}
 				}
-				//add myFiles after a certain node type
-				if(node instanceof LinkTypeReferencesNode) {
-					if(DocearWorkspaceProject.CURRENT_PROJECT_VERSION.equals(getProject().getVersion())) {
-						((ProjectRootNode) parent.getModel().getRoot()).initiateMyFile(getProject());
-					}
-				}
-				else if(node instanceof FolderTypeLiteratureRepositoryNode) {
+				if(node instanceof FolderTypeLiteratureRepositoryNode) {
 					project.addExtension(FolderTypeLiteratureRepositoryNode.class, (IWorkspaceProjectExtension) node);
 				}
 				else if(node instanceof LinkTypeIncomingNode) {

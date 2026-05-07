@@ -26,10 +26,13 @@ docear_plugin_core/src/TestMain.java
 freeplane_ant/.classpath
 freeplane_plugin_remote_server/META-INF/MANIFEST.MF
 freeplane_plugin_remote_server/lib/
-freeplane_plugin_remote_server_tests/lib
-freeplane_plugin_remote_server_tests/report
-freeplane_plugin_remote_server_tests/src/files/mindmaps/4.mm
-freeplane_plugin_remote_client/lib
-freeplane_plugin_remote_shared/lib
+docear_plugin_remote_server_tests/lib
+docear_plugin_remote_server_tests/report
+docear_plugin_remote_server_tests/src/files/mindmaps/4.mm
+docear_plugin_remote_client/lib
+docear_plugin_remote_shared/lib
 docear_framework/launcher_build/
 docear_framework/eclipse/docear-osgi (1.7).launch
+desktop.ini
+folderhighlight-*.ico
+**/.project/

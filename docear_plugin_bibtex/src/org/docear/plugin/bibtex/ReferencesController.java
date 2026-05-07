@@ -420,7 +420,7 @@ public class ReferencesController extends ALanguageController implements IDocear
 						jabrefWrapper = new JabrefWrapper(Controller.getCurrentController().getViewController().getJFrame());
 						 
 						modeController.getExtension(KeyBindingProcessor.class).addKeyStrokeProcessor(new KeyBindInterceptor());
-						createOptionPanel(jabrefWrapper.getJabrefFrame());
+						//createOptionPanel(jabrefWrapper.getJabrefFrame());
 						
 						WorkspaceController.getModeExtension(modeController).getView().addProjectSelectionListener(getProjectSelectionListener());
 					}
