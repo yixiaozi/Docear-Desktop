@@ -63,4 +63,33 @@ if (!(Test-Path $windowsZip)) {
     throw "Expected package not found: $windowsZip"
 }
 
+$extractDir = Join-Path $targetDir "docear_windows"
+Write-Output "Extracting $windowsZip to $extractDir..."
+
+if (Test-Path $extractDir) {
+    Remove-Item -Path $extractDir -Recurse -Force
+}
+
+Expand-Archive -Path $windowsZip -DestinationPath $extractDir -Force
+
+Write-Output "Extraction completed."
+
+$launcherPath = Join-Path $extractDir "Docear.exe"
+if (-not (Test-Path $launcherPath)) {
+    $subDirs = Get-ChildItem -Path $extractDir -Directory
+    foreach ($subDir in $subDirs) {
+        $launcherPath = Join-Path $subDir.FullName "Docear.exe"
+        if (Test-Path $launcherPath) {
+            break
+        }
+    }
+}
+
+if (Test-Path $launcherPath) {
+    Write-Output "Launching Docear from $launcherPath..."
+    Start-Process -FilePath $launcherPath
+} else {
+    Write-Warning "Docear.exe not found in $extractDir"
+}
+
 Write-Output "Published Docear packages to $targetDir"
