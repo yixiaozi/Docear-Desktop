@@ -1102,12 +1102,29 @@ public class PdfUtilitiesController extends ALanguageController {
 				Object source = event.getSource();
 				if (source != null && source instanceof JRadioButton) {
 					JRadioButton radioButton = (JRadioButton) event.getSource();
+					
+					final IPropertyControl pdfReaderControl = opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY);
+					final IPropertyControl standardViewerControl = opc.getPropertyControl(OPEN_STANDARD_PDF_VIEWER_KEY);
+					final IPropertyControl internalViewerControl = opc.getPropertyControl(OPEN_INTERNAL_PDF_VIEWER_KEY);
+					final IPropertyControl onPageViewerControl = opc.getPropertyControl(OPEN_PDF_VIEWER_ON_PAGE_KEY);
+					final IPropertyControl installPdfReadersControl = opc.getPropertyControl("docear.show_install_pdf_readers");
+					
 					if (radioButton.getName().equals(OPEN_STANDARD_PDF_VIEWER_KEY)) {
-						((RadioButtonProperty) opc.getPropertyControl(OPEN_STANDARD_PDF_VIEWER_KEY)).setValue(true);
-						((RadioButtonProperty) opc.getPropertyControl(OPEN_INTERNAL_PDF_VIEWER_KEY)).setValue(false);
-						((RadioButtonProperty) opc.getPropertyControl(OPEN_PDF_VIEWER_ON_PAGE_KEY)).setValue(false);						
-						opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY).setEnabled(false);
-						opc.getPropertyControl("docear.show_install_pdf_readers").setEnabled(false);
+						if (standardViewerControl != null) {
+							((RadioButtonProperty) standardViewerControl).setValue(true);
+						}
+						if (internalViewerControl != null) {
+							((RadioButtonProperty) internalViewerControl).setValue(false);
+						}
+						if (onPageViewerControl != null) {
+							((RadioButtonProperty) onPageViewerControl).setValue(false);
+						}
+						if (pdfReaderControl != null) {
+							pdfReaderControl.setEnabled(false);
+						}
+						if (installPdfReadersControl != null) {
+							installPdfReadersControl.setEnabled(false);
+						}
 						List<PDFReaderHandle> readers = getPdfViewers();
 						PDFReaderHandle pdfxc = null;
 						for(PDFReaderHandle reader : readers){
@@ -1136,23 +1153,43 @@ public class PdfUtilitiesController extends ALanguageController {
 						}
 					}
 					if (radioButton.getName().equals(OPEN_INTERNAL_PDF_VIEWER_KEY)) {
-						((RadioButtonProperty) opc.getPropertyControl(OPEN_INTERNAL_PDF_VIEWER_KEY)).setValue(true);
-						((RadioButtonProperty) opc.getPropertyControl(OPEN_STANDARD_PDF_VIEWER_KEY)).setValue(false);
-						((RadioButtonProperty) opc.getPropertyControl(OPEN_PDF_VIEWER_ON_PAGE_KEY)).setValue(false);						
-						opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY).setEnabled(false);
-						opc.getPropertyControl("docear.show_install_pdf_readers").setEnabled(false);
+						if (internalViewerControl != null) {
+							((RadioButtonProperty) internalViewerControl).setValue(true);
+						}
+						if (standardViewerControl != null) {
+							((RadioButtonProperty) standardViewerControl).setValue(false);
+						}
+						if (onPageViewerControl != null) {
+							((RadioButtonProperty) onPageViewerControl).setValue(false);
+						}
+						if (pdfReaderControl != null) {
+							pdfReaderControl.setEnabled(false);
+						}
+						if (installPdfReadersControl != null) {
+							installPdfReadersControl.setEnabled(false);
+						}
 					}
 					if (radioButton.getName().equals(OPEN_PDF_VIEWER_ON_PAGE_KEY)) {
-						((RadioButtonProperty) opc.getPropertyControl(OPEN_INTERNAL_PDF_VIEWER_KEY)).setValue(false);
-						((RadioButtonProperty) opc.getPropertyControl(OPEN_STANDARD_PDF_VIEWER_KEY)).setValue(false);
-						((RadioButtonProperty) opc.getPropertyControl(OPEN_PDF_VIEWER_ON_PAGE_KEY)).setValue(true);
-						if(Compat.isMacOsX()) {
-							opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY).setEnabled(false);
+						if (internalViewerControl != null) {
+							((RadioButtonProperty) internalViewerControl).setValue(false);
 						}
-						else {
-							opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY).setEnabled(true);
+						if (standardViewerControl != null) {
+							((RadioButtonProperty) standardViewerControl).setValue(false);
 						}
-						opc.getPropertyControl("docear.show_install_pdf_readers").setEnabled(true);
+						if (onPageViewerControl != null) {
+							((RadioButtonProperty) onPageViewerControl).setValue(true);
+						}
+						if (pdfReaderControl != null) {
+							if(Compat.isMacOsX()) {
+								pdfReaderControl.setEnabled(false);
+							}
+							else {
+								pdfReaderControl.setEnabled(true);
+							}
+						}
+						if (installPdfReadersControl != null) {
+							installPdfReadersControl.setEnabled(true);
+						}
 					}
 				}
 				else if(source != null && source instanceof JCheckBox) {
@@ -1173,103 +1210,171 @@ public class PdfUtilitiesController extends ALanguageController {
 
 		opc.addPropertyLoadListener(new PropertyLoadListener() {
 			public void propertiesLoaded(Collection<IPropertyControl> properties) {
-				if(Compat.isMacOsX()) {
-					opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY).setEnabled(false);
+				final IPropertyControl pdfReaderControl = opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY);
+				final IPropertyControl standardViewerControl = opc.getPropertyControl(OPEN_STANDARD_PDF_VIEWER_KEY);
+				final IPropertyControl internalViewerControl = opc.getPropertyControl(OPEN_INTERNAL_PDF_VIEWER_KEY);
+				final IPropertyControl onPageViewerControl = opc.getPropertyControl(OPEN_PDF_VIEWER_ON_PAGE_KEY);
+				final IPropertyControl installPdfReadersControl = opc.getPropertyControl("docear.show_install_pdf_readers");
+				
+				if(Compat.isMacOsX() && pdfReaderControl != null) {
+					pdfReaderControl.setEnabled(false);
 				}
-				((RadioButtonProperty) opc.getPropertyControl(OPEN_STANDARD_PDF_VIEWER_KEY))
-						.addPropertyChangeListener(new PropertyChangeListener() {
-							public void propertyChange(PropertyChangeEvent evt) {
-								if (evt.getNewValue().equals("true")) { //$NON-NLS-1$
-									opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY).setEnabled(false);
-									opc.getPropertyControl("docear.show_install_pdf_readers").setEnabled(false);
-								}
-							}
-						});
-
-				((RadioButtonProperty) opc.getPropertyControl(OPEN_INTERNAL_PDF_VIEWER_KEY))
-						.addPropertyChangeListener(new PropertyChangeListener() {
-							public void propertyChange(PropertyChangeEvent evt) {
-								if (evt.getNewValue().equals("true")) {									
-									opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY).setEnabled(false);
-									opc.getPropertyControl("docear.show_install_pdf_readers").setEnabled(false);
-								}
-							}
-						});
-
-				((RadioButtonProperty) opc.getPropertyControl(OPEN_PDF_VIEWER_ON_PAGE_KEY))
-						.addPropertyChangeListener(new PropertyChangeListener() {
-							public void propertyChange(PropertyChangeEvent evt) {
-								if (evt.getNewValue().equals("true")) {
-									if(Compat.isMacOsX()) {
-										opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY).setEnabled(false);
+				
+				if (standardViewerControl != null) {
+					((RadioButtonProperty) standardViewerControl)
+							.addPropertyChangeListener(new PropertyChangeListener() {
+								public void propertyChange(PropertyChangeEvent evt) {
+									if (evt.getNewValue().equals("true")) { //$NON-NLS-1$
+										if (pdfReaderControl != null) {
+											pdfReaderControl.setEnabled(false);
+										}
+										if (installPdfReadersControl != null) {
+											installPdfReadersControl.setEnabled(false);
+										}
 									}
-									else {
-										opc.getPropertyControl(ShowPdfReaderDefinitionDialogAction.KEY).setEnabled(true);
-									}
-									
-									opc.getPropertyControl("docear.show_install_pdf_readers").setEnabled(true);
 								}
+							});
+				}
+
+				if (internalViewerControl != null) {
+					((RadioButtonProperty) internalViewerControl)
+							.addPropertyChangeListener(new PropertyChangeListener() {
+								public void propertyChange(PropertyChangeEvent evt) {
+									if (evt.getNewValue().equals("true")) {									
+										if (pdfReaderControl != null) {
+											pdfReaderControl.setEnabled(false);
+										}
+										if (installPdfReadersControl != null) {
+											installPdfReadersControl.setEnabled(false);
+										}
+									}
+								}
+							});
+				}
+
+				if (onPageViewerControl != null) {
+					((RadioButtonProperty) onPageViewerControl)
+							.addPropertyChangeListener(new PropertyChangeListener() {
+								public void propertyChange(PropertyChangeEvent evt) {
+									if (evt.getNewValue().equals("true")) {
+										if (pdfReaderControl != null) {
+											if(Compat.isMacOsX()) {
+												pdfReaderControl.setEnabled(false);
+											}
+											else {
+												pdfReaderControl.setEnabled(true);
+											}
+										}
+										if (installPdfReadersControl != null) {
+											installPdfReadersControl.setEnabled(true);
+										}
+									}
+								}
+							});
+				}
+				final IPropertyControl removeLinebreaksControl = opc.getPropertyControl(REMOVE_LINEBREAKS_KEY);
+				if (removeLinebreaksControl != null) {
+					((BooleanProperty) removeLinebreaksControl)
+					.addPropertyChangeListener(new PropertyChangeListener() {
+						public void propertyChange(PropertyChangeEvent evt) {
+							boolean checked = false;
+							if (evt.getNewValue().equals("true")) {
+								checked = true;
 							}
-						});
-				((BooleanProperty) opc.getPropertyControl(REMOVE_LINEBREAKS_KEY))
-				.addPropertyChangeListener(new PropertyChangeListener() {
-					public void propertyChange(PropertyChangeEvent evt) {
-						boolean checked = false;
-						if (evt.getNewValue().equals("true")) {
-							checked = true;
+							changeLinebreakOptions(checked);
 						}
-						changeLinebreakOptions(checked);
-					}
-				});				
-				changeLinebreakOptions(((BooleanProperty) opc.getPropertyControl(REMOVE_LINEBREAKS_KEY)).getBooleanValue());
+					});				
+					changeLinebreakOptions(((BooleanProperty) removeLinebreaksControl).getBooleanValue());
+				}
 				
 				
-				((BooleanProperty) opc.getPropertyControl(IMPORT_HIGHLIGHTED_TEXTS_KEY))
-				.addPropertyChangeListener(new PropertyChangeListener() {
-					public void propertyChange(PropertyChangeEvent evt) {
-						((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_ONLY_POP_UP_KEY)).setEnabled(Boolean.parseBoolean(""+ evt.getNewValue()));
-						if(DocearAddonController.getController().hasPlugin(IHighlightsImporter.class)){
-							((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_ONLY_HIGHLIGHTED_KEY)).setEnabled(Boolean.parseBoolean(""+ evt.getNewValue()));
-							((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_POP_UP_HIGHLIGHTED_KEY)).setEnabled(Boolean.parseBoolean(""+ evt.getNewValue()));
-						}						
-					}
-				});	
+				final IPropertyControl importHighlightedTextsControl = opc.getPropertyControl(IMPORT_HIGHLIGHTED_TEXTS_KEY);
+				final IPropertyControl importOnlyPopUpControl = opc.getPropertyControl(IMPORT_ONLY_POP_UP_KEY);
+				final IPropertyControl importOnlyHighlightedControl = opc.getPropertyControl(IMPORT_ONLY_HIGHLIGHTED_KEY);
+				final IPropertyControl importPopUpHighlightedControl = opc.getPropertyControl(IMPORT_POP_UP_HIGHLIGHTED_KEY);
+				
+				if (importHighlightedTextsControl != null) {
+					((LinkRadioButtonProperty) importHighlightedTextsControl)
+					.addPropertyChangeListener(new PropertyChangeListener() {
+						public void propertyChange(PropertyChangeEvent evt) {
+							if (importOnlyPopUpControl != null) {
+								((LinkRadioButtonProperty) importOnlyPopUpControl).setEnabled(Boolean.parseBoolean(""+ evt.getNewValue()));
+							}
+							if(DocearAddonController.getController().hasPlugin(IHighlightsImporter.class)){
+								if (importOnlyHighlightedControl != null) {
+									((LinkRadioButtonProperty) importOnlyHighlightedControl).setEnabled(Boolean.parseBoolean(""+ evt.getNewValue()));
+								}
+								if (importPopUpHighlightedControl != null) {
+									((LinkRadioButtonProperty) importPopUpHighlightedControl).setEnabled(Boolean.parseBoolean(""+ evt.getNewValue()));
+								}
+							}						
+						}
+					});	
+				}
 			
-				((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_ONLY_POP_UP_KEY))
-				.addPropertyChangeListener(new PropertyChangeListener() {					
-					public void propertyChange(PropertyChangeEvent evt) {
-						if (evt.getNewValue().equals("true")) {
-							((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_ONLY_HIGHLIGHTED_KEY)).setValue(false);
-							((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_POP_UP_HIGHLIGHTED_KEY)).setValue(false);
-						}						
-					}
-				});	
-				((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_ONLY_HIGHLIGHTED_KEY))
-				.addPropertyChangeListener(new PropertyChangeListener() {					
-					public void propertyChange(PropertyChangeEvent evt) {
-						if (evt.getNewValue().equals("true")) {
-							((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_ONLY_POP_UP_KEY)).setValue(false);
-							((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_POP_UP_HIGHLIGHTED_KEY)).setValue(false);
-						}						
-					}
-				});
-				((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_POP_UP_HIGHLIGHTED_KEY))
-				.addPropertyChangeListener(new PropertyChangeListener() {					
-					public void propertyChange(PropertyChangeEvent evt) {
-						if (evt.getNewValue().equals("true")) {
-							((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_ONLY_HIGHLIGHTED_KEY)).setValue(false);
-							((LinkRadioButtonProperty) opc.getPropertyControl(IMPORT_ONLY_POP_UP_KEY)).setValue(false);
-						}						
-					}
-				});
+				if (importOnlyPopUpControl != null) {
+					((LinkRadioButtonProperty) importOnlyPopUpControl)
+					.addPropertyChangeListener(new PropertyChangeListener() {					
+						public void propertyChange(PropertyChangeEvent evt) {
+							if (evt.getNewValue().equals("true")) {
+								if (importOnlyHighlightedControl != null) {
+									((LinkRadioButtonProperty) importOnlyHighlightedControl).setValue(false);
+								}
+								if (importPopUpHighlightedControl != null) {
+									((LinkRadioButtonProperty) importPopUpHighlightedControl).setValue(false);
+								}
+							}						
+						}
+					});	
+				}
+				if (importOnlyHighlightedControl != null) {
+					((LinkRadioButtonProperty) importOnlyHighlightedControl)
+					.addPropertyChangeListener(new PropertyChangeListener() {					
+						public void propertyChange(PropertyChangeEvent evt) {
+							if (evt.getNewValue().equals("true")) {
+								if (importOnlyPopUpControl != null) {
+									((LinkRadioButtonProperty) importOnlyPopUpControl).setValue(false);
+								}
+								if (importPopUpHighlightedControl != null) {
+									((LinkRadioButtonProperty) importPopUpHighlightedControl).setValue(false);
+								}
+							}						
+						}
+					});
+				}
+				if (importPopUpHighlightedControl != null) {
+					((LinkRadioButtonProperty) importPopUpHighlightedControl)
+					.addPropertyChangeListener(new PropertyChangeListener() {					
+						public void propertyChange(PropertyChangeEvent evt) {
+							if (evt.getNewValue().equals("true")) {
+								if (importOnlyHighlightedControl != null) {
+									((LinkRadioButtonProperty) importOnlyHighlightedControl).setValue(false);
+								}
+								if (importOnlyPopUpControl != null) {
+									((LinkRadioButtonProperty) importOnlyPopUpControl).setValue(false);
+								}
+							}						
+						}
+					});
+				}
 				
 							
 			}
 			
 			private void changeLinebreakOptions(boolean checked) {
-				((BooleanProperty) opc.getPropertyControl(REMOVE_DASHES_KEY)).setEnabled(checked);
-				((BooleanProperty) opc.getPropertyControl(KEEP_DOUBLE_LINEBREAKS_KEY)).setEnabled(checked);
-				((BooleanProperty) opc.getPropertyControl(ADD_SPACES_KEY)).setEnabled(checked);
+				final IPropertyControl removeDashesControl = opc.getPropertyControl(REMOVE_DASHES_KEY);
+				final IPropertyControl keepDoubleLinebreaksControl = opc.getPropertyControl(KEEP_DOUBLE_LINEBREAKS_KEY);
+				final IPropertyControl addSpacesControl = opc.getPropertyControl(ADD_SPACES_KEY);
+				
+				if (removeDashesControl != null) {
+					((BooleanProperty) removeDashesControl).setEnabled(checked);
+				}
+				if (keepDoubleLinebreaksControl != null) {
+					((BooleanProperty) keepDoubleLinebreaksControl).setEnabled(checked);
+				}
+				if (addSpacesControl != null) {
+					((BooleanProperty) addSpacesControl).setEnabled(checked);
+				}
 				
 //				((BooleanProperty) opc.getPropertyControl(REMOVE_LINEBREAKS_BOOKMARKS_KEY)).setEnabled(checked);
 //				((BooleanProperty) opc.getPropertyControl(REMOVE_LINEBREAKS_COMMENTS_KEY)).setEnabled(checked);
@@ -1372,11 +1477,28 @@ public class PdfUtilitiesController extends ALanguageController {
 	}	
 
 	private void addPropertiesToOptionPanel(ModeController modeController) {
+		LogUtils.info("PdfUtilitiesController.addPropertiesToOptionPanel: starting");
 		final URL preferences = this.getClass().getResource("preferences.xml"); //$NON-NLS-1$
-		if (preferences == null) throw new RuntimeException("cannot open docear.pdf_utilities plugin preferences"); //$NON-NLS-1$
+		if (preferences == null) {
+			LogUtils.severe("PdfUtilitiesController.addPropertiesToOptionPanel: cannot open docear.pdf_utilities plugin preferences");
+			throw new RuntimeException("cannot open docear.pdf_utilities plugin preferences");
+		}
+		LogUtils.info("PdfUtilitiesController.addPropertiesToOptionPanel: preferences URL=" + preferences);
 		
 		OptionPanelBuilder builder = ((MModeController)modeController).getOptionPanelBuilder();
-		builder.load(preferences);		
+		try {
+			builder.load(preferences);
+			LogUtils.info("PdfUtilitiesController.addPropertiesToOptionPanel: loaded preferences successfully");
+		} catch (Exception ex) {
+			LogUtils.severe("PdfUtilitiesController.addPropertiesToOptionPanel: failed to load preferences", ex);
+			throw new RuntimeException("Failed to load preferences", ex);
+		}
+		
+		if (builder.getRoot().getChildCount() == 0) {
+			LogUtils.info("PdfUtilitiesController.addPropertiesToOptionPanel: no tabs defined, skipping");
+			return;
+		}
+		
 		builder.addCreator("pdf_management/annotations_import", new IPropertyControlCreator() {
 			
 			public IPropertyControl createControl() {				

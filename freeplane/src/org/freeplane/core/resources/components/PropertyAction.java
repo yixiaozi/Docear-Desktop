@@ -40,6 +40,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.resources.components.OptionPanel.IOptionPanelFeedback;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.components.UITools;
+import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 
 /**
@@ -62,6 +63,7 @@ public class PropertyAction extends AFreeplaneAction {
 	}
 
 	public void actionPerformed(final ActionEvent e) {
+		LogUtils.info("PropertyAction.actionPerformed: starting");
 		JDialog dialog = null;
 		if(e != null){
 			final Object source = e.getSource();
@@ -79,23 +81,32 @@ public class PropertyAction extends AFreeplaneAction {
 			dialog= new JDialog(UITools.getFrame(), true /* modal */);
 		dialog.setResizable(true);
 		dialog.setUndecorated(false);
-		final OptionPanel options = new OptionPanel(dialog, new IOptionPanelFeedback() {
-			public void writeProperties(final Properties props) {
-				boolean propertiesChanged = false;
-				for (final Object keyObject : props.keySet()) {
-					final String key = keyObject.toString();
-					final String newProperty = props.getProperty(key);
-					propertiesChanged = propertiesChanged
-					        || !newProperty.equals(ResourceController.getResourceController().getProperty(key));
-					ResourceController.getResourceController().setProperty(key, newProperty);
+		LogUtils.info("PropertyAction.actionPerformed: creating OptionPanel");
+		final OptionPanel options;
+		try {
+			options = new OptionPanel(dialog, new IOptionPanelFeedback() {
+				public void writeProperties(final Properties props) {
+					boolean propertiesChanged = false;
+					for (final Object keyObject : props.keySet()) {
+						final String key = keyObject.toString();
+						final String newProperty = props.getProperty(key);
+						propertiesChanged = propertiesChanged
+						        || !newProperty.equals(ResourceController.getResourceController().getProperty(key));
+						ResourceController.getResourceController().setProperty(key, newProperty);
+					}
+					if (propertiesChanged) {
+						JOptionPane.showMessageDialog(UITools.getFrame(), TextUtils
+						    .getText("option_changes_may_require_restart"));
+						ResourceController.getResourceController().saveProperties();
+					}
 				}
-				if (propertiesChanged) {
-					JOptionPane.showMessageDialog(UITools.getFrame(), TextUtils
-					    .getText("option_changes_may_require_restart"));
-					ResourceController.getResourceController().saveProperties();
-				}
-			}
-		});
+			});
+		} catch (Exception ex) {
+			LogUtils.severe("PropertyAction.actionPerformed: failed to create OptionPanel", ex);
+			JOptionPane.showMessageDialog(UITools.getFrame(), "Failed to open preferences: " + ex.getMessage());
+			return;
+		}
+		LogUtils.info("PropertyAction.actionPerformed: OptionPanel created successfully");
 		final String marshalled = ResourceController.getResourceController().getProperty(
 		    OptionPanel.PREFERENCE_STORAGE_PROPERTY);
 		final OptionPanelWindowConfigurationStorage storage = OptionPanelWindowConfigurationStorage.decorateDialog(
@@ -103,7 +114,14 @@ public class PropertyAction extends AFreeplaneAction {
 		if (storage != null) {
 			options.setSelectedPanel(storage.getPanel());
 		}
-		options.buildPanel(controls);
+		try {
+			options.buildPanel(controls);
+			LogUtils.info("PropertyAction.actionPerformed: panel built successfully");
+		} catch (Exception ex) {
+			LogUtils.severe("PropertyAction.actionPerformed: failed to build panel", ex);
+			JOptionPane.showMessageDialog(UITools.getFrame(), "Failed to build preferences panel: " + ex.getMessage());
+			return;
+		}
 		options.setProperties();
 		final String title = TextUtils.getText("PropertyAction.dialog");
 		dialog.setTitle(title);
@@ -115,9 +133,6 @@ public class PropertyAction extends AFreeplaneAction {
 			}
 		});
 		final Action action = new AbstractAction() {
-			/**
-			 * 
-			 */
 			private static final long serialVersionUID = 1L;
 
 			public void actionPerformed(final ActionEvent arg0) {
@@ -129,6 +144,7 @@ public class PropertyAction extends AFreeplaneAction {
 			dialog.pack();
 		}
 		dialog.setVisible(true);
+		LogUtils.info("PropertyAction.actionPerformed: finished");
 	}
 
 	@Override

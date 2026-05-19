@@ -1,45 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <preferences_structure>
 	<tabbed_pane>
-		<tab name="pdf_management">
-			<separator name="annotations_import">
-				<boolean name="docear_import_bookmarks" />
-				<boolean name="docear_import_comments" />
-				<boolean name="docear_import_highlighted_text" />
-			</separator>
-			<separator name="remove_linebreaks">
-			     <boolean name="docear_remove_linebreaks" />
-			     <!--boolean name="docear_remove_linebreaks_bookmarks" /-->
-			     <!--boolean name="docear_remove_linebreaks_comments" /-->
-			     <!--boolean name="docear_remove_linebreaks_highlighted_text" /-->
-			     <!--text name="remove_linebreaks_options"/--> 
-			     <boolean name="docear_keep_double_linebreaks" />
-			     <boolean name="docear_add_spaces" />
-			     <boolean name="docear_remove_dashes" />
-			</separator>
-			<separator name="annotations_edit">
-			    <text name="edit_annotations_info"/> 
-			    <boolean name="docear_edit_bookmarks" />                
-                <boolean name="docear_edit_comment" /> 
-			</separator>
-			<separator name ="annotations_open">				
-			    <radiobutton name = "docear_open_standard"/>
-			    <radiobutton name = "docear_open_internal" enabled = "false"/>
-			    <text name = "docear_open_on_page_explanation" />			    
-			    <radiobutton name = "docear_open_on_page"/>
-			    <action name = "docear.show_install_pdf_readers" />
-			    <action name = "docear.show_pdf_reader_definition" />
-			</separator>			
-		</tab>
-		<tab name ="folder_monitoring">
-			<separator name ="monitoring_settings">
-			    <boolean name="docear_auto_monitoring" />
-                <boolean name="docear_subdir_monitoring" />
-                <boolean name="docear_flatten_subdir" />
-                <string name="docear_files_to_import"/>   
-                <string name="docear_subdirs_to_ignore"/>   
-                <boolean name="docear_extra_incoming_node"/>
-			</separator>
-		</tab>
 	</tabbed_pane>
 </preferences_structure>

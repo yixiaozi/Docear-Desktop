@@ -231,26 +231,6 @@
         	</combo>
         </separator>
     </tab>
-    <tab name="HTML">
-        <separator name="browser">
-            <string name="default_browser_command_windows_nt"/>
-            <string name="default_browser_command_windows_9x"/>
-            <string name="default_browser_command_other_os"/>
-            <string name="default_browser_command_mac"/>
-        </separator>
-        <separator name="html_export">
-            <combo name="html_export_folding">
-                <choice value="html_export_no_folding"/>
-                <choice value="html_export_fold_currently_folded"/>
-                <choice value="html_export_fold_all"/>
-                <choice value="html_export_based_on_headings"/>
-            </combo>
-            <boolean name="export_icons_in_html"/>
-        </separator>
-        <separator name="html_import">
-        	<boolean name="structured_html_import"/>
-        </separator>
-    </tab>
-    <tab name="plugins"/>
+
 </tabbed_pane>
 </preferences_structure>

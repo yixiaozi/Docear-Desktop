@@ -30,6 +30,7 @@ import org.freeplane.core.resources.components.PropertyAction;
 import org.freeplane.core.ui.IndexedTree;
 import org.freeplane.core.undo.IActor;
 import org.freeplane.core.undo.IUndoHandler;
+import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.mindmapmode.MMapModel;
@@ -102,10 +103,18 @@ public class MModeController extends ModeController {
 	}
 
 	private void createOptionPanelControls() {
+		LogUtils.info("MModeController.createOptionPanelControls: starting");
 		optionPanelBuilder = new OptionPanelBuilder();
-		final ResourceController resourceController = ResourceController.getResourceController();		
-		optionPanelBuilder.load(resourceController.getResource("/xml/preferences.xml"));
+		final ResourceController resourceController = ResourceController.getResourceController();
+		try {
+			optionPanelBuilder.load(resourceController.getResource("/xml/preferences.xml"));
+			LogUtils.info("MModeController.createOptionPanelControls: loaded main preferences.xml");
+		} catch (Exception ex) {
+			LogUtils.severe("MModeController.createOptionPanelControls: failed to load preferences.xml", ex);
+			throw new RuntimeException("Failed to load preferences.xml", ex);
+		}
 		addAction(createPropertyAction(optionPanelBuilder));
+		LogUtils.info("MModeController.createOptionPanelControls: finished");
 	}
 
 	public static PropertyAction createPropertyAction(OptionPanelBuilder optionPanelBuilder) {
