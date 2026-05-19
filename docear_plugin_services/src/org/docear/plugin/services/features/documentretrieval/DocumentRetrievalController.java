@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.swing.JProgressBar;
 import javax.swing.ProgressMonitor;
+import javax.swing.SwingUtilities;
 
 import org.apache.commons.lang.NullArgumentException;
 import org.docear.plugin.core.util.CoreUtils;
@@ -203,17 +204,11 @@ public abstract class DocumentRetrievalController extends ADocearServiceFeature 
 	}
 				
 	public void refreshDocuments(DocumentEntries documentEntries) {
-		DocumentsModel model = null;
 		if(documentEntries == null) {
-			try {
-				model = requestDocuments();
-			} catch (AlreadyInUseException e) {
-				return;
-			}			
+			requestDocuments();
+			return;
 		}
-		else {
-			model = new DocumentsModel(documentEntries);
-		}		
+		DocumentsModel model = new DocumentsModel(documentEntries);
 		updateDocumentView(model);
 	}
 	
@@ -232,55 +227,62 @@ public abstract class DocumentRetrievalController extends ADocearServiceFeature 
 		}
 	}
 	
-	protected DocumentsModel requestDocuments() throws AlreadyInUseException {
-		DocumentsModel model = null;		
-		if (ServiceController.getCurrentUser().isRecommendationsEnabled()) {
-			final ProgressMonitor monitor = new ProgressMonitor(UITools.getFrame(), TextUtils.getText("recommendations.request.wait.text"), null, 0, 100);
-			monitor.setMillisToDecideToPopup(0);
-			monitor.setMillisToPopup(0);
-			ExecutorService executor = Executors.newSingleThreadExecutor();
-			try {
-				Future<DocumentsModel> task = executor.submit(new Callable<DocumentsModel>() {
-	
-					public DocumentsModel call() throws Exception {
-						DocumentsModel model = null;	
-											
-						monitor.setProgress(1);
-						((JProgressBar)monitor.getAccessibleContext().getAccessibleChild(1)).setIndeterminate(true);
-						long l = System.currentTimeMillis();
-						DocumentEntries documentEntries = getNewDocuments(true);
-						LogUtils.info("recommendation request time: "+(System.currentTimeMillis()-l));
-						
-						model = new DocumentsModel(documentEntries);
-						return model;
-					}
+	protected void requestDocuments() {
+		if (!ServiceController.getCurrentUser().isRecommendationsEnabled()) {
+			DocumentsModel model = new DocumentsModel(null);
+			updateDocumentView(model);
+			return;
+		}
+		
+		final ProgressMonitor monitor = new ProgressMonitor(UITools.getFrame(), TextUtils.getText("recommendations.request.wait.text"), null, 0, 100);
+		monitor.setMillisToDecideToPopup(0);
+		monitor.setMillisToPopup(0);
+		
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		executor.submit(new Runnable() {
+			public void run() {
+				DocumentsModel model = null;
+				try {
+					SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							monitor.setProgress(1);
+							((JProgressBar)monitor.getAccessibleContext().getAccessibleChild(1)).setIndeterminate(true);
+						}
+					});
 					
+					long l = System.currentTimeMillis();
+					DocumentEntries documentEntries = getNewDocuments(true);
+					LogUtils.info("recommendation request time: "+(System.currentTimeMillis()-l));
+					
+					model = new DocumentsModel(documentEntries);
+					
+					if (model.getChildCount(model.getRootNode()) > 0) {
+						sendReceiveConfirmation(model);
+					}
+				}
+				catch (AlreadyInUseException e) {
+					return;
+				}
+				catch (Exception e) {
+					LogUtils.warn(e);
+					model = getExceptionModel(e);
+				}
+				finally {
+					SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							monitor.close();
+						}
+					});
+				}
+				
+				final DocumentsModel finalModel = model;
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						updateDocumentView(finalModel);
+					}
 				});
-				model = task.get(DocearConnectionProvider.CONNECTION_TIMEOUT, TimeUnit.MILLISECONDS);
-				
-				if (model.getChildCount(model.getRootNode()) > 0) { 
-					//handshake -> send receive confirmation
-					sendReceiveConfirmation(model);
-				}
-				
 			}
-			catch (Exception e) {
-				executor.shutdownNow();
-				if(e instanceof AlreadyInUseException) {
-					throw (AlreadyInUseException)e;
-				}
-				LogUtils.warn(e);
-				model = getExceptionModel(e);
-				
-			}
-			finally {
-				monitor.close();
-			}
-		} 
-		else {
-			model = new DocumentsModel(null);
-		}		
-		return model;
+		});
 	}
 		
 	protected DocumentsModel getExceptionModel(Exception e) {

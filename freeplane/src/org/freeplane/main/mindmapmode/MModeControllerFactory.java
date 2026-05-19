@@ -157,14 +157,9 @@ public class MModeControllerFactory {
 	private MUIFactory uiFactory;
 
 	private void createAddIns() {
-		final StyleEditorPanel panel = new StyleEditorPanel(modeController, uiFactory, true);
-		final JScrollPane styleScrollPane = new JScrollPane(panel, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS,
-		    JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-		UITools.setScrollbarIncrement(styleScrollPane);
 		final JComponent tabs = (JComponent) modeController.getUserInputListenerFactory().getToolBar("/format").getComponent(1);
 		tabs.add("\u63d0\u9192", new ReminderTabPanel(modeController));
 		tabs.add("\u5168\u90e8\u63d0\u9192", new EnhancedAllRemindersTabPanel());
-		tabs.add(TextUtils.getText("format_panel"), styleScrollPane);
 		new AttributePanelManager(modeController);
 		new HierarchicalIcons();
 		new AutomaticLayoutController();

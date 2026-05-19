@@ -142,8 +142,8 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 				}
 				else if (user instanceof ReminderRecord) {
 					ReminderRecord record = (ReminderRecord) user;
-					String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText).replaceAll("\\s+", " ");
-					setText(timeFormat.format(new Date(record.remindAt)) + "  " + text + " (" + record.file.getName() + ")");
+					String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText).replaceAll("\\s+", " ").trim();
+					setText(timeFormat.format(new Date(record.remindAt)) + " " + text.trim() + " (" + record.file.getName() + ")");
 				}
 				return this;
 			}
@@ -491,6 +491,18 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		final DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) path.getLastPathComponent();
 		final Object user = selectedNode.getUserObject();
 		JPopupMenu menu = new JPopupMenu();
+		
+		if (user instanceof ReminderRecord) {
+			final ReminderRecord record = (ReminderRecord) user;
+			JMenuItem openFolderItem = new JMenuItem("\u6253\u5f00\u6587\u4ef6\u5939");
+			openFolderItem.addActionListener(new java.awt.event.ActionListener() {
+				public void actionPerformed(java.awt.event.ActionEvent event) {
+					openContainingFolder(record.file);
+				}
+			});
+			menu.add(openFolderItem);
+		}
+		
 		JMenuItem copyItem = new JMenuItem("\u590d\u5236");
 		copyItem.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent event) {
@@ -499,6 +511,27 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		});
 		menu.add(copyItem);
 		menu.show(tree, e.getX(), e.getY());
+	}
+	
+	private void openContainingFolder(File file) {
+		if (file == null || !file.exists()) {
+			return;
+		}
+		File parentDir = file.getParentFile();
+		if (parentDir == null || !parentDir.isDirectory()) {
+			return;
+		}
+		try {
+			if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
+				Runtime.getRuntime().exec("explorer.exe \"" + parentDir.getAbsolutePath() + "\"");
+			} else if (System.getProperty("os.name").toLowerCase().startsWith("mac")) {
+				Runtime.getRuntime().exec(new String[] { "open", parentDir.getAbsolutePath() });
+			} else {
+				Runtime.getRuntime().exec(new String[] { "xdg-open", parentDir.getAbsolutePath() });
+			}
+		} catch (Exception e) {
+			LogUtils.warn(e);
+		}
 	}
 
 	private void copyNodeContent(DefaultMutableTreeNode selectedNode, Object user) {
@@ -528,7 +561,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		Object user = node.getUserObject();
 		if (user instanceof ReminderRecord) {
 			ReminderRecord record = (ReminderRecord) user;
-			String leaf = timeFormat.format(new Date(record.remindAt)) + "  " + normalizeTaskText(record.nodeText) + " (" + record.file.getName() + ")";
+			String leaf = timeFormat.format(new Date(record.remindAt)) + " " + normalizeTaskText(record.nodeText) + " (" + record.file.getName() + ")";
 			String line = prefix.length() == 0 ? leaf : (prefix + " > " + leaf);
 			out.add(line.trim());
 			return;
@@ -566,8 +599,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			IMapViewManager mapViewManager = Controller.getCurrentController().getMapViewManager();
 			URL url = record.file.toURI().toURL();
 			if (!mapViewManager.tryToChangeToMapView(url)) {
-				Controller.getCurrentController().getViewController().openDocument(url);
-				mapViewManager.tryToChangeToMapView(url);
+				Controller.getCurrentModeController().getMapController().newMap(url);
 			}
 			selectReminderNodeWithRetry(record, 0);
 		}

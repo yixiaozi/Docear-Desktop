@@ -221,37 +221,7 @@ public class ReminderHook extends PersistentNodeHook implements IExtension {
 	}
 
 	private void createTimePanel() {
-		final TimeManagement timeManagement = new TimeManagement(this);
-		final int axis = BoxLayout.Y_AXIS;
-		final JTimePanel timePanel = timeManagement.createTimePanel(null, false, 1);
-		modeController.getMapController().addNodeSelectionListener(new INodeSelectionListener() {
-			public void onSelect(NodeModel node) {
-				timePanel.update(node);
-			}
-			
-			public void onDeselect(NodeModel node) {
-			}
-		});
-		modeController.getMapController().addNodeChangeListener(new INodeChangeListener() {
-			public void nodeChanged(NodeChangeEvent event) {
-				final NodeModel node = event.getNode();
-				if(event.getProperty().equals(getExtensionClass()) && node.equals(modeController.getMapController().getSelectedNode()))
-						timePanel.update(node);
-			}
-		});
-		timePanel.setBorder(BorderFactory.createTitledBorder(TextUtils.getText("calendar_panel")));
-		final JPanel tablePanel = new AttributePanelManager(modeController).getTablePanel();
-		tablePanel.setBorder(BorderFactory.createTitledBorder(TextUtils.getText("attributes_attribute")));
-		final Box panel = new Box(axis);
-		panel.add(timePanel);
-		panel.add(tablePanel);
-		System.out.println("REMINDERHOOK: "+modeController);
-		final JTabbedPane tabs = (JTabbedPane) modeController.getUserInputListenerFactory().getToolBar("/format").getComponent(1);
-		final JScrollPane timeScrollPane = new JScrollPane(panel, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-		    JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-		UITools.setScrollbarIncrement(timeScrollPane);
-		tabs.add(TextUtils.getText("calendar_attributes_panel"), timeScrollPane);
-    }
+	}
 
 	@Override
 	public void add(final NodeModel node, final IExtension extension) {

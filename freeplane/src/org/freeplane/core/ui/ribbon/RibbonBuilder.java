@@ -127,6 +127,8 @@ public class RibbonBuilder {
 			getAcceleratorManager().loadAcceleratorPresets(new FileInputStream(getAcceleratorManager().getPresetsFile()));
 		}
 		catch (IOException ex) {
+			LogUtils.info("User accelerator.properties not found, loading defaults");
+			getAcceleratorManager().loadDefaultAcceleratorPresets();
 		}
 		
 		getMapChangeAdapter().clear();

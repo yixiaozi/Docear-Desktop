@@ -256,6 +256,30 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
 			LogUtils.warn("shortcut presets not stored: "+e.getMessage());
 		}
 	}
+
+	public void loadDefaultAcceleratorPresets() {
+		InputStream in = null;
+		try {
+			in = RibbonAcceleratorManager.class.getResourceAsStream("/accelerator.default.properties");
+			if (in != null) {
+				LogUtils.info("Loading default accelerator presets");
+				loadAcceleratorPresets(in);
+			}
+		}
+		catch (final Exception e) {
+			LogUtils.warn("Could not load default accelerator presets: "+e.getMessage());
+		}
+		finally {
+			if (in != null) {
+				try {
+					in.close();
+				}
+				catch (IOException e) {
+					LogUtils.warn(e);
+				}
+			}
+		}
+	}
  	
  	public void storeAcceleratorPreset(OutputStream out) {
  		try {

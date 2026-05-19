@@ -177,37 +177,32 @@ public class DocumentEntryComponent extends JPanel {
 	public void setBounds(int x, int y, int width, int height) {
 		Insets insets = getInsets(null);
 		int maxHeight = (height-insets.top-insets.bottom);
-		//adjust openIcon
-		if(openIcon.getIconHeight() > maxHeight) {
-			while(openIcon.getIconHeight() > maxHeight) {
-				openIcon.setDimension(new Dimension(openIcon.getIconWidth()-8, openIcon.getIconHeight()-8));
+		
+		if(maxHeight > 0) {
+			if(openIcon.getIconHeight() > maxHeight) {
+				while(openIcon.getIconHeight() > maxHeight) {
+					openIcon.setDimension(new Dimension(openIcon.getIconWidth()-8, openIcon.getIconHeight()-8));
+				}
 			}
-			openIcon.paintIcon(this, getGraphics(), 0, 0);
-		}
-		else if(openIcon.getIconHeight()+8 < maxHeight) {
-			while(openIcon.getIconHeight()+8 < maxHeight) {
-				openIcon.setDimension(new Dimension(openIcon.getIconWidth()+8, openIcon.getIconHeight()+8));
+			else if(openIcon.getIconHeight()+8 < maxHeight) {
+				while(openIcon.getIconHeight()+8 < maxHeight) {
+					openIcon.setDimension(new Dimension(openIcon.getIconWidth()+8, openIcon.getIconHeight()+8));
+				}
 			}
-			openIcon.paintIcon(this, getGraphics(), 0, 0);
+			
+			if(dlIcon.getIconHeight() > maxHeight) {
+				while(dlIcon.getIconHeight() > maxHeight) {
+					dlIcon.setDimension(new Dimension(dlIcon.getIconWidth()-8, dlIcon.getIconHeight()-8));
+				}
+			}
+			else if(dlIcon.getIconHeight()+8 < maxHeight) {
+				while(dlIcon.getIconHeight()+8 < maxHeight) {
+					dlIcon.setDimension(new Dimension(dlIcon.getIconWidth()+8, dlIcon.getIconHeight()+8));
+				}
+			}
 		}
 		
-		//adjust dlIcon
-		if(dlIcon.getIconHeight() > maxHeight) {
-			while(dlIcon.getIconHeight() > (height-insets.top-insets.bottom)) {
-				dlIcon.setDimension(new Dimension(dlIcon.getIconWidth()-8, dlIcon.getIconHeight()-8));
-			}
-			dlIcon.paintIcon(this, getGraphics(), 0, 0);
-		}
-		else if(dlIcon.getIconHeight()+8 < maxHeight) {
-			while(dlIcon.getIconHeight()+8 < maxHeight) {
-				dlIcon.setDimension(new Dimension(dlIcon.getIconWidth()+8, dlIcon.getIconHeight()+8));
-			}
-			dlIcon.paintIcon(this, getGraphics(), 0, 0);
-		}
-		
-		invalidate();
 		super.setBounds(x, y, width, height);
-		repaint();
     }
 
 }

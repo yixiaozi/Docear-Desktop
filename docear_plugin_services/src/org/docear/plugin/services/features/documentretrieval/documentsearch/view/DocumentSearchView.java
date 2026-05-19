@@ -31,10 +31,12 @@ public class DocumentSearchView extends DocumentView {
 	
 	public DocumentSearchView(DocumentsModel model) {
 		super(model);
+		DocumentSearchController.getController().loadSearchModelAsync();
 	}
 	
 	public DocumentSearchView() {
 		super();
+		DocumentSearchController.getController().loadSearchModelAsync();
 	}
 	
 	@Override
@@ -123,6 +125,20 @@ public class DocumentSearchView extends DocumentView {
 		Container container = getPaginator();
 		if (container != null) {
 			documentList.add(getPaginator());
+		}
+	}
+
+	public void updateSearchModelButtons(SearchModel searchModel) {
+		if (documentSearchPanel != null && searchModel != null && searchModel.getId() != null) {
+			Component parent = documentSearchPanel.getParent();
+			if (parent instanceof JPanel) {
+				JPanel panel = (JPanel) parent;
+				panel.remove(documentSearchPanel);
+				documentSearchPanel = new DocumentSearchPanel(searchModel.getModel().split(" "), searchModel.getId());
+				panel.add(documentSearchPanel, BorderLayout.CENTER);
+				panel.revalidate();
+				panel.repaint();
+			}
 		}
 	}
 

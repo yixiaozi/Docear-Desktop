@@ -7,6 +7,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import javax.swing.SwingUtilities;
 import javax.ws.rs.core.MultivaluedMap;
 
 import org.docear.plugin.core.DocearController;
@@ -14,6 +15,7 @@ import org.docear.plugin.core.logging.DocearLogger;
 import org.docear.plugin.services.ServiceController;
 import org.docear.plugin.services.features.documentretrieval.DocumentRetrievalController;
 import org.docear.plugin.services.features.documentretrieval.documentsearch.actions.ShowDocumentSearchAction;
+import org.docear.plugin.services.features.documentretrieval.documentsearch.view.DocumentSearchView;
 import org.docear.plugin.services.features.documentretrieval.model.DocumentsModel;
 import org.docear.plugin.services.features.io.DocearConnectionProvider;
 import org.docear.plugin.services.features.io.DocearServiceResponse;
@@ -107,24 +109,24 @@ public class DocumentSearchController extends DocumentRetrievalController {
 		return query;
 	}
 	
-	public SearchModel getSearchModel() {
+	public void loadSearchModelAsync() {
 		if (searchModel != null) {
-			return searchModel;
+			return;
 		}
 		
 		final DocearUser user = ServiceController.getCurrentUser();		
 		if (user == null) {
-			return null;
+			return;
 		}
 		
-		ExecutorService executor = Executors.newSingleThreadExecutor();
-		Future<SearchModel> task = executor.submit(new Callable<SearchModel>() {
-			public SearchModel call() throws Exception {
+		final ExecutorService executor = Executors.newSingleThreadExecutor();
+		executor.submit(new Runnable() {
+			public void run() {
 				try {
     				DocearServiceResponse response = ServiceController.getConnectionController().get("/user/"+user.getUsername()+"/searchmodel/");
     				if (response != null && response.getStatus() == Status.OK) {    					
         				DocearXmlBuilder xmlBuilder = new DocearXmlBuilder();
-        				IXMLReader reader = new StdXMLReader(new InputStreamReader(response.getContent(), "UTF8"));
+        				IXMLReader reader = new StdXMLReader(new InputStreamReader(response.getContent(), "UTF-8"));
         				IXMLParser parser = XMLParserFactory.createDefaultXMLParser();
         				parser.setBuilder(xmlBuilder);
         				parser.setReader(reader);
@@ -136,12 +138,15 @@ public class DocumentSearchController extends DocumentRetrievalController {
         				
         				if (searchModel != null) {
         					sendModelReceivedConfirmation();
+        					updateSearchPanelWithModel();
         				}
-    					return searchModel;
     				}
 				}
 				catch(NullPointerException ignore) {}
-				return null;
+				catch(Exception e) {
+					LogUtils.warn(e);
+				}
+				executor.shutdown();
 			}
 			
 			private void sendModelReceivedConfirmation() {				
@@ -160,14 +165,21 @@ public class DocumentSearchController extends DocumentRetrievalController {
 							+ e.getMessage());
 				}
 			}
+			
+			private void updateSearchPanelWithModel() {
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						if (searchModel != null && DocumentRetrievalController.getView() instanceof DocumentSearchView) {
+							((DocumentSearchView) DocumentRetrievalController.getView()).updateSearchModelButtons(searchModel);
+						}
+					}
+				});
+			}
 		});
-		try {
-			return task.get(DocearConnectionProvider.CONNECTION_TIMEOUT, TimeUnit.MILLISECONDS);		
-		}
-		catch(Exception e) {
-			LogUtils.warn(e);
-		}
-		return null;
+	}
+	
+	public SearchModel getSearchModel() {
+		return searchModel;
 	}
 	
 	public void search(String query) {
