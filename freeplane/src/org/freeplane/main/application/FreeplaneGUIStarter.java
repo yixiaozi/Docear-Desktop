@@ -131,6 +131,7 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 			applicationResourceController.init();
 			LogUtils.createLogger();
 			FreeplaneGUIStarter.showSysInfo();
+			registerSubstanceLookAndFeels();
 			final String lookandfeel = System.getProperty("lookandfeel", applicationResourceController
 			    .getProperty("lookandfeel"));
 			FrameController.setLookAndFeel(lookandfeel);
@@ -376,5 +377,30 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 
 	public ResourceController getResourceController() {
 	    return applicationResourceController;
-    }
+	}
+	
+	private static void registerSubstanceLookAndFeels() {
+		try {
+			Class.forName("org.pushingpixels.substance.api.SubstanceLookAndFeel");
+			
+			UIManager.installLookAndFeel("Business Black Steel", "org.pushingpixels.substance.api.skin.BusinessBlackSteelSkin");
+			UIManager.installLookAndFeel("Business Blue Steel", "org.pushingpixels.substance.api.skin.BusinessBlueSteelSkin");
+			UIManager.installLookAndFeel("Business", "org.pushingpixels.substance.api.skin.BusinessSkin");
+			UIManager.installLookAndFeel("Creme Coffee", "org.pushingpixels.substance.api.skin.CremeCoffeeSkin");
+			UIManager.installLookAndFeel("Creme", "org.pushingpixels.substance.api.skin.CremeSkin");
+			UIManager.installLookAndFeel("Dust Coffee", "org.pushingpixels.substance.api.skin.DustCoffeeSkin");
+			UIManager.installLookAndFeel("Dust", "org.pushingpixels.substance.api.skin.DustSkin");
+			UIManager.installLookAndFeel("Graphite Aqua", "org.pushingpixels.substance.api.skin.GraphiteAquaSkin");
+			UIManager.installLookAndFeel("Graphite Glass", "org.pushingpixels.substance.api.skin.GraphiteGlassSkin");
+			UIManager.installLookAndFeel("Graphite", "org.pushingpixels.substance.api.skin.GraphiteSkin");
+			UIManager.installLookAndFeel("Mist Aqua", "org.pushingpixels.substance.api.skin.MistAquaSkin");
+			UIManager.installLookAndFeel("Mist Silver", "org.pushingpixels.substance.api.skin.MistSilverSkin");
+			UIManager.installLookAndFeel("Nebula Brick Wall", "org.pushingpixels.substance.api.skin.NebulaBrickWallSkin");
+			UIManager.installLookAndFeel("Nebula", "org.pushingpixels.substance.api.skin.NebulaSkin");
+			UIManager.installLookAndFeel("Obsidian", "org.pushingpixels.substance.api.skin.ObsidianSkin");
+			UIManager.installLookAndFeel("Sahara", "org.pushingpixels.substance.api.skin.SaharaSkin");
+		}
+		catch (Exception e) {
+		}
+	}
 }

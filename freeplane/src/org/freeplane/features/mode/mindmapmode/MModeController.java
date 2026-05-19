@@ -118,6 +118,7 @@ public class MModeController extends ModeController {
 	}
 
 	public static PropertyAction createPropertyAction(OptionPanelBuilder optionPanelBuilder) {
+		registerSubstanceLookAndFeels();
 	    final LookAndFeelInfo[] lafInfo = UIManager.getInstalledLookAndFeels();
 		final Vector<String> lafNames = new Vector<String>(lafInfo.length + 1);
 		final Vector<String> translatedLafNames = new Vector<String>(lafInfo.length + 1);
@@ -133,6 +134,31 @@ public class MModeController extends ModeController {
 		optionPanelBuilder.addComboProperty("Appearance/look_and_feel/lookandfeel", LOOKANDFEEL_PROPERTY, lafNames,
 		    translatedLafNames, IndexedTree.AS_CHILD);
 		return new PropertyAction(optionPanelBuilder.getRoot());
+    }
+
+    private static void registerSubstanceLookAndFeels() {
+    	try {
+    		Class.forName("org.pushingpixels.substance.api.SubstanceLookAndFeel");
+    		
+    		UIManager.installLookAndFeel("Business Black Steel", "org.pushingpixels.substance.api.skin.BusinessBlackSteelSkin");
+    		UIManager.installLookAndFeel("Business Blue Steel", "org.pushingpixels.substance.api.skin.BusinessBlueSteelSkin");
+    		UIManager.installLookAndFeel("Business", "org.pushingpixels.substance.api.skin.BusinessSkin");
+    		UIManager.installLookAndFeel("Creme Coffee", "org.pushingpixels.substance.api.skin.CremeCoffeeSkin");
+    		UIManager.installLookAndFeel("Creme", "org.pushingpixels.substance.api.skin.CremeSkin");
+    		UIManager.installLookAndFeel("Dust Coffee", "org.pushingpixels.substance.api.skin.DustCoffeeSkin");
+    		UIManager.installLookAndFeel("Dust", "org.pushingpixels.substance.api.skin.DustSkin");
+    		UIManager.installLookAndFeel("Graphite Aqua", "org.pushingpixels.substance.api.skin.GraphiteAquaSkin");
+    		UIManager.installLookAndFeel("Graphite Glass", "org.pushingpixels.substance.api.skin.GraphiteGlassSkin");
+    		UIManager.installLookAndFeel("Graphite", "org.pushingpixels.substance.api.skin.GraphiteSkin");
+    		UIManager.installLookAndFeel("Mist Aqua", "org.pushingpixels.substance.api.skin.MistAquaSkin");
+    		UIManager.installLookAndFeel("Mist Silver", "org.pushingpixels.substance.api.skin.MistSilverSkin");
+    		UIManager.installLookAndFeel("Nebula Brick Wall", "org.pushingpixels.substance.api.skin.NebulaBrickWallSkin");
+    		UIManager.installLookAndFeel("Nebula", "org.pushingpixels.substance.api.skin.NebulaSkin");
+    		UIManager.installLookAndFeel("Obsidian", "org.pushingpixels.substance.api.skin.ObsidianSkin");
+    		UIManager.installLookAndFeel("Sahara", "org.pushingpixels.substance.api.skin.SaharaSkin");
+    	}
+    	catch (Exception e) {
+    	}
     }
 
     private static void addCurrentLookAndFeelIfNecessary(Vector<String> lafNames, Vector<String> translatedLafNames) {
