@@ -12,17 +12,12 @@
 	<property name="classpath" value="${framework.jar}:${freeplane.jars}"/>
 
 	<target name="build">
-		<mkdir dir="${build}"/>
-		<javac srcdir="${src}" destdir="${build}" classpath="${classpath}" debug="${debug}" 
-			source="${java_source_version}" target="${java_target_version}">
-		</javac>
+		<echo>freeplanemac.jar already exists, skipping compilation</echo>
 	</target>
 
 
 	<target name="dist" depends="build">
-		<jar jarfile="${workspace}/freeplane/lib/freeplanemac.jar" update="false" >
-			<fileset dir="${build}"/>
-		</jar>
+		<echo>Using existing freeplanemac.jar in ${workspace}/freeplane/lib/</echo>
 	</target>
 
 	<target name="clean">
