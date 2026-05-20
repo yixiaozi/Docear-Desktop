@@ -5,7 +5,9 @@ import java.awt.Component;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -53,7 +55,7 @@ public class ReminderTabPanel extends JPanel {
 
 	private final DefaultListModel items = new DefaultListModel();
 	private final JList reminderList = new JList(items);
-	private final DateFormat dateFormat = DateFormat.getDateTimeInstance();
+	private final DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
 	private final ModeController modeController;
 
 	public ReminderTabPanel(final ModeController modeController) {

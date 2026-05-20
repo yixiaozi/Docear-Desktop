@@ -109,7 +109,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 	private final DateFormat dayFormat = new SimpleDateFormat("ddE", Locale.CHINA);
 	private final DateFormat monthFormat = new SimpleDateFormat("MM", Locale.CHINA);
 	private final DateFormat yearFormat = new SimpleDateFormat("yyyy", Locale.CHINA);
-	private final DateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.CHINA);
+	private final DateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.CHINA);
 	private final DecimalFormat twoDigits = new DecimalFormat("00");
 	private final Map cacheByFile = new HashMap();
 	private final Map remindersByKey = new HashMap();
@@ -453,14 +453,14 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 
 			DefaultMutableTreeNode yearNode = (DefaultMutableTreeNode) yearNodes.get(yearKey);
 			if (yearNode == null) {
-				yearNode = new DefaultMutableTreeNode(new GroupLabel(yearKey));
+				yearNode = new DefaultMutableTreeNode(new GroupLabel(yearKey + "年"));
 				yearNodes.put(yearKey, yearNode);
 				root.add(yearNode);
 			}
 
 			DefaultMutableTreeNode monthNode = (DefaultMutableTreeNode) monthNodes.get(monthNodeKey);
 			if (monthNode == null) {
-				monthNode = new DefaultMutableTreeNode(new GroupLabel(monthKey));
+				monthNode = new DefaultMutableTreeNode(new GroupLabel(monthKey + "月"));
 				monthNodes.put(monthNodeKey, monthNode);
 				yearNode.add(monthNode);
 			}
