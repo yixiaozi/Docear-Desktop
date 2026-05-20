@@ -212,6 +212,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		activeWorker = new SwingWorker() {
 			protected Object doInBackground() throws Exception {
 				List files = collectAllMindmapFiles();
+				cleanupCache(files);
 				for (int i = 0; i < files.size(); i++) {
 					if (isCancelled()) {
 						break;
@@ -307,6 +308,39 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			}
 		}
 		return normalized;
+	}
+
+	private void cleanupCache(List currentFiles) {
+		Set currentPaths = new HashSet();
+		for (int i = 0; i < currentFiles.size(); i++) {
+			File file = (File) currentFiles.get(i);
+			currentPaths.add(file.getAbsolutePath());
+		}
+		List toRemove = new ArrayList();
+		for (Object key : cacheByFile.keySet()) {
+			if (!currentPaths.contains(key)) {
+				toRemove.add(key);
+			}
+		}
+		for (int i = 0; i < toRemove.size(); i++) {
+			cacheByFile.remove(toRemove.get(i));
+		}
+		toRemove.clear();
+		for (Object key : reminderKeysByFile.keySet()) {
+			if (!currentPaths.contains(key)) {
+				toRemove.add(key);
+			}
+		}
+		for (int i = 0; i < toRemove.size(); i++) {
+			String fileKey = (String) toRemove.get(i);
+			List oldKeys = (List) reminderKeysByFile.get(fileKey);
+			if (oldKeys != null) {
+				for (int j = 0; j < oldKeys.size(); j++) {
+					remindersByKey.remove(oldKeys.get(j));
+				}
+			}
+			reminderKeysByFile.remove(fileKey);
+		}
 	}
 
 	private void collectMindmapFilesRecursive(File dir, List out) {

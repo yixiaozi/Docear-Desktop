@@ -18,7 +18,7 @@
 				<ribbon_action action="CopyAction" accelerator="control C" priority="medium">
 					<ribbon_action action="CopySingleAction" accelerator="control shift C" />
 					<ribbon_action action="CopyIDAction" />
-					<ribbon_action action="CopyNodeURIAction" />
+					<ribbon_action action="CopyNodeURIAction" accelerator="alt X" />
 					<ribbon_action action="CopyBibtexKeyToClipboardAction" priority="medium" />
 					<ribbon_action action="CopyCiteKeyToClipboardAction" priority="medium" />
 				</ribbon_action>

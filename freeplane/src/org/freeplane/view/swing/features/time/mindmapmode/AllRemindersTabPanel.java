@@ -170,6 +170,7 @@ public class AllRemindersTabPanel extends JPanel {
 	private List scanAllReminders() {
 		List all = new ArrayList();
 		List files = collectAllMindmapFiles();
+		cleanupCache(files);
 		Set seenReminderKeys = new HashSet();
 		for (int i = 0; i < files.size(); i++) {
 			File file = (File) files.get(i);
@@ -248,6 +249,23 @@ public class AllRemindersTabPanel extends JPanel {
 			}
 		}
 		return normalized;
+	}
+
+	private void cleanupCache(List currentFiles) {
+		Set currentPaths = new HashSet();
+		for (int i = 0; i < currentFiles.size(); i++) {
+			File file = (File) currentFiles.get(i);
+			currentPaths.add(file.getAbsolutePath());
+		}
+		List toRemove = new ArrayList();
+		for (Object key : cacheByFile.keySet()) {
+			if (!currentPaths.contains(key)) {
+				toRemove.add(key);
+			}
+		}
+		for (int i = 0; i < toRemove.size(); i++) {
+			cacheByFile.remove(toRemove.get(i));
+		}
 	}
 
 	private void collectMindmapFilesRecursive(File dir, List out) {

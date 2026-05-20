@@ -548,6 +548,7 @@ abstract public class FrameController implements ViewController {
 		try {
 			if (Compat.isMacOsX() || lookAndFeel.equals("default")) {
 				UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+				Controller.getCurrentController().getResourceController().setProperty("lookandfeel", "default");
 			}
 			else {
 				LookAndFeelInfo[] lafInfos = UIManager.getInstalledLookAndFeels();
@@ -597,6 +598,7 @@ abstract public class FrameController implements ViewController {
 			}
 			if(lafInfo.getClassName().equals(lookAndFeel)){
 				UIManager.setLookAndFeel(lafInfo.getClassName());
+				Controller.getCurrentController().getResourceController().setProperty("lookandfeel", lookAndFeel);
 				setLnF = true;
 				break;
 			}
