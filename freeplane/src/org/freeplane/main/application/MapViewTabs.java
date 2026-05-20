@@ -58,6 +58,8 @@ class MapViewTabs implements IMapViewChangeListener {
 	final private Vector<Component> mTabbedPaneMapViews;
 	private boolean mTabbedPaneSelectionUpdate = true;
 	private TabbedPaneUI tabbedPaneUI;
+	
+	private static final int MAX_TAB_SHORTCUT = 9;
 
 	public MapViewTabs( final ViewController fm, final JComponent contentComponent) {
 //		this.controller = controller;
@@ -114,11 +116,42 @@ class MapViewTabs implements IMapViewChangeListener {
 		final Controller controller = Controller.getCurrentController();
 		controller.getMapViewManager().addMapViewChangeListener(this);
 		fm.getContentPane().add(mTabbedPane, BorderLayout.CENTER);
+		
+		installTabShortcuts();
 	}
 
 	void removeTabbedPaneAccelerators() {
-	    final InputMap map = new InputMap();
-		mTabbedPane.setInputMap(JTabbedPane.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, map);
+        final InputMap map = new InputMap();
+        mTabbedPane.setInputMap(JTabbedPane.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, map);
+    }
+    
+    private void installTabShortcuts() {
+        InputMap inputMap = mTabbedPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        if (inputMap == null) {
+            inputMap = new InputMap();
+            mTabbedPane.setInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW, inputMap);
+        }
+        
+        javax.swing.ActionMap actionMap = mTabbedPane.getActionMap();
+        
+        for (int i = 1; i <= MAX_TAB_SHORTCUT; i++) {
+            final int tabIndex = i;
+            KeyStroke keyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_0 + i, InputEvent.ALT_MASK);
+            String actionKey = "mapviewtabs.switch.to.tab." + i;
+            inputMap.put(keyStroke, actionKey);
+            actionMap.put(actionKey, new javax.swing.AbstractAction() {
+                private static final long serialVersionUID = 1L;
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    switchToTab(tabIndex - 1);
+                }
+            });
+        }
+    }
+    
+    private void switchToTab(int index) {
+        if (index >= 0 && index < mTabbedPane.getTabCount()) {
+            mTabbedPane.setSelectedIndex(index);
+        }
     }
 
 	public void afterViewChange(final Component pOldMap, final Component pNewMap) {
@@ -250,7 +283,6 @@ class MapViewTabs implements IMapViewChangeListener {
 				}
 			});
 		}
-		removeTabbedPaneAccelerators();
 		mTabbedPane.revalidate();
 	}
 
