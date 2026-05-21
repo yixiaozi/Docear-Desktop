@@ -2,12 +2,12 @@ package org.freeplane.view.swing.features.time.mindmapmode;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.net.URL;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.text.DateFormat;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
@@ -52,7 +52,7 @@ import org.freeplane.features.ui.IMapViewManager;
 import org.xml.sax.Attributes;
 import org.xml.sax.helpers.DefaultHandler;
 
-public class EnhancedAllRemindersTabPanel extends JPanel {
+public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 	private static final String HARD_CODED_SCAN_ROOT = "E:\\yixiaozi";
 
@@ -61,14 +61,12 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		private final String nodeId;
 		private final String nodeText;
 		private final long remindAt;
-		private final boolean isRecurring;
 
-		private ReminderRecord(File file, String nodeId, String nodeText, long remindAt, boolean isRecurring) {
+		private ReminderRecord(File file, String nodeId, String nodeText, long remindAt) {
 			this.file = file;
 			this.nodeId = nodeId;
 			this.nodeText = nodeText;
 			this.remindAt = remindAt;
-			this.isRecurring = isRecurring;
 		}
 	}
 
@@ -106,8 +104,8 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 	}
 
 	private final JButton refreshButton = new JButton("\u5237\u65b0");
-	private final JLabel statusLabel = new JLabel("\u63d0\u9192\u603b\u6570: 0");
-	private final JTree tree = new JTree(new DefaultMutableTreeNode("\u5168\u90e8\u63d0\u9192"));
+	private final JLabel statusLabel = new JLabel("\u5468\u671f\u63d0\u9192\u603b\u6570: 0");
+	private final JTree tree = new JTree(new DefaultMutableTreeNode("\u5468\u671f\u63d0\u9192"));
 	private final DateFormat dayFormat = new SimpleDateFormat("ddE", Locale.CHINA);
 	private final DateFormat monthFormat = new SimpleDateFormat("MM", Locale.CHINA);
 	private final DateFormat yearFormat = new SimpleDateFormat("yyyy", Locale.CHINA);
@@ -120,7 +118,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 	private boolean rescanRequested;
 	private final Timer autoRefreshTimer;
 
-	public EnhancedAllRemindersTabPanel() {
+	public EnhancedAllRecurringRemindersTabPanel() {
 		super(new BorderLayout(4, 4));
 		JPanel top = new JPanel(new BorderLayout(4, 0));
 		top.add(statusLabel, BorderLayout.CENTER);
@@ -200,8 +198,8 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		Controller.getCurrentController().getMapViewManager().addMapSelectionListener(new IMapSelectionListener() {
 			public void beforeMapChange(MapModel oldMap, MapModel newMap) {
 			}
+
 			public void afterMapChange(MapModel oldMap, MapModel newMap) {
-				refreshInBackground();
 			}
 		});
 	}
@@ -211,6 +209,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			rescanRequested = true;
 			return;
 		}
+		rescanRequested = false;
 		activeWorker = new SwingWorker() {
 			protected Object doInBackground() throws Exception {
 				List files = collectAllMindmapFiles();
@@ -235,7 +234,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			}
 
 			protected void done() {
-				statusLabel.setText("\u63d0\u9192\u603b\u6570: " + remindersByKey.size());
+				statusLabel.setText("\u5468\u671f\u63d0\u9192\u603b\u6570: " + remindersByKey.size());
 				if (rescanRequested) {
 					rescanRequested = false;
 					refreshInBackground();
@@ -272,44 +271,47 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		}
 		List normalizedRoots = normalizeRoots(roots);
 		List files = new ArrayList();
-		Set seenFiles = new HashSet();
-		for (Object rootObj : normalizedRoots) {
-			collectMindmapFilesRecursive((File) rootObj, files);
-		}
-		for (int i = files.size() - 1; i >= 0; i--) {
-			File f = (File) files.get(i);
-			if (!seenFiles.add(f.getAbsolutePath())) {
-				files.remove(i);
-			}
+		for (Object root : normalizedRoots) {
+			collectMindmapFiles((File) root, files);
 		}
 		return files;
 	}
 
-	private List normalizeRoots(Set rawRoots) {
-		List roots = new ArrayList(rawRoots);
-		Collections.sort(roots, new Comparator() {
-			public int compare(Object o1, Object o2) {
-				return ((File) o1).getAbsolutePath().length() - ((File) o2).getAbsolutePath().length();
-			}
-		});
-		List normalized = new ArrayList();
-		for (int i = 0; i < roots.size(); i++) {
-			File candidate = (File) roots.get(i);
-			boolean covered = false;
-			for (int j = 0; j < normalized.size(); j++) {
-				File existing = (File) normalized.get(j);
-				String existingPath = existing.getAbsolutePath();
-				String candidatePath = candidate.getAbsolutePath();
-				if (candidatePath.equals(existingPath) || candidatePath.startsWith(existingPath + File.separator)) {
-					covered = true;
-					break;
+	private List normalizeRoots(Set roots) {
+		List normalizedRoots = new ArrayList();
+		for (Object root : roots) {
+			File file = (File) root;
+			if (file.exists()) {
+				try {
+					normalizedRoots.add(file.getCanonicalFile());
+				}
+				catch (Exception e) {
+					normalizedRoots.add(file.getAbsoluteFile());
 				}
 			}
-			if (!covered) {
-				normalized.add(candidate);
+		}
+		return normalizedRoots;
+	}
+
+	private void collectMindmapFiles(File directory, List files) {
+		if (!directory.exists() || !directory.isDirectory()) {
+			return;
+		}
+		File[] children = directory.listFiles();
+		if (children == null) {
+			return;
+		}
+		for (File child : children) {
+			if (child.getName().startsWith(".")) {
+				continue;
+			}
+			if (child.isDirectory()) {
+				collectMindmapFiles(child, files);
+			}
+			else if (child.getName().toLowerCase().endsWith(".mm")) {
+				files.add(child);
 			}
 		}
-		return normalized;
 	}
 
 	private void cleanupCache(List currentFiles) {
@@ -334,36 +336,11 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			}
 		}
 		for (int i = 0; i < toRemove.size(); i++) {
-			String fileKey = (String) toRemove.get(i);
-			List oldKeys = (List) reminderKeysByFile.get(fileKey);
-			if (oldKeys != null) {
-				for (int j = 0; j < oldKeys.size(); j++) {
-					remindersByKey.remove(oldKeys.get(j));
-				}
-			}
-			reminderKeysByFile.remove(fileKey);
-		}
-	}
-
-	private void collectMindmapFilesRecursive(File dir, List out) {
-		if (dir == null || !dir.exists() || !dir.isDirectory()) {
-			return;
-		}
-		File[] children = dir.listFiles();
-		if (children == null) {
-			return;
-		}
-		for (int i = 0; i < children.length; i++) {
-			File file = children[i];
-			if (file.isDirectory()) {
-				if (!file.isHidden() && !file.getName().startsWith(".")) {
-					collectMindmapFilesRecursive(file, out);
-				}
-			}
-			else {
-				String lower = file.getName().toLowerCase();
-				if (lower.endsWith(".mm") && !file.getName().startsWith("~") && !file.getName().contains("冲突副本")) {
-					out.add(file);
+			String key = (String) toRemove.get(i);
+			List keys = (List) reminderKeysByFile.remove(key);
+			if (keys != null) {
+				for (int j = 0; j < keys.size(); j++) {
+					remindersByKey.remove(keys.get(j));
 				}
 			}
 		}
@@ -401,8 +378,8 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 									String nodeText = nodeInfo[1] == null ? "" : nodeInfo[1].trim();
 									String remindType = nodeInfo.length > 2 ? nodeInfo[2] : null;
 									boolean isRecurring = (remindType != null && !"onetime".equalsIgnoreCase(remindType));
-									if (!"bin".equalsIgnoreCase(nodeText) && !isRecurring) {
-										reminders.add(new ReminderRecord(file, nodeInfo[0], nodeText, remindTs, false));
+									if (!"bin".equalsIgnoreCase(nodeText) && isRecurring) {
+										reminders.add(new ReminderRecord(file, nodeInfo[0], nodeText, remindTs));
 									}
 								}
 							}
@@ -433,65 +410,60 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			public int compare(Object o1, Object o2) {
 				ReminderRecord a = (ReminderRecord) o1;
 				ReminderRecord b = (ReminderRecord) o2;
-				return a.remindAt < b.remindAt ? -1 : (a.remindAt == b.remindAt ? 0 : 1);
+				return Long.compare(a.remindAt, b.remindAt);
 			}
 		});
-		DefaultMutableTreeNode root = new DefaultMutableTreeNode("\u5168\u90e8\u63d0\u9192");
-		Map yearNodes = new HashMap();
-		Map monthNodes = new HashMap();
-		Map weekNodes = new HashMap();
-		Map dayNodes = new HashMap();
+
+		DefaultMutableTreeNode root = new DefaultMutableTreeNode("\u5468\u671f\u63d0\u9192");
+		Map dateNodes = new HashMap();
 		Map reminderNodesByKey = new HashMap();
+
+		Calendar cal = Calendar.getInstance();
+		long now = cal.getTimeInMillis();
+		cal.set(Calendar.HOUR_OF_DAY, 0);
+		cal.set(Calendar.MINUTE, 0);
+		cal.set(Calendar.SECOND, 0);
+		cal.set(Calendar.MILLISECOND, 0);
+		long today = cal.getTimeInMillis();
+
 		for (int i = 0; i < records.size(); i++) {
 			ReminderRecord record = (ReminderRecord) records.get(i);
-			Date date = new Date(record.remindAt);
-			Calendar cal = Calendar.getInstance();
-			cal.setFirstDayOfWeek(Calendar.MONDAY);
-			cal.setMinimalDaysInFirstWeek(4);
-			cal.setTime(date);
-			String yearKey = yearFormat.format(date);
-			String monthKey = monthFormat.format(date);
-			String monthNodeKey = yearKey + "|" + monthKey;
-			String weekKey = monthNodeKey + "|W" + cal.get(Calendar.WEEK_OF_MONTH);
-			String dayKey = dayFormat.format(date);
-			String dayNodeKey = weekKey + "|" + dayKey;
 
-			DefaultMutableTreeNode yearNode = (DefaultMutableTreeNode) yearNodes.get(yearKey);
-			if (yearNode == null) {
-				yearNode = new DefaultMutableTreeNode(new GroupLabel(yearKey + "年"));
-				yearNodes.put(yearKey, yearNode);
-				root.add(yearNode);
+			long remindAt = record.remindAt;
+			String groupLabel;
+
+			if (remindAt < today) {
+				groupLabel = "\u8fc7\u671f";
+			}
+			else if (remindAt < today + 24 * 60 * 60 * 1000) {
+				groupLabel = "\u4eca\u5929";
+			}
+			else if (remindAt < today + 2 * 24 * 60 * 60 * 1000) {
+				groupLabel = "\u660e\u5929";
+			}
+			else {
+				cal.setTimeInMillis(remindAt);
+				groupLabel = monthFormat.format(cal.getTime()) + "\u6708" + dayFormat.format(cal.getTime());
 			}
 
-			DefaultMutableTreeNode monthNode = (DefaultMutableTreeNode) monthNodes.get(monthNodeKey);
-			if (monthNode == null) {
-				monthNode = new DefaultMutableTreeNode(new GroupLabel(monthKey + "月"));
-				monthNodes.put(monthNodeKey, monthNode);
-				yearNode.add(monthNode);
+			DefaultMutableTreeNode dateNode = (DefaultMutableTreeNode) dateNodes.get(groupLabel);
+			if (dateNode == null) {
+				dateNode = new DefaultMutableTreeNode(new GroupLabel(groupLabel), true);
+				dateNodes.put(groupLabel, dateNode);
+				root.add(dateNode);
 			}
 
-			DefaultMutableTreeNode weekNode = (DefaultMutableTreeNode) weekNodes.get(weekKey);
-			if (weekNode == null) {
-				String weekLabel = "\u7b2c" + cal.get(Calendar.WEEK_OF_MONTH) + "\u5468";
-				weekNode = new DefaultMutableTreeNode(new GroupLabel(weekLabel));
-				weekNodes.put(weekKey, weekNode);
-				monthNode.add(weekNode);
-			}
-
-			DefaultMutableTreeNode dayNode = (DefaultMutableTreeNode) dayNodes.get(dayNodeKey);
-			if (dayNode == null) {
-				dayNode = new DefaultMutableTreeNode(new GroupLabel(dayKey));
-				dayNodes.put(dayNodeKey, dayNode);
-				weekNode.add(dayNode);
-			}
 			DefaultMutableTreeNode reminderNode = new DefaultMutableTreeNode(record, false);
-			dayNode.add(reminderNode);
+			dateNode.add(reminderNode);
 			reminderNodesByKey.put(reminderKey(record), reminderNode);
 		}
+
 		tree.setModel(new DefaultTreeModel(root));
+
 		for (int i = 0; i < tree.getRowCount(); i++) {
 			tree.expandRow(i);
 		}
+
 		if (selectedKey != null) {
 			DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) reminderNodesByKey.get(selectedKey);
 			if (selectedNode != null) {
@@ -521,6 +493,18 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		return canonicalPath(record.file) + "|" + record.nodeId;
 	}
 
+	private String canonicalPath(File file) {
+		if (file == null) {
+			return "";
+		}
+		try {
+			return file.getCanonicalPath();
+		}
+		catch (Exception e) {
+			return file.getAbsolutePath();
+		}
+	}
+
 	private void showContextMenu(MouseEvent e) {
 		TreePath path = tree.getPathForLocation(e.getX(), e.getY());
 		if (path == null) {
@@ -530,7 +514,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		final DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) path.getLastPathComponent();
 		final Object user = selectedNode.getUserObject();
 		JPopupMenu menu = new JPopupMenu();
-		
+
 		if (user instanceof ReminderRecord) {
 			final ReminderRecord record = (ReminderRecord) user;
 			JMenuItem openFolderItem = new JMenuItem("\u6253\u5f00\u6587\u4ef6\u5939");
@@ -541,7 +525,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			});
 			menu.add(openFolderItem);
 		}
-		
+
 		JMenuItem copyItem = new JMenuItem("\u590d\u5236");
 		copyItem.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent event) {
@@ -551,7 +535,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		menu.add(copyItem);
 		menu.show(tree, e.getX(), e.getY());
 	}
-	
+
 	private void openContainingFolder(File file) {
 		if (file == null || !file.exists()) {
 			return;
@@ -574,47 +558,12 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 	}
 
 	private void copyNodeContent(DefaultMutableTreeNode selectedNode, Object user) {
-		String textToCopy = "";
+		String text = "";
 		if (user instanceof ReminderRecord) {
-			ReminderRecord record = (ReminderRecord) user;
-			textToCopy = normalizeTaskText(record.nodeText);
+			text = ((ReminderRecord) user).nodeText;
 		}
-		else {
-			List lines = new ArrayList();
-			collectReminderLines(selectedNode, lines, "");
-			StringBuilder sb = new StringBuilder();
-			for (int i = 0; i < lines.size(); i++) {
-				if (i > 0) {
-					sb.append('\n');
-				}
-				sb.append(((String) lines.get(i)).trim());
-			}
-			textToCopy = sb.toString();
-		}
-		if (textToCopy != null && textToCopy.length() > 0) {
-			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(textToCopy.trim()), null);
-		}
-	}
-
-	private void collectReminderLines(DefaultMutableTreeNode node, List out, String prefix) {
-		Object user = node.getUserObject();
-		if (user instanceof ReminderRecord) {
-			ReminderRecord record = (ReminderRecord) user;
-			String leaf = timeFormat.format(new Date(record.remindAt)) + " " + normalizeTaskText(record.nodeText) + " (" + record.file.getName() + ")";
-			String line = prefix.length() == 0 ? leaf : (prefix + " > " + leaf);
-			out.add(line.trim());
-			return;
-		}
-		String nextPrefix = prefix;
-		if (user instanceof GroupLabel) {
-			String groupText = ((GroupLabel) user).text == null ? "" : ((GroupLabel) user).text.trim();
-			if (groupText.length() > 0) {
-				nextPrefix = prefix.length() == 0 ? groupText : (prefix + " > " + groupText);
-			}
-		}
-		for (int i = 0; i < node.getChildCount(); i++) {
-			collectReminderLines((DefaultMutableTreeNode) node.getChildAt(i), out, nextPrefix);
-		}
+		text = normalizeTaskText(text);
+		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
 	}
 
 	private String normalizeTaskText(String text) {
@@ -681,31 +630,24 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		retry.start();
 	}
 
-	private boolean isSameFile(File a, File b) {
-		if (a == null || b == null) {
-			return false;
-		}
-		return canonicalPath(a).equals(canonicalPath(b));
-	}
-
-	private String canonicalPath(File file) {
-		if (file == null) {
-			return "";
+	private boolean isSameFile(File file1, File file2) {
+		if (file1 == null || file2 == null) {
+			return file1 == file2;
 		}
 		try {
-			return file.getCanonicalPath();
+			return file1.getCanonicalPath().equals(file2.getCanonicalPath());
 		}
 		catch (Exception e) {
-			return file.getAbsolutePath();
+			return file1.getAbsolutePath().equals(file2.getAbsolutePath());
 		}
 	}
 
 	private void installArrowKeyNavigation() {
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_UP, 0), "all.reminders.up");
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_DOWN, 0), "all.reminders.down");
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_LEFT, 0), "all.reminders.left");
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_RIGHT, 0), "all.reminders.right");
-		tree.getActionMap().put("all.reminders.up", new AbstractAction() {
+		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_UP, 0), "all.recurring.up");
+		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_DOWN, 0), "all.recurring.down");
+		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_LEFT, 0), "all.recurring.left");
+		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_RIGHT, 0), "all.recurring.right");
+		tree.getActionMap().put("all.recurring.up", new AbstractAction() {
 			private static final long serialVersionUID = 1L;
 			public void actionPerformed(java.awt.event.ActionEvent e) {
 				int row = tree.getLeadSelectionRow();
@@ -716,7 +658,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 				tree.scrollRowToVisible(row - 1);
 			}
 		});
-		tree.getActionMap().put("all.reminders.down", new AbstractAction() {
+		tree.getActionMap().put("all.recurring.down", new AbstractAction() {
 			private static final long serialVersionUID = 1L;
 			public void actionPerformed(java.awt.event.ActionEvent e) {
 				int row = tree.getLeadSelectionRow();
@@ -730,7 +672,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 				tree.scrollRowToVisible(row + 1);
 			}
 		});
-		tree.getActionMap().put("all.reminders.left", new AbstractAction() {
+		tree.getActionMap().put("all.recurring.left", new AbstractAction() {
 			private static final long serialVersionUID = 1L;
 			public void actionPerformed(java.awt.event.ActionEvent e) {
 				TreePath path = tree.getSelectionPath();
@@ -745,7 +687,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 				}
 			}
 		});
-		tree.getActionMap().put("all.reminders.right", new AbstractAction() {
+		tree.getActionMap().put("all.recurring.right", new AbstractAction() {
 			private static final long serialVersionUID = 1L;
 			public void actionPerformed(java.awt.event.ActionEvent e) {
 				TreePath path = tree.getSelectionPath();
