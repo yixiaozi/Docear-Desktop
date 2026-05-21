@@ -226,45 +226,103 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	}
 
 	private void showPopupMenu(MouseEvent e) {
-		TreePath path = tree.getPathForLocation(e.getX(), e.getY());
+		final TreePath path = tree.getPathForLocation(e.getX(), e.getY());
 		if (path == null) {
 			return;
 		}
 		Object userObject = ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
-		if (!(userObject instanceof ItemRecord)) {
-			return;
-		}
-
-		final ItemRecord record = (ItemRecord) userObject;
+		
 		JPopupMenu menu = new JPopupMenu();
 
-		JMenuItem openFolderItem = new JMenuItem("\u6253\u5F00\u6587\u4EF6\u5939");
-		openFolderItem.addActionListener(new java.awt.event.ActionListener() {
-			public void actionPerformed(java.awt.event.ActionEvent e1) {
-				try {
+		if (userObject instanceof ItemRecord) {
+			final ItemRecord record = (ItemRecord) userObject;
+
+			JMenuItem openFolderItem = new JMenuItem("\u6253\u5F00\u6587\u4EF6\u5939");
+			openFolderItem.addActionListener(new java.awt.event.ActionListener() {
+				public void actionPerformed(java.awt.event.ActionEvent e1) {
+					try {
+						String filePath = record.file.getAbsolutePath();
+						String cmd = "explorer.exe /select,\"" + filePath + "\"";
+						Runtime.getRuntime().exec(cmd);
+					} catch (Exception ex) {
+						LogUtils.warn(ex);
+					}
+				}
+			});
+			menu.add(openFolderItem);
+
+			JMenuItem copyItem = new JMenuItem("\u590D\u5236");
+			copyItem.addActionListener(new java.awt.event.ActionListener() {
+				public void actionPerformed(java.awt.event.ActionEvent e1) {
+					String text = record.nodeText == null ? ""
+							: HtmlUtils.removeHtmlTagsFromString(record.nodeText).replaceAll("\\s+", " ").trim();
+					Toolkit.getDefaultToolkit().getSystemClipboard()
+							.setContents(new StringSelection(text), null);
+				}
+			});
+			menu.add(copyItem);
+		} else if (userObject instanceof GroupLabel) {
+			final GroupLabel label = (GroupLabel) userObject;
+			
+			JMenuItem openFolderItem = new JMenuItem("\u6253\u5F00\u6587\u4EF6\u5939");
+			openFolderItem.addActionListener(new java.awt.event.ActionListener() {
+				public void actionPerformed(java.awt.event.ActionEvent e1) {
+					try {
+						String folderPath = findFolderPathForLabel(label.text, path);
+						if (folderPath != null) {
+							Runtime.getRuntime().exec("explorer.exe \"" + folderPath + "\"");
+						}
+					} catch (Exception ex) {
+						LogUtils.warn(ex);
+					}
+				}
+			});
+			menu.add(openFolderItem);
+		}
+
+		if (menu.getComponentCount() > 0) {
+			menu.show(tree, e.getX(), e.getY());
+		}
+	}
+	
+	private String findFolderPathForLabel(String label, TreePath path) {
+		if (label.toLowerCase().endsWith(".mm")) {
+			for (Object key : itemsByKey.keySet()) {
+				ItemRecord record = (ItemRecord) itemsByKey.get(key);
+				if (record.mapName.equals(label)) {
 					File parent = record.file.getParentFile();
 					if (parent != null && parent.exists()) {
-						Runtime.getRuntime().exec("explorer.exe /select,\"" + record.file.getAbsolutePath() + "\"");
+						return parent.getAbsolutePath();
 					}
-				} catch (Exception ex) {
-					LogUtils.warn(ex);
 				}
 			}
-		});
-		menu.add(openFolderItem);
-
-		JMenuItem copyItem = new JMenuItem("\u590D\u5236");
-		copyItem.addActionListener(new java.awt.event.ActionListener() {
-			public void actionPerformed(java.awt.event.ActionEvent e1) {
-				String text = record.nodeText == null ? ""
-						: HtmlUtils.removeHtmlTagsFromString(record.nodeText).replaceAll("\\s+", " ").trim();
-				Toolkit.getDefaultToolkit().getSystemClipboard()
-						.setContents(new StringSelection(text), null);
+			return null;
+		}
+		
+		Object[] pathComponents = path.getPath();
+		StringBuilder folderPath = new StringBuilder(HARD_CODED_SCAN_ROOT);
+		
+		for (int i = 1; i < pathComponents.length; i++) {
+			Object component = pathComponents[i];
+			if (component instanceof DefaultMutableTreeNode) {
+				Object userObj = ((DefaultMutableTreeNode) component).getUserObject();
+				if (userObj instanceof GroupLabel) {
+					String part = ((GroupLabel) userObj).text;
+					if (part.toLowerCase().endsWith(".mm")) {
+						continue;
+					}
+					folderPath.append(File.separator).append(part);
+					if (part.equals(label)) {
+						File folder = new File(folderPath.toString());
+						if (folder.exists() && folder.isDirectory()) {
+							return folder.getAbsolutePath();
+						}
+					}
+				}
 			}
-		});
-		menu.add(copyItem);
-
-		menu.show(tree, e.getX(), e.getY());
+		}
+		
+		return null;
 	}
 
 	private void openSelectedItem() {

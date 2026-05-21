@@ -244,7 +244,7 @@ public class TodoTabPanel extends JPanel {
 
 		DefaultMutableTreeNode root = new DefaultMutableTreeNode("\u5F85\u529E");
 		Set<NodeModel> addedNodes = new HashSet();
-		collectTodoNodes(map.getRootNode(), root, "", addedNodes);
+		collectTodoNodes(map.getRootNode(), root, addedNodes);
 		tree.setModel(new DefaultTreeModel(root));
 
 		for (int i = 0; i < tree.getRowCount(); i++) {
@@ -252,37 +252,35 @@ public class TodoTabPanel extends JPanel {
 		}
 	}
 
-	private void collectTodoNodes(NodeModel node, DefaultMutableTreeNode parentTreeNode, String path, Set<NodeModel> addedNodes) {
-		boolean hasTodoIcon = hasHourglassIcon(node);
-		String nodeText = node.getText();
-		String text = nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(nodeText).replaceAll("\\s+", " ").trim();
-		
-		if (hasTodoIcon && !"bin".equalsIgnoreCase(text)) {
-			if (addedNodes.contains(node)) {
-				return;
-			}
-			addedNodes.add(node);
-			
-			TodoRecord record = new TodoRecord(node, text);
-			DefaultMutableTreeNode todoNode = new DefaultMutableTreeNode(record, false);
-			parentTreeNode.add(todoNode);
-		}
-		
+	private void collectTodoNodes(NodeModel node, DefaultMutableTreeNode parentTreeNode, Set<NodeModel> addedNodes) {
 		List<NodeModel> children = node.getChildren();
 		for (NodeModel child : children) {
-			boolean childHasTodo = hasHourglassIcon(child) || hasTodoDescendant(child);
-			if (!childHasTodo) {
+			boolean childHasTodo = hasHourglassIcon(child);
+			boolean childHasTodoDescendant = hasTodoDescendant(child);
+			
+			if (!childHasTodo && !childHasTodoDescendant) {
 				continue;
 			}
 			
 			String childText = child.getText();
 			String childLabel = childText == null ? "" : HtmlUtils.removeHtmlTagsFromString(childText).replaceAll("\\s+", " ").trim();
-			DefaultMutableTreeNode childTreeNode = new DefaultMutableTreeNode(new GroupLabel(childLabel), true);
 			
-			collectTodoNodes(child, childTreeNode, path + "/" + text, addedNodes);
-			
-			if (childTreeNode.getChildCount() > 0) {
-				parentTreeNode.add(childTreeNode);
+			if (childHasTodo && !"bin".equalsIgnoreCase(childLabel)) {
+				if (addedNodes.contains(child)) {
+					continue;
+				}
+				addedNodes.add(child);
+				
+				TodoRecord record = new TodoRecord(child, childLabel);
+				DefaultMutableTreeNode todoNode = new DefaultMutableTreeNode(record, false);
+				parentTreeNode.add(todoNode);
+			} else if (childHasTodoDescendant) {
+				DefaultMutableTreeNode childTreeNode = new DefaultMutableTreeNode(new GroupLabel(childLabel), true);
+				collectTodoNodes(child, childTreeNode, addedNodes);
+				
+				if (childTreeNode.getChildCount() > 0) {
+					parentTreeNode.add(childTreeNode);
+				}
 			}
 		}
 	}
