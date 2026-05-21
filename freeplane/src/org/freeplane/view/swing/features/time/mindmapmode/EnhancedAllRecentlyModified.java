@@ -407,11 +407,11 @@ public class EnhancedAllRecentlyModified extends JPanel {
 		Map timeNodes = new HashMap();
 		Map nodeNodesByKey = new HashMap();
 
-		Calendar cal = Calendar.getInstance();
 		for (int i = 0; i < records.size(); i++) {
 			ModifiedNode record = (ModifiedNode) records.get(i);
 
 			String groupLabel = getTimeGroupLabel(record.modifiedAt);
+			String fileName = record.file.getName();
 
 			DefaultMutableTreeNode timeNode = (DefaultMutableTreeNode) timeNodes.get(groupLabel);
 			if (timeNode == null) {
@@ -420,9 +420,35 @@ public class EnhancedAllRecentlyModified extends JPanel {
 				root.add(timeNode);
 			}
 
-			DefaultMutableTreeNode nodeNode = new DefaultMutableTreeNode(record, false);
-			timeNode.add(nodeNode);
-			nodeNodesByKey.put(nodeKey(record), nodeNode);
+			boolean hasNextSameFile = (i + 1 < records.size()) && 
+				((ModifiedNode) records.get(i + 1)).file.getName().equals(fileName);
+
+			boolean hasPrevSameFile = (i > 0) && 
+				((ModifiedNode) records.get(i - 1)).file.getName().equals(fileName);
+
+			if (hasNextSameFile) {
+				String fileGroupKey = groupLabel + "|" + fileName + "|" + i;
+				DefaultMutableTreeNode fileNode = new DefaultMutableTreeNode(new GroupLabel(fileName), true);
+				timeNode.add(fileNode);
+
+				DefaultMutableTreeNode nodeNode = new DefaultMutableTreeNode(record, false);
+				fileNode.add(nodeNode);
+				nodeNodesByKey.put(nodeKey(record), nodeNode);
+
+				i++;
+				while (i < records.size() && ((ModifiedNode) records.get(i)).file.getName().equals(fileName)) {
+					ModifiedNode nextRecord = (ModifiedNode) records.get(i);
+					nodeNode = new DefaultMutableTreeNode(nextRecord, false);
+					fileNode.add(nodeNode);
+					nodeNodesByKey.put(nodeKey(nextRecord), nodeNode);
+					i++;
+				}
+				i--;
+			} else if (!hasPrevSameFile) {
+				DefaultMutableTreeNode nodeNode = new DefaultMutableTreeNode(record, false);
+				timeNode.add(nodeNode);
+				nodeNodesByKey.put(nodeKey(record), nodeNode);
+			}
 		}
 
 		tree.setModel(new DefaultTreeModel(root));
