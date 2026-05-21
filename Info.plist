@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<plist version="1.0">
+  <dict>
+    <key>CFBundleName</key>
+    <string>Docear</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.2.0.24_devel_build493</string>
+    <key>CFBundleGetInfoString</key>
+    <string>Docear 1.2.0.24_devel_build493</string>
+    <key>CFBundleAllowMixedLocalizations</key>
+    <string>false</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleExecutable</key>
+    <string>Docear</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>English</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>DCR</string>
+    <key>CFBundleIconFile</key>
+    <string>docear.icns</string>
+    <key>CFBundleIdentifier</key>
+    <string>org.docear</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+      <dict>
+        <key>CFBundleTypeName</key>
+        <string>Mindmap</string>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleTypeIconFile</key>
+        <string>docear.icns</string>
+        <key>CFBundleTypeExtensions</key>
+        <array>
+          <string>mm</string>
+        </array>
+        <key>CFBundleTypeOSTypes</key>
+        <array>
+          <string>MM</string>
+        </array>
+      </dict>
+    </array>
+    <key>Java</key>
+    <dict>
+      <key>MainClass</key>
+      <string>org.knopflerfish.framework.Main</string>
+      <key>WorkingDirectory</key>
+<string>$JAVAROOT</string>
+<key>JVMVersion</key>
+      <string>1.6+</string>
+      <key>ClassPath</key>
+      <array>
+        <string>$JAVAROOT/framework.jar</string>
+      </array>
+      <key>VMOptions</key>
+      <string> -Xmx512m -Dorg.knopflerfish.framework.bundlestorage=memory -Dorg.freeplane.globalresourcedir=./resources -Dorg.knopflerfish.gosg.jars=reference:file:./core/</string>
+      <key>Arguments</key>
+      <string>-xargs ./props.xargs -xargs ./init.xargs</string>
+    </dict>
+  <key>NSHighResolutionCapable</key>
+<true/>
+</dict>
+</plist>

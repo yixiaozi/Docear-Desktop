@@ -36,6 +36,61 @@ show_help() {
     echo ""
 }
 
+# 修复 Docear.app
+fix_docear_app() {
+    local app_path="$1"
+    echo -e "${YELLOW}正在修复 $app_path ...${NC}"
+    
+    # 1. 创建新的启动脚本
+    cat > "$app_path/Contents/MacOS/Docear" << 'EOF'
+#!/bin/bash
+# 找到应用包的 Contents 目录
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONTENTS_DIR="$(dirname "$SCRIPT_DIR")"
+JAVA_DIR="$CONTENTS_DIR/Resources/Java"
+
+# 查找合适的 Java
+if [ -x "/usr/libexec/java_home" ]; then
+    JAVA_HOME="$(/usr/libexec/java_home -v 1.8+ 2>/dev/null || /usr/libexec/java_home 2>/dev/null)"
+    if [ -n "$JAVA_HOME" ]; then
+        export JAVA_HOME
+        PATH="$JAVA_HOME/bin:$PATH"
+    fi
+fi
+
+# 进入 Java 目录
+cd "$JAVA_DIR" || exit 1
+
+# 启动 Docear
+exec java \
+    -Xmx512m \
+    -Dorg.knopflerfish.framework.bundlestorage=memory \
+    -Dorg.freeplane.globalresourcedir=./resources \
+    -Dorg.knopflerfish.gosg.jars=reference:file:./core/ \
+    -cp "framework.jar" \
+    org.knopflerfish.framework.Main \
+    -xargs ./props.xargs \
+    -xargs ./init.xargs \
+    "$@"
+EOF
+    
+    # 2. 设置执行权限
+    chmod +x "$app_path/Contents/MacOS/Docear"
+    
+    # 3. 修改 Info.plist
+    local plist_path="$app_path/Contents/Info.plist"
+    
+    # 尝试使用 PlistBuddy，否则使用 sed
+    /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Docear" "$plist_path" 2>/dev/null || {
+        sed -i '' 's/FreeplaneJavaApplicationStub/Docear/g' "$plist_path"
+    }
+    
+    # 4. 删除旧的启动器
+    rm -f "$app_path/Contents/MacOS/FreeplaneJavaApplicationStub"
+    
+    echo -e "${GREEN}✓ $app_path 修复完成！${NC}"
+}
+
 # 检查系统要求
 check_requirements() {
     echo -e "${YELLOW}Checking system requirements...${NC}"
@@ -129,8 +184,8 @@ main() {
         echo -e "${YELLOW}开始构建 Docear...${NC}"
         echo ""
         
-        # 先构建 freeplane_ant（因为这是需要的第一个东西）
-        echo -e "${YELLOW}步骤 1/2: 构建 freeplane_ant...${NC}"
+        # 先构建 freeplane_ant
+        echo -e "${YELLOW}步骤 1/3: 构建 freeplane_ant...${NC}"
         cd "$PROJECT_DIR/freeplane_ant"
         mkdir -p bin dist
         
@@ -145,7 +200,7 @@ main() {
         
         # 现在构建完整的 Docear
         echo ""
-        echo -e "${YELLOW}步骤 2/2: 构建 Docear 应用...${NC}"
+        echo -e "${YELLOW}步骤 2/3: 构建 Docear 应用...${NC}"
         cd "$PROJECT_DIR/docear_framework"
         "$ANT_CMD" -f ant/build.xml clean macosxapp || {
             echo -e "${YELLOW}Trying just 'macosxapp' without clean...${NC}"
@@ -158,6 +213,10 @@ main() {
         echo -e "${RED}错误: 构建失败，未找到 Docear.app 在 $DOCEAR_APP${NC}"
         exit 1
     fi
+    
+    echo ""
+    echo -e "${YELLOW}步骤 3/3: 修复 Docear.app 启动器...${NC}"
+    fix_docear_app "$DOCEAR_APP"
     
     echo ""
     echo -e "${GREEN}构建成功！${NC}"
@@ -182,6 +241,7 @@ main() {
         echo -e "${YELLOW}您可以通过以下方式运行 Docear:${NC}"
         echo "  1. 在 Finder 中打开 $TEMP_DIR，双击 Docear.app"
         echo "  2. 或者在终端中运行: open $TEMP_DIR/Docear.app"
+        echo "  3. 或者直接运行源应用: open $DOCEAR_APP"
     else
         echo -e "${RED}复制失败！${NC}"
         exit 1
