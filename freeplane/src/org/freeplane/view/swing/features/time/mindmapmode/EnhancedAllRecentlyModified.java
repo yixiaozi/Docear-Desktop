@@ -61,12 +61,14 @@ public class EnhancedAllRecentlyModified extends JPanel {
 		private final String nodeId;
 		private final String nodeText;
 		private final long modifiedAt;
+		private final boolean isGrouped;
 
-		private ModifiedNode(File file, String nodeId, String nodeText, long modifiedAt) {
+		private ModifiedNode(File file, String nodeId, String nodeText, long modifiedAt, boolean isGrouped) {
 			this.file = file;
 			this.nodeId = nodeId;
 			this.nodeText = nodeText;
 			this.modifiedAt = modifiedAt;
+			this.isGrouped = isGrouped;
 		}
 	}
 
@@ -140,7 +142,11 @@ public class EnhancedAllRecentlyModified extends JPanel {
 				else if (user instanceof ModifiedNode) {
 					ModifiedNode record = (ModifiedNode) user;
 					String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText).replaceAll("\\s+", " ").trim();
-					setText(dateFormat.format(new Date(record.modifiedAt)) + " " + text.trim() + " (" + record.file.getName() + ")");
+					String displayText = dateFormat.format(new Date(record.modifiedAt)) + " " + text.trim();
+					if (!record.isGrouped) {
+						displayText += " (" + record.file.getName() + ")";
+					}
+					setText(displayText);
 				}
 				return this;
 			}
@@ -368,7 +374,7 @@ public class EnhancedAllRecentlyModified extends JPanel {
 								Calendar cal = Calendar.getInstance();
 								long cutoff = cal.getTimeInMillis() - (MAX_DAYS * 24L * 60L * 60L * 1000L);
 								if (modifiedAt > cutoff && !"bin".equalsIgnoreCase(text)) {
-									nodes.add(new ModifiedNode(file, id, text, modifiedAt));
+									nodes.add(new ModifiedNode(file, id, text, modifiedAt, false));
 								}
 							}
 							catch (Exception e) {
@@ -431,14 +437,16 @@ public class EnhancedAllRecentlyModified extends JPanel {
 				DefaultMutableTreeNode fileNode = new DefaultMutableTreeNode(new GroupLabel(fileName), true);
 				timeNode.add(fileNode);
 
-				DefaultMutableTreeNode nodeNode = new DefaultMutableTreeNode(record, false);
+				ModifiedNode groupedRecord = new ModifiedNode(record.file, record.nodeId, record.nodeText, record.modifiedAt, true);
+				DefaultMutableTreeNode nodeNode = new DefaultMutableTreeNode(groupedRecord, false);
 				fileNode.add(nodeNode);
 				nodeNodesByKey.put(nodeKey(record), nodeNode);
 
 				i++;
 				while (i < records.size() && ((ModifiedNode) records.get(i)).file.getName().equals(fileName)) {
 					ModifiedNode nextRecord = (ModifiedNode) records.get(i);
-					nodeNode = new DefaultMutableTreeNode(nextRecord, false);
+					ModifiedNode groupedNextRecord = new ModifiedNode(nextRecord.file, nextRecord.nodeId, nextRecord.nodeText, nextRecord.modifiedAt, true);
+					nodeNode = new DefaultMutableTreeNode(groupedNextRecord, false);
 					fileNode.add(nodeNode);
 					nodeNodesByKey.put(nodeKey(nextRecord), nodeNode);
 					i++;
