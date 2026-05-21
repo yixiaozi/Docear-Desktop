@@ -121,15 +121,13 @@ class MapViewTabs implements IMapViewChangeListener {
 	}
 
 	void removeTabbedPaneAccelerators() {
-        final InputMap map = new InputMap();
-        mTabbedPane.setInputMap(JTabbedPane.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, map);
     }
     
     private void installTabShortcuts() {
-        InputMap inputMap = mTabbedPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        InputMap inputMap = mTabbedPane.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
         if (inputMap == null) {
             inputMap = new InputMap();
-            mTabbedPane.setInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW, inputMap);
+            mTabbedPane.setInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, inputMap);
         }
         
         javax.swing.ActionMap actionMap = mTabbedPane.getActionMap();

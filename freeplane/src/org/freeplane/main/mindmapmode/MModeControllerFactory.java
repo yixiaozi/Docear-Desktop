@@ -125,6 +125,7 @@ import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllRemindersTa
 import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllTodosTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllPublishTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllRecurringRemindersTabPanel;
+import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllRecentlyModified;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.TodoTabPanel;
@@ -168,6 +169,7 @@ public class MModeControllerFactory {
 		tabs.add("\u5f85\u529e", new TodoTabPanel(modeController));
 		tabs.add("\u5168\u90e8\u5f85\u529e", new EnhancedAllTodosTabPanel());
 		tabs.add("\u5168\u90e8\u53d1\u5e03", new EnhancedAllPublishTabPanel());
+		tabs.add("\u6700\u8fd1\u4fee\u6539", new EnhancedAllRecentlyModified());
 		new AttributePanelManager(modeController);
 		new HierarchicalIcons();
 		new AutomaticLayoutController();
