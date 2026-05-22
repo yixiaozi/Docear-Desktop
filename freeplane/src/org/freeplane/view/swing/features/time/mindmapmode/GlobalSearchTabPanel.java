@@ -125,6 +125,7 @@ public class GlobalSearchTabPanel extends JPanel {
 		resultList.setCellRenderer(new DefaultListCellRenderer() {
 			private static final long serialVersionUID = 1L;
 			private final Border lineBorder = BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 230, 230));
+			private final Border padding = BorderFactory.createEmptyBorder(4, 8, 4, 8);
 			
 			@Override
 			public Component getListCellRendererComponent(JList<?> list, Object value, int index,
@@ -132,20 +133,20 @@ public class GlobalSearchTabPanel extends JPanel {
 				super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 				if (value instanceof SearchResult) {
 					SearchResult result = (SearchResult) value;
-					String fileName = escapeHtml(result.file.getName());
+					String fileName = result.file.getName();
+					if (fileName.toLowerCase().endsWith(".mm")) {
+						fileName = fileName.substring(0, fileName.length() - 3);
+					}
 					String text = highlightKeywords(result.nodeText, lastQuery);
 					
-					if (text.length() > 100) {
-						text = text.substring(0, 100) + "...";
+					if (text.length() > 150) {
+						text = text.substring(0, 150) + "...";
 					}
 					
-					int indent = result.depth * 15;
-					String padding = createPadding(indent / 6);
-					String html = "<html><b style='color:#3366cc'>" + fileName + "</b><br/>" + padding + text + "</html>";
+					String html = "<html><span style='color:#3366cc;font-weight:bold'>[" + escapeHtml(fileName) + "]</span> " + text + "</html>";
 					
 					setText(html);
-					Border itemPadding = BorderFactory.createEmptyBorder(4, 8 + indent, 4, 8);
-					setBorder(BorderFactory.createCompoundBorder(lineBorder, itemPadding));
+					setBorder(BorderFactory.createCompoundBorder(lineBorder, padding));
 					
 					if (isSelected) {
 						setBackground(new Color(66, 133, 244));
