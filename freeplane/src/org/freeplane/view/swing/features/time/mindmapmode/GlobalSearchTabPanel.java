@@ -50,19 +50,24 @@ import org.freeplane.features.mode.Controller;
 public class GlobalSearchTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 	private static final String SCAN_ROOT = "E:\\yixiaozi";
-	private static final int MAX_RESULTS = 100;
+	private static final int MAX_RESULTS = Integer.MAX_VALUE;
 	private static final int PREVIEW_LENGTH = 100;
 	
 	private final JTextField searchField = new JTextField();
 	private final DefaultListModel<SearchResult> listModel = new DefaultListModel<SearchResult>();
 	private final JList<SearchResult> resultList = new JList<SearchResult>(listModel);
 	private final JLabel statusLabel = new JLabel("加载中...");
-	private final ExecutorService executor = Executors.newSingleThreadExecutor();
+	private final ExecutorService executor = Executors.newFixedThreadPool(4);
 	private volatile boolean isSearching = false;
 	private volatile String lastQuery = "";
 	
 	private final Map<String, Long> fileLastModifiedCache = new HashMap<String, Long>();
 	private final Map<String, List<NodeInfo>> fileNodesCache = new HashMap<String, List<NodeInfo>>();
+	
+	private volatile int scanningFileCount = 0;
+	private volatile int searchScannedFileCount = 0;
+	private volatile int matchedNodeCount = 0;
+	private volatile int searchTotalFileCount = 0;
 	
 	private static class NodeInfo {
 		String text;
@@ -262,6 +267,7 @@ public class GlobalSearchTabPanel extends JPanel {
 		
 		if (lastQuery.isEmpty()) {
 			listModel.clear();
+			statusLabel.setText(getStatusText());
 			return;
 		}
 		
@@ -270,7 +276,12 @@ public class GlobalSearchTabPanel extends JPanel {
 		}
 		
 		isSearching = true;
-		statusLabel.setText("搜索中...");
+		searchScannedFileCount = 0;
+		matchedNodeCount = 0;
+		synchronized (this) {
+			searchTotalFileCount = 0;
+		}
+		updateStatus("搜索中...");
 		
 		executor.submit(new Runnable() {
 			public void run() {
@@ -290,6 +301,11 @@ public class GlobalSearchTabPanel extends JPanel {
 					Set<String> checkedFiles = new HashSet<String>();
 					Set<String> seenResults = new HashSet<String>();
 					
+					synchronized (this) {
+						searchTotalFileCount = 0;
+					}
+					countTotalFiles(new File(SCAN_ROOT));
+					
 					scanDirectory(new File(SCAN_ROOT), keywords, results, checkedFiles, seenResults);
 					
 					Collections.sort(results, new Comparator<SearchResult>() {
@@ -298,19 +314,67 @@ public class GlobalSearchTabPanel extends JPanel {
 						}
 					});
 					
-					final List<SearchResult> finalResults = results;
+					final List<SearchResult> finalResults = new ArrayList<SearchResult>(results);
 					SwingUtilities.invokeLater(new Runnable() {
 						public void run() {
 							listModel.clear();
 							for (SearchResult result : finalResults) {
 								listModel.addElement(result);
 							}
-							statusLabel.setText(getStatusText());
+							resultList.updateUI();
+							updateStatus("搜索完成");
 						}
 					});
 				} finally {
 					isSearching = false;
 				}
+			}
+		});
+	}
+	
+	private void countTotalFiles(File dir) {
+		File[] files = dir.listFiles();
+		if (files == null) {
+			return;
+		}
+		for (File file : files) {
+			if (file.isDirectory() && !file.getName().startsWith(".")) {
+				countTotalFiles(file);
+			} else if (file.getName().toLowerCase().endsWith(".mm")) {
+				synchronized (this) {
+					searchTotalFileCount++;
+				}
+			}
+		}
+	}
+	
+	private void updateStatus(final String status) {
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				String totalInfo = "";
+				int cacheFiles = fileNodesCache.size();
+				int cacheNodes = 0;
+				for (List<NodeInfo> nodes : fileNodesCache.values()) {
+					cacheNodes += nodes.size();
+				}
+				if (cacheFiles > 0) {
+					totalInfo = String.format("（共 %d 个导图，%d 个节点）", cacheFiles, cacheNodes);
+				}
+				
+				String searchInfo = "";
+				if (searchTotalFileCount > 0) {
+					searchInfo = String.format(" (%d/%d)", searchScannedFileCount, searchTotalFileCount);
+				}
+				if (matchedNodeCount > 0) {
+					int displayedCount = Math.min(matchedNodeCount, MAX_RESULTS);
+					if (matchedNodeCount <= MAX_RESULTS) {
+						searchInfo += String.format(", 匹配 %d 个节点", matchedNodeCount);
+					} else {
+						searchInfo += String.format(", 匹配 %d 个节点，显示前 %d 条", matchedNodeCount, displayedCount);
+					}
+				}
+				
+				statusLabel.setText(status + searchInfo + totalInfo);
 			}
 		});
 	}
@@ -321,7 +385,7 @@ public class GlobalSearchTabPanel extends JPanel {
 		for (List<NodeInfo> nodes : fileNodesCache.values()) {
 			nodeCount += nodes.size();
 		}
-		return "已加载 " + fileCount + " 个导图，共 " + nodeCount + " 个节点";
+		return "就绪（共 " + fileCount + " 个导图，" + nodeCount + " 个节点）";
 	}
 	
 	private void scanDirectory(File dir, List<String> keywords, List<SearchResult> results, 
@@ -369,12 +433,20 @@ public class GlobalSearchTabPanel extends JPanel {
 							if (!seenResults.contains(resultKey)) {
 								seenResults.add(resultKey);
 								results.add(new SearchResult(file, node.text, preview, node.id, node.depth, node.lastModified));
+								matchedNodeCount++;
+								if (matchedNodeCount % 10 == 0) {
+									updateStatus("搜索中...");
+								}
 								if (results.size() >= MAX_RESULTS) {
 									return;
 								}
 							}
 						}
 					}
+				}
+				searchScannedFileCount++;
+				if (searchScannedFileCount % 5 == 0) {
+					updateStatus("搜索中...");
 				}
 			}
 		}
@@ -523,13 +595,29 @@ public class GlobalSearchTabPanel extends JPanel {
 	}
 	
 	private boolean matchesKeywords(NodeInfo node, List<String> keywords) {
-		String text = node.text.toLowerCase();
+		String text = node.text.trim();
+		
+		if (isShortNumber(text)) {
+			return false;
+		}
+		
+		String lowerText = text.toLowerCase();
 		for (String keyword : keywords) {
-			if (!text.contains(keyword)) {
+			if (!lowerText.contains(keyword)) {
 				return false;
 			}
 		}
 		return true;
+	}
+	
+	private boolean isShortNumber(String text) {
+		if (text == null || text.isEmpty()) {
+			return false;
+		}
+		if (text.matches("^\\d{1,4}$")) {
+			return true;
+		}
+		return false;
 	}
 	
 	private String generatePreview(NodeInfo node, List<String> keywords) {
@@ -621,36 +709,79 @@ public class GlobalSearchTabPanel extends JPanel {
 			public void run() {
 				File root = new File(SCAN_ROOT);
 				if (root.exists()) {
-					preloadCache(root);
-				}
-				SwingUtilities.invokeLater(new Runnable() {
-					public void run() {
-						statusLabel.setText(getStatusText());
+					List<File> mmFiles = new ArrayList<File>();
+					collectMindMapFiles(root, mmFiles);
+					
+					final int totalFiles = mmFiles.size();
+					final java.util.concurrent.atomic.AtomicInteger completedCount = new java.util.concurrent.atomic.AtomicInteger(0);
+					
+					SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							statusLabel.setText("加载中... (0/" + totalFiles + ")");
+						}
+					});
+					
+					for (File file : mmFiles) {
+						final File f = file;
+						executor.submit(new Runnable() {
+							public void run() {
+								String filePath = f.getAbsolutePath();
+								if (!fileLastModifiedCache.containsKey(filePath) || 
+									fileLastModifiedCache.get(filePath) != f.lastModified()) {
+									List<NodeInfo> nodes = parseMindMapFile(f);
+									if (nodes != null) {
+										synchronized (fileNodesCache) {
+											fileNodesCache.put(filePath, nodes);
+											fileLastModifiedCache.put(filePath, f.lastModified());
+										}
+									}
+								}
+								
+								int completed = completedCount.incrementAndGet();
+								if (completed % 5 == 0 || completed == totalFiles) {
+									final int currentCompleted = completed;
+									SwingUtilities.invokeLater(new Runnable() {
+										public void run() {
+											if (currentCompleted == totalFiles) {
+												updateStatus("就绪");
+											} else {
+												statusLabel.setText("加载中... (" + currentCompleted + "/" + totalFiles + ")");
+											}
+										}
+									});
+								}
+							}
+						});
 					}
-				});
+					
+					if (totalFiles == 0) {
+						SwingUtilities.invokeLater(new Runnable() {
+							public void run() {
+								updateStatus("就绪");
+							}
+						});
+					}
+				} else {
+					SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							updateStatus("就绪");
+						}
+					});
+				}
 			}
 		});
 	}
 	
-	private void preloadCache(File dir) {
-		File[] files = dir.listFiles();
-		if (files == null) {
+	private void collectMindMapFiles(File dir, List<File> files) {
+		File[] dirFiles = dir.listFiles();
+		if (dirFiles == null) {
 			return;
 		}
-		
-		for (File file : files) {
+		for (File file : dirFiles) {
 			if (file.isDirectory() && !file.getName().startsWith(".")) {
-				preloadCache(file);
+				collectMindMapFiles(file, files);
 			} else if (file.getName().toLowerCase().endsWith(".mm")) {
-				String filePath = file.getAbsolutePath();
-				if (!fileLastModifiedCache.containsKey(filePath) || 
-					fileLastModifiedCache.get(filePath) != file.lastModified()) {
-					List<NodeInfo> nodes = parseMindMapFile(file);
-					if (nodes != null) {
-						fileNodesCache.put(filePath, nodes);
-						fileLastModifiedCache.put(filePath, file.lastModified());
-					}
-				}
+				files.add(file);
 			}
 		}
 	}
