@@ -11,10 +11,15 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.net.URL;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
@@ -64,12 +69,14 @@ public class GlobalSearchTabPanel extends JPanel {
 		String note;
 		String id;
 		int depth;
+		long lastModified;
 		
-		NodeInfo(String text, String note, String id, int depth) {
+		NodeInfo(String text, String note, String id, int depth, long lastModified) {
 			this.text = text;
 			this.note = note;
 			this.id = id;
 			this.depth = depth;
+			this.lastModified = lastModified;
 		}
 	}
 	
@@ -79,13 +86,15 @@ public class GlobalSearchTabPanel extends JPanel {
 		final String preview;
 		final String nodeId;
 		final int depth;
+		final long fileModifiedTime;
 		
-		SearchResult(File file, String nodeText, String preview, String nodeId, int depth) {
+		SearchResult(File file, String nodeText, String preview, String nodeId, int depth, long fileModifiedTime) {
 			this.file = file;
 			this.nodeText = nodeText;
 			this.preview = preview;
 			this.nodeId = nodeId;
 			this.depth = depth;
+			this.fileModifiedTime = fileModifiedTime;
 		}
 	}
 	
@@ -125,7 +134,10 @@ public class GlobalSearchTabPanel extends JPanel {
 		resultList.setCellRenderer(new DefaultListCellRenderer() {
 			private static final long serialVersionUID = 1L;
 			private final Border lineBorder = BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 230, 230));
-			private final Border padding = BorderFactory.createEmptyBorder(4, 8, 4, 8);
+			private final Border padding = BorderFactory.createEmptyBorder(2, 4, 2, 4);
+			private final SimpleDateFormat thisYearFormat = new SimpleDateFormat("MM-dd HH:mm", Locale.CHINA);
+			private final SimpleDateFormat otherYearFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA);
+			private final int currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR);
 			
 			@Override
 			public Component getListCellRendererComponent(JList<?> list, Object value, int index,
@@ -143,13 +155,27 @@ public class GlobalSearchTabPanel extends JPanel {
 						text = text.substring(0, 150) + "...";
 					}
 					
-					String html = "<html><span style='color:#3366cc;font-weight:bold'>[" + escapeHtml(fileName) + "]</span> " + text + "</html>";
+					String modifiedTime;
+					java.util.Calendar cal = java.util.Calendar.getInstance();
+					cal.setTime(new Date(result.fileModifiedTime));
+					if (cal.get(java.util.Calendar.YEAR) == currentYear) {
+						modifiedTime = thisYearFormat.format(new Date(result.fileModifiedTime));
+					} else {
+						modifiedTime = otherYearFormat.format(new Date(result.fileModifiedTime));
+					}
+					
+					String html = "<html><table width='100%' style='table-layout:fixed'><tr>" +
+						"<td align='left' style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>" +
+						"<span style='color:#3366cc;font-weight:bold'>[" + escapeHtml(fileName) + "]</span> " + text +
+						"</td>" +
+						"<td align='right' style='white-space:nowrap;font-size:10px;color:#999999;padding-left:8px'>" + modifiedTime + "</td>" +
+						"</tr></table></html>";
 					
 					setText(html);
 					setBorder(BorderFactory.createCompoundBorder(lineBorder, padding));
 					
 					if (isSelected) {
-						setBackground(new Color(66, 133, 244));
+						setBackground(new Color(100, 149, 237));
 						setForeground(Color.WHITE);
 					} else {
 						setBackground(Color.WHITE);
@@ -159,12 +185,12 @@ public class GlobalSearchTabPanel extends JPanel {
 				return this;
 			}
 		});
-		resultList.setSelectionBackground(new Color(66, 133, 244));
+		resultList.setSelectionBackground(new Color(100, 149, 237));
 		resultList.setSelectionForeground(Color.WHITE);
 		resultList.setBackground(Color.WHITE);
 		resultList.setBorder(null);
 		resultList.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-		resultList.setFixedCellHeight(50);
+		resultList.setFixedCellHeight(28);
 		
 		resultList.addKeyListener(new KeyAdapter() {
 			@Override
@@ -266,6 +292,12 @@ public class GlobalSearchTabPanel extends JPanel {
 					
 					scanDirectory(new File(SCAN_ROOT), keywords, results, checkedFiles, seenResults);
 					
+					Collections.sort(results, new Comparator<SearchResult>() {
+						public int compare(SearchResult a, SearchResult b) {
+							return Long.compare(b.fileModifiedTime, a.fileModifiedTime);
+						}
+					});
+					
 					final List<SearchResult> finalResults = results;
 					SwingUtilities.invokeLater(new Runnable() {
 						public void run() {
@@ -336,7 +368,7 @@ public class GlobalSearchTabPanel extends JPanel {
 							String resultKey = filePath + "|" + nodeId + "|" + node.text;
 							if (!seenResults.contains(resultKey)) {
 								seenResults.add(resultKey);
-								results.add(new SearchResult(file, node.text, preview, node.id, node.depth));
+								results.add(new SearchResult(file, node.text, preview, node.id, node.depth, node.lastModified));
 								if (results.size() >= MAX_RESULTS) {
 									return;
 								}
@@ -384,6 +416,7 @@ public class GlobalSearchTabPanel extends JPanel {
 				String text = extractTextFromTag(nodeTag);
 				String id = extractIdFromTag(nodeTag);
 				String note = extractNote(xmlContent, nodeMatcher.end());
+				long modifiedTime = extractModifiedTime(nodeTag, file.lastModified());
 				
 				String beforeText = xmlContent.substring(0, nodeMatcher.start());
 				int startTagCount = beforeText.split("<node", -1).length - 1;
@@ -391,7 +424,7 @@ public class GlobalSearchTabPanel extends JPanel {
 				int currentDepth = startTagCount - endTagCount;
 				
 				if (!text.isEmpty()) {
-					nodes.add(new NodeInfo(text, note, id, currentDepth));
+					nodes.add(new NodeInfo(text, note, id, currentDepth, modifiedTime));
 				}
 			}
 		} catch (Exception e) {
@@ -409,6 +442,28 @@ public class GlobalSearchTabPanel extends JPanel {
 			return matcher.group(1);
 		}
 		return "";
+	}
+	
+	private long extractModifiedTime(String nodeTag, long defaultTime) {
+		Pattern timePattern = Pattern.compile("CREATED=\"([^\"]*)\"");
+		Matcher matcher = timePattern.matcher(nodeTag);
+		if (matcher.find()) {
+			String timeStr = matcher.group(1);
+			try {
+				return Long.parseLong(timeStr);
+			} catch (NumberFormatException e) {
+			}
+		}
+		timePattern = Pattern.compile("MODIFIED=\"([^\"]*)\"");
+		matcher = timePattern.matcher(nodeTag);
+		if (matcher.find()) {
+			String timeStr = matcher.group(1);
+			try {
+				return Long.parseLong(timeStr);
+			} catch (NumberFormatException e) {
+			}
+		}
+		return defaultTime;
 	}
 	
 	private String extractTextFromTag(String nodeTag) {
