@@ -16,9 +16,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import org.freeplane.features.mode.Controller;
-import org.freeplane.features.url.UrlManager;
-
 public class UsageStatsManager {
     private static final String STATS_ROOT_DIR = ".docear_stats";
     private static final String DATA_DIR = "data";
@@ -130,7 +127,7 @@ public class UsageStatsManager {
         currentRecord.setStartTime(System.currentTimeMillis());
         currentRecord.setEventType("activated");
         currentRecord.setMapPath(currentMapPath);
-        currentRecord.setFileHash(calculateFileHash(currentMapPath));
+        currentRecord.setFileHash(calculateDcrId(currentMapPath));
         idleTimeAccumulator = 0;
     }
     
@@ -162,31 +159,30 @@ public class UsageStatsManager {
         }
     }
     
-    private String calculateFileHash(String filePath) {
+    private String calculateDcrId(String filePath) {
         try {
             File file = new File(filePath);
-            String key = filePath + "|" + file.lastModified();
-            return hashString(key);
+            if (!file.exists() || !file.canRead()) {
+                return "";
+            }
+            
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+                String firstLine = reader.readLine();
+                if (firstLine != null && firstLine.contains("dcr_id=")) {
+                    int startIndex = firstLine.indexOf("dcr_id=\"");
+                    if (startIndex >= 0) {
+                        startIndex += 8;
+                        int endIndex = firstLine.indexOf("\"", startIndex);
+                        if (endIndex > startIndex) {
+                            return firstLine.substring(startIndex, endIndex);
+                        }
+                    }
+                }
+            }
+            return "";
         } catch (Exception e) {
             return "";
-        }
-    }
-    
-    private String hashString(String input) {
-        try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hexString = new StringBuilder();
-            for (byte b : hash) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) {
-                    hexString.append('0');
-                }
-                hexString.append(hex);
-            }
-            return hexString.toString().substring(0, 32);
-        } catch (Exception e) {
-            return String.valueOf(input.hashCode());
         }
     }
     
@@ -344,7 +340,7 @@ public class UsageStatsManager {
     private void writeRecord(BufferedWriter writer, UsageRecord record) throws IOException {
         writer.write("{");
         writeStringField(writer, "recordId", record.getRecordId(), true);
-        writeStringField(writer, "fileHash", record.getFileHash(), true);
+        writeStringField(writer, "dcrId", record.getFileHash(), true);
         writeStringField(writer, "deviceId", record.getDeviceId(), true);
         writeLongField(writer, "startTime", record.getStartTime(), true);
         writeLongField(writer, "endTime", record.getEndTime(), true);
