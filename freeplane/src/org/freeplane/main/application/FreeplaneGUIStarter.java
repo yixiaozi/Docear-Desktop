@@ -21,6 +21,9 @@ package org.freeplane.main.application;
 
 import java.awt.EventQueue;
 import java.awt.Frame;
+import java.awt.Window;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
@@ -72,6 +75,9 @@ import org.freeplane.main.filemode.FModeControllerFactory;
 import org.freeplane.main.mindmapmode.MModeControllerFactory;
 import org.freeplane.view.swing.features.nodehistory.NodeHistory;
 import org.freeplane.view.swing.map.ViewLayoutTypeAction;
+import org.freeplane.features.map.IMapLifeCycleListener;
+import org.freeplane.features.map.MapModel;
+import org.freeplane.features.usagestats.UsageStatsManager;
 import org.freeplane.view.swing.map.mindmapmode.MMapViewController;
 import org.pushingpixels.flamingo.api.ribbon.JRibbonFrame;
 
@@ -228,6 +234,67 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 				frame.toFront();
 				startupFinished = true;
 		        System.setProperty("nonInteractive", Boolean.toString(options.isNonInteractive()));
+		        
+		        // Initialize and start UsageStatsManager
+		        final UsageStatsManager statsManager = UsageStatsManager.getInstance();
+		        statsManager.start();
+		        
+		        // Add window event listeners
+		        frame.addWindowListener(new WindowAdapter() {
+		            @Override
+		            public void windowActivated(WindowEvent e) {
+		                statsManager.onWindowActivated();
+		            }
+		            
+		            @Override
+		            public void windowDeactivated(WindowEvent e) {
+		                statsManager.onWindowDeactivated();
+		            }
+		            
+		            @Override
+		            public void windowClosing(WindowEvent e) {
+		                statsManager.stop();
+		            }
+		        });
+		        
+		        // Add map lifecycle listeners
+		        modeController.getMapController().addMapLifeCycleListener(new IMapLifeCycleListener() {
+		            @Override
+		            public void onCreate(MapModel map) {
+		                // Handle map creation
+		            }
+		            
+		            @Override
+		            public void onRemove(MapModel map) {
+		                String file = map.getFile() != null ? map.getFile().getAbsolutePath() : "";
+		                statsManager.onMapClosed(file);
+		            }
+		            
+		            @Override
+		            public void onSaved(MapModel map) {
+		                // Handle map saved
+		            }
+		            
+		            @Override
+		            public void afterMapChange(MapModel oldMap, MapModel newMap) {
+		                if (oldMap != null) {
+		                    String oldFile = oldMap.getFile() != null ? oldMap.getFile().getAbsolutePath() : "";
+		                    statsManager.onMapClosed(oldFile);
+		                }
+		                if (newMap != null) {
+		                    String newFile = newMap.getFile() != null ? newMap.getFile().getAbsolutePath() : "";
+		                    statsManager.onMapOpened(newFile);
+		                }
+		            }
+		        });
+		        
+		        // If a map is already open, notify UsageStatsManager
+		        if (controller.getMap() != null) {
+		            String mapPath = controller.getMap().getFile() != null ? 
+		                controller.getMap().getFile().getAbsolutePath() : "";
+		            statsManager.onMapOpened(mapPath);
+		        }
+		        
 		        try {
                     Thread.sleep(1000);
                 }
