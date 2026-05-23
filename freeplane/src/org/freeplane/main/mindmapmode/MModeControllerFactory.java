@@ -172,6 +172,7 @@ public class MModeControllerFactory {
 		tabs.add("\u5168\u90e8\u53d1\u5e03", new EnhancedAllPublishTabPanel());
 		tabs.add("\u6700\u8fd1\u4fee\u6539", new EnhancedAllRecentlyModified());
 		tabs.add("\u641c\u7d22", new GlobalSearchTabPanel());
+		tabs.add("\u6587\u4ef6\u641c\u7d22", new MindMapFileSearchPanel());
 		new AttributePanelManager(modeController);
 		new HierarchicalIcons();
 		new AutomaticLayoutController();
