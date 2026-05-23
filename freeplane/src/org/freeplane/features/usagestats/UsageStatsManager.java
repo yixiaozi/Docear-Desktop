@@ -57,8 +57,11 @@ public class UsageStatsManager {
     
     public static File getStatsDataDir() {
         try {
-            File userHome = new File(System.getProperty("user.home"));
-            File docearStatsDir = new File(userHome, STATS_ROOT_DIR);
+            File baseDir = new File("E:\\yixiaozi");
+            if (!baseDir.exists()) {
+                baseDir.mkdirs();
+            }
+            File docearStatsDir = new File(baseDir, STATS_ROOT_DIR);
             if (!docearStatsDir.exists()) {
                 docearStatsDir.mkdirs();
             }

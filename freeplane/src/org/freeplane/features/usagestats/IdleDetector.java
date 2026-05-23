@@ -11,7 +11,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class IdleDetector {
-    public static final int DEFAULT_IDLE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+    public static final int DEFAULT_IDLE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
     private static final int CHECK_INTERVAL_MS = 1000; // 1 second
     
     private long idleThresholdMs = DEFAULT_IDLE_THRESHOLD_MS;
