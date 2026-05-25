@@ -131,6 +131,7 @@ import org.freeplane.view.swing.features.time.mindmapmode.GlobalSearchTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.TodoTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.MindMapFileSearchPanel;
+import org.freeplane.view.swing.features.time.mindmapmode.AllFileSearchPanel;
 import org.freeplane.view.swing.map.ShowNotesInMapAction;
 import org.freeplane.features.usagestats.UsageStatsManager;
 import org.freeplane.view.swing.map.attribute.AttributePanelManager;
@@ -175,6 +176,7 @@ public class MModeControllerFactory {
 		tabs.add("\u6700\u8fd1\u4fee\u6539", new EnhancedAllRecentlyModified());
 		tabs.add("\u641c\u7d22", new GlobalSearchTabPanel());
 		tabs.add("\u6587\u4ef6\u641c\u7d22", new MindMapFileSearchPanel());
+		tabs.add("\u5168\u90e8\u6587\u4ef6\u641c\u7d22", new AllFileSearchPanel());
 		new AttributePanelManager(modeController);
 		new HierarchicalIcons();
 		new AutomaticLayoutController();

@@ -8,8 +8,6 @@ import java.awt.Font;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.io.File;
-import java.io.IOException;
-import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,22 +21,19 @@ import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
-import javax.swing.JPopupMenu;
-import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.border.Border;
 
 import org.freeplane.core.util.LogUtils;
-import org.freeplane.core.util.TextUtils;
-import org.freeplane.features.map.MapModel;
-import org.freeplane.features.mode.Controller;
 
-public class MindMapFileSearchPanel extends JPanel {
+public class AllFileSearchPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 	private static final String SCAN_ROOT = "E:\\yixiaozi";
 	
@@ -47,7 +42,7 @@ public class MindMapFileSearchPanel extends JPanel {
 	private final JList<FileResult> resultList = new JList<FileResult>(listModel);
 	private JLabel statusLabel = new JLabel("加载中...");
 	
-	private final List<File> allMindMapFiles = new ArrayList<File>();
+	private final List<File> allFiles = new ArrayList<File>();
 	
 	public static class FileResult {
 		final File file;
@@ -59,7 +54,7 @@ public class MindMapFileSearchPanel extends JPanel {
 		}
 	}
 	
-	public MindMapFileSearchPanel() {
+	public AllFileSearchPanel() {
 		super(new BorderLayout(4, 4));
 		
 		searchField.setBorder(BorderFactory.createCompoundBorder(
@@ -113,9 +108,6 @@ public class MindMapFileSearchPanel extends JPanel {
 				if (value instanceof FileResult) {
 					FileResult result = (FileResult) value;
 					String fileName = result.file.getName();
-					if (fileName.toLowerCase().endsWith(".mm")) {
-						fileName = fileName.substring(0, fileName.length() - 3);
-					}
 					
 					String modifiedTime;
 					java.util.Calendar cal = java.util.Calendar.getInstance();
@@ -127,10 +119,10 @@ public class MindMapFileSearchPanel extends JPanel {
 					}
 					
 					String html = "<html><table width='100%' style='table-layout:fixed'><tr>" +
-						"<td align='left' style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>" +
-						"<span style='color:#3366cc;font-weight:bold'>" + escapeHtml(fileName) + "</span>" +
+						"<td align='left' style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>" +
+						"<span style='color:#3366cc;font-weight:bold;'>" + escapeHtml(fileName) + "</span>" +
 						"</td>" +
-						"<td align='right' style='white-space:nowrap;font-size:10px;color:#999999;padding-left:8px'>" + modifiedTime + "</td>" +
+						"<td align='right' style='white-space:nowrap;font-size:10px;color:#999999;padding-left:8px;'>" + modifiedTime + "</td>" +
 						"</tr></table></html>";
 					
 					setText(html);
@@ -186,9 +178,12 @@ public class MindMapFileSearchPanel extends JPanel {
 			}
 		});
 		
+		JPanel buttonPanel = new JPanel(new BorderLayout(4, 4));
+		buttonPanel.add(refreshButton, BorderLayout.EAST);
+		
 		JPanel searchPanel = new JPanel(new BorderLayout(4, 4));
 		searchPanel.add(searchField, BorderLayout.CENTER);
-		searchPanel.add(refreshButton, BorderLayout.EAST);
+		searchPanel.add(buttonPanel, BorderLayout.EAST);
 		searchPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 		
 		JScrollPane scrollPane = new JScrollPane(resultList);
@@ -198,7 +193,7 @@ public class MindMapFileSearchPanel extends JPanel {
 		add(scrollPane, BorderLayout.CENTER);
 		add(statusLabel, BorderLayout.SOUTH);
 		
-		loadMindMapFiles();
+		loadFiles();
 	}
 	
 	private String escapeHtml(String text) {
@@ -209,7 +204,7 @@ public class MindMapFileSearchPanel extends JPanel {
 			.replace("\"", "&quot;").replace("'", "&#39;");
 	}
 	
-	private void loadMindMapFiles() {
+	private void loadFiles() {
 		refresh();
 	}
 	
@@ -220,7 +215,7 @@ public class MindMapFileSearchPanel extends JPanel {
 				List<File> newFiles = new ArrayList<File>();
 				File root = new File(SCAN_ROOT);
 				if (root.exists()) {
-					collectMindMapFiles(root, newFiles);
+					collectAllFiles(root, newFiles);
 				}
 				
 				Collections.sort(newFiles, new Comparator<File>() {
@@ -232,29 +227,25 @@ public class MindMapFileSearchPanel extends JPanel {
 				final List<File> finalFiles = newFiles;
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
-						allMindMapFiles.clear();
-						allMindMapFiles.addAll(finalFiles);
+						allFiles.clear();
+						allFiles.addAll(finalFiles);
 						performSearch();
-						statusLabel.setText("就绪 (共 " + allMindMapFiles.size() + " 个文件)");
+						statusLabel.setText("就绪 (共 " + allFiles.size() + " 个文件)");
 					}
 				});
 			}
 		}).start();
 	}
 	
-	private void collectMindMapFiles(File dir) {
-		collectMindMapFiles(dir, allMindMapFiles);
-	}
-	
-	private void collectMindMapFiles(File dir, List<File> resultList) {
+	private void collectAllFiles(File dir, List<File> resultList) {
 		File[] files = dir.listFiles();
 		if (files == null) {
 			return;
 		}
 		for (File file : files) {
 			if (file.isDirectory() && !file.getName().startsWith(".")) {
-				collectMindMapFiles(file, resultList);
-			} else if (file.getName().toLowerCase().endsWith(".mm")) {
+				collectAllFiles(file, resultList);
+			} else if (file.isFile()) {
 				resultList.add(file);
 			}
 		}
@@ -268,20 +259,17 @@ public class MindMapFileSearchPanel extends JPanel {
 		List<FileResult> results = new ArrayList<FileResult>();
 		
 		if (query.isEmpty()) {
-			// 显示所有文件，按修改时间排序
-			for (File file : allMindMapFiles) {
+			for (File file : allFiles) {
 				results.add(new FileResult(file, file.lastModified()));
 			}
 		} else {
-			// 搜索匹配文件名的文件
-			for (File file : allMindMapFiles) {
+			for (File file : allFiles) {
 				String fileName = file.getName().toLowerCase();
 				if (fileName.contains(query)) {
 					results.add(new FileResult(file, file.lastModified()));
 				}
 			}
 			
-			// 搜索结果按修改时间排序
 			Collections.sort(results, new Comparator<FileResult>() {
 				public int compare(FileResult a, FileResult b) {
 					return Long.compare(b.lastModified, a.lastModified);
@@ -293,9 +281,8 @@ public class MindMapFileSearchPanel extends JPanel {
 			listModel.addElement(result);
 		}
 		
-		// 更新状态标签
 		if (query.isEmpty()) {
-			statusLabel.setText("就绪 (共 " + allMindMapFiles.size() + " 个文件)");
+			statusLabel.setText("就绪 (共 " + allFiles.size() + " 个文件)");
 		} else {
 			statusLabel.setText("找到 " + results.size() + " 个文件");
 		}
@@ -308,19 +295,10 @@ public class MindMapFileSearchPanel extends JPanel {
 		}
 		
 		try {
-			final URL mapUrl = result.file.toURI().toURL();
-			
-			SwingUtilities.invokeLater(new Runnable() {
-				public void run() {
-					try {
-						Controller.getCurrentModeController().getMapController().newMap(mapUrl);
-					} catch (Exception e) {
-						LogUtils.warn("Failed to open file: " + e.getMessage());
-					}
-				}
-			});
+			openFileWithSystemApp(result.file);
 		} catch (Exception e) {
-			LogUtils.warn("Failed to open file: " + e.getMessage());
+			LogUtils.warn("无法打开文件: " + e.getMessage());
+			JOptionPane.showMessageDialog(this, "无法打开文件: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
 		}
 	}
 	
@@ -332,7 +310,7 @@ public class MindMapFileSearchPanel extends JPanel {
 		
 		JPopupMenu popupMenu = new JPopupMenu();
 		
-		JMenuItem openItem = new JMenuItem("打开导图");
+		JMenuItem openItem = new JMenuItem("打开文件");
 		openItem.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent e) {
 				openSelectedResult();
@@ -351,6 +329,21 @@ public class MindMapFileSearchPanel extends JPanel {
 		popupMenu.show(resultList, e.getX(), e.getY());
 	}
 	
+	private void openFileWithSystemApp(File file) {
+		if (file == null || !file.exists()) {
+			return;
+		}
+		
+		try {
+			if (java.awt.Desktop.isDesktopSupported()) {
+				java.awt.Desktop.getDesktop().open(file);
+			}
+		} catch (Exception e) {
+			LogUtils.warn("无法打开文件: " + e.getMessage());
+			throw new RuntimeException(e);
+		}
+	}
+	
 	private void openContainingFolder(File file) {
 		if (file == null || !file.exists()) {
 			return;
@@ -365,19 +358,10 @@ public class MindMapFileSearchPanel extends JPanel {
 		try {
 			if (java.awt.Desktop.isDesktopSupported()) {
 				java.awt.Desktop.getDesktop().open(parentDir);
-			} else {
-				if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-					String cmd = "explorer.exe \"" + parentDir.getAbsolutePath() + "\"";
-					Runtime.getRuntime().exec(cmd);
-				} else if (System.getProperty("os.name").toLowerCase().contains("mac")) {
-					Runtime.getRuntime().exec(new String[]{"open", parentDir.getAbsolutePath()});
-				} else {
-					Runtime.getRuntime().exec(new String[]{"/usr/bin/xdg-open", parentDir.getAbsolutePath()});
-				}
 			}
-		} catch (IOException e) {
-			LogUtils.warn("Failed to open folder: " + e.getMessage());
-			JOptionPane.showMessageDialog(this, "无法打开文件所在目录: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+		} catch (Exception e) {
+			LogUtils.warn("无法打开目录: " + e.getMessage());
+			JOptionPane.showMessageDialog(this, "无法打开目录: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
 		}
 	}
 }
