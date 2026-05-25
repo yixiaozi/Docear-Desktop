@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import org.freeplane.core.util.FreeplaneVersion;
+
 public class UsageStatsManager {
     private static final String STATS_ROOT_DIR = ".docear_stats";
     private static final String DATA_DIR = "data";
@@ -128,6 +130,7 @@ public class UsageStatsManager {
         currentRecord.setEventType("activated");
         currentRecord.setMapPath(currentMapPath);
         currentRecord.setFileHash(calculateDcrId(currentMapPath));
+        currentRecord.setAppVersion(getApplicationVersion());
         idleTimeAccumulator = 0;
     }
     
@@ -303,6 +306,8 @@ public class UsageStatsManager {
                     value = value.substring(1, value.length() - 1);
                 }
                 
+                value = unescapeJsonString(value);
+                
                 try {
                     if ("recordId".equals(key)) {
                         // Skip, since we generate new
@@ -334,6 +339,37 @@ public class UsageStatsManager {
         }
         
         return record;
+    }
+    
+    private String unescapeJsonString(String value) {
+        if (value == null) {
+            return "";
+        }
+        String result = value;
+        String prevResult;
+        int maxIterations = 20;
+        int iteration = 0;
+        do {
+            prevResult = result;
+            result = result.replace("\\\\", "\\")
+                          .replace("\\\"", "\"")
+                          .replace("\\n", "\n")
+                          .replace("\\r", "\r")
+                          .replace("\\t", "\t");
+        } while (!result.equals(prevResult) && ++iteration < maxIterations);
+        return result;
+    }
+    
+    private String getApplicationVersion() {
+        try {
+            Class<?> docearControllerClass = Class.forName("org.docear.plugin.core.DocearController");
+            java.lang.reflect.Method getControllerMethod = docearControllerClass.getMethod("getController");
+            Object controller = getControllerMethod.invoke(null);
+            java.lang.reflect.Method getApplicationVersionMethod = docearControllerClass.getMethod("getApplicationVersion");
+            return (String) getApplicationVersionMethod.invoke(controller);
+        } catch (Exception e) {
+            return FreeplaneVersion.getVersion().toString();
+        }
     }
     
     private void saveRecordsToFile(File file, List<UsageRecord> records) {

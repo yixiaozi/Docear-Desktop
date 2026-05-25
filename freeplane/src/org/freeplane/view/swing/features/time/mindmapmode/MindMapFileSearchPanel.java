@@ -8,6 +8,7 @@ import java.awt.Font;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -22,6 +23,9 @@ import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPopupMenu;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -30,6 +34,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.border.Border;
 
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
 
@@ -40,7 +45,7 @@ public class MindMapFileSearchPanel extends JPanel {
 	private final JTextField searchField = new JTextField();
 	private final DefaultListModel<FileResult> listModel = new DefaultListModel<FileResult>();
 	private final JList<FileResult> resultList = new JList<FileResult>(listModel);
-	private final JLabel statusLabel = new JLabel("加载中...");
+	private JLabel statusLabel = new JLabel("加载中...");
 	
 	private final List<File> allMindMapFiles = new ArrayList<File>();
 	
@@ -88,6 +93,14 @@ public class MindMapFileSearchPanel extends JPanel {
 				searchField.setText("");
 				searchField.requestFocus();
 				performSearch();
+			}
+		});
+		
+		JButton refreshButton = new JButton("刷新");
+		refreshButton.setPreferredSize(new Dimension(60, 30));
+		refreshButton.addActionListener(new java.awt.event.ActionListener() {
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				refresh();
 			}
 		});
 		
@@ -163,15 +176,33 @@ public class MindMapFileSearchPanel extends JPanel {
 		resultList.addMouseListener(new java.awt.event.MouseAdapter() {
 			@Override
 			public void mouseClicked(java.awt.event.MouseEvent e) {
-				if (e.getClickCount() >= 1) {
+				if (e.getClickCount() >= 1 && !e.isPopupTrigger()) {
 					openSelectedResult();
+				}
+			}
+			
+			@Override
+			public void mouseReleased(java.awt.event.MouseEvent e) {
+				if (e.isPopupTrigger()) {
+					showPopupMenu(e);
+				}
+			}
+			
+			@Override
+			public void mousePressed(java.awt.event.MouseEvent e) {
+				if (e.isPopupTrigger()) {
+					showPopupMenu(e);
 				}
 			}
 		});
 		
+		JPanel buttonPanel = new JPanel(new BorderLayout(4, 4));
+		buttonPanel.add(clearButton, BorderLayout.WEST);
+		buttonPanel.add(refreshButton, BorderLayout.EAST);
+		
 		JPanel searchPanel = new JPanel(new BorderLayout(4, 4));
 		searchPanel.add(searchField, BorderLayout.CENTER);
-		searchPanel.add(clearButton, BorderLayout.EAST);
+		searchPanel.add(buttonPanel, BorderLayout.EAST);
 		searchPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 		
 		JScrollPane scrollPane = new JScrollPane(resultList);
@@ -193,22 +224,30 @@ public class MindMapFileSearchPanel extends JPanel {
 	}
 	
 	private void loadMindMapFiles() {
+		refresh();
+	}
+	
+	public void refresh() {
+		statusLabel.setText("刷新中...");
 		new Thread(new Runnable() {
 			public void run() {
-				allMindMapFiles.clear();
+				List<File> newFiles = new ArrayList<File>();
 				File root = new File(SCAN_ROOT);
 				if (root.exists()) {
-					collectMindMapFiles(root);
+					collectMindMapFiles(root, newFiles);
 				}
 				
-				Collections.sort(allMindMapFiles, new Comparator<File>() {
+				Collections.sort(newFiles, new Comparator<File>() {
 					public int compare(File a, File b) {
 						return Long.compare(b.lastModified(), a.lastModified());
 					}
 				});
 				
+				final List<File> finalFiles = newFiles;
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
+						allMindMapFiles.clear();
+						allMindMapFiles.addAll(finalFiles);
 						performSearch();
 						statusLabel.setText("就绪 (共 " + allMindMapFiles.size() + " 个文件)");
 					}
@@ -218,15 +257,19 @@ public class MindMapFileSearchPanel extends JPanel {
 	}
 	
 	private void collectMindMapFiles(File dir) {
+		collectMindMapFiles(dir, allMindMapFiles);
+	}
+	
+	private void collectMindMapFiles(File dir, List<File> resultList) {
 		File[] files = dir.listFiles();
 		if (files == null) {
 			return;
 		}
 		for (File file : files) {
 			if (file.isDirectory() && !file.getName().startsWith(".")) {
-				collectMindMapFiles(file);
+				collectMindMapFiles(file, resultList);
 			} else if (file.getName().toLowerCase().endsWith(".mm")) {
-				allMindMapFiles.add(file);
+				resultList.add(file);
 			}
 		}
 	}
@@ -292,6 +335,67 @@ public class MindMapFileSearchPanel extends JPanel {
 			});
 		} catch (Exception e) {
 			LogUtils.warn("Failed to open file: " + e.getMessage());
+		}
+	}
+	
+	private void showPopupMenu(java.awt.event.MouseEvent e) {
+		final FileResult result = resultList.getSelectedValue();
+		if (result == null) {
+			return;
+		}
+		
+		JPopupMenu popupMenu = new JPopupMenu();
+		
+		JMenuItem openItem = new JMenuItem("打开导图");
+		openItem.addActionListener(new java.awt.event.ActionListener() {
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				openSelectedResult();
+			}
+		});
+		popupMenu.add(openItem);
+		
+		JMenuItem openFolderItem = new JMenuItem("打开所在目录");
+		openFolderItem.addActionListener(new java.awt.event.ActionListener() {
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				openContainingFolder(result.file);
+			}
+		});
+		popupMenu.add(openFolderItem);
+		
+		popupMenu.show(resultList, e.getX(), e.getY());
+	}
+	
+	private void openContainingFolder(File file) {
+		if (file == null || !file.exists()) {
+			return;
+		}
+		
+		File parentDir = file.getParentFile();
+		if (parentDir == null || !parentDir.exists()) {
+			JOptionPane.showMessageDialog(this, "无法找到文件所在目录", "错误", JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+		
+		try {
+			if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+				String selectParam = "/select," + file.getAbsolutePath();
+				Runtime.getRuntime().exec(new String[]{"explorer.exe", selectParam});
+			} else if (System.getProperty("os.name").toLowerCase().contains("mac")) {
+				Runtime.getRuntime().exec(new String[]{"open", "-R", file.getAbsolutePath()});
+			} else {
+				Runtime.getRuntime().exec(new String[]{"/usr/bin/xdg-open", parentDir.getAbsolutePath()});
+			}
+		} catch (IOException e) {
+			try {
+				if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+					Runtime.getRuntime().exec(new String[]{"explorer.exe", parentDir.getAbsolutePath()});
+				} else {
+					Runtime.getRuntime().exec(new String[]{System.getProperty("os.name").toLowerCase().contains("mac") ? "open" : "xdg-open", parentDir.getAbsolutePath()});
+				}
+			} catch (IOException ex) {
+				LogUtils.warn("Failed to open folder: " + ex.getMessage());
+				JOptionPane.showMessageDialog(this, "无法打开文件所在目录: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+			}
 		}
 	}
 }
