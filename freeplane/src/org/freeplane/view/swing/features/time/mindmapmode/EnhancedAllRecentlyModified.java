@@ -373,9 +373,9 @@ public class EnhancedAllRecentlyModified extends JPanel {
 								long modifiedAt = Long.parseLong(modifiedStr);
 								Calendar cal = Calendar.getInstance();
 								long cutoff = cal.getTimeInMillis() - (MAX_DAYS * 24L * 60L * 60L * 1000L);
-								if (modifiedAt > cutoff && !"bin".equalsIgnoreCase(text)) {
-									nodes.add(new ModifiedNode(file, id, text, modifiedAt, false));
-								}
+								if (modifiedAt > cutoff && !"bin".equalsIgnoreCase(text) && !isNumericOnly(text)) {
+								nodes.add(new ModifiedNode(file, id, text, modifiedAt, false));
+							}
 							}
 							catch (Exception e) {
 							}
@@ -509,6 +509,14 @@ public class EnhancedAllRecentlyModified extends JPanel {
 		start.set(Calendar.SECOND, 0);
 		start.set(Calendar.MILLISECOND, 0);
 		return start.getTimeInMillis();
+	}
+
+	private boolean isNumericOnly(String text) {
+		if (text == null) {
+			return false;
+		}
+		text = text.trim();
+		return text.length() <= 4 && text.matches("^\\d+$");
 	}
 
 	private String getSelectedNodeKey() {

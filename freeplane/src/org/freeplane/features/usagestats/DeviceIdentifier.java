@@ -48,14 +48,24 @@ public class DeviceIdentifier {
     }
     
     private static String readDeviceIdFromFile(File file) {
-        try (Reader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
-             BufferedReader br = new BufferedReader(reader)) {
+        Reader reader = null;
+        BufferedReader br = null;
+        try {
+            reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
+            br = new BufferedReader(reader);
             String id = br.readLine();
             if (id != null && !id.trim().isEmpty()) {
                 return id.trim();
             }
         } catch (IOException e) {
             // Ignore
+        } finally {
+            if (br != null) {
+                try { br.close(); } catch (IOException e) { }
+            }
+            if (reader != null) {
+                try { reader.close(); } catch (IOException e) { }
+            }
         }
         return null;
     }
@@ -66,11 +76,21 @@ public class DeviceIdentifier {
             parentDir.mkdirs();
         }
         
-        try (Writer writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
-             BufferedWriter bw = new BufferedWriter(writer)) {
+        Writer writer = null;
+        BufferedWriter bw = null;
+        try {
+            writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
+            bw = new BufferedWriter(writer);
             bw.write(deviceId);
         } catch (IOException e) {
             // Ignore
+        } finally {
+            if (bw != null) {
+                try { bw.close(); } catch (IOException e) { }
+            }
+            if (writer != null) {
+                try { writer.close(); } catch (IOException e) { }
+            }
         }
     }
     

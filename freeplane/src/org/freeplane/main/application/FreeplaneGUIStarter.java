@@ -76,6 +76,7 @@ import org.freeplane.main.mindmapmode.MModeControllerFactory;
 import org.freeplane.view.swing.features.nodehistory.NodeHistory;
 import org.freeplane.view.swing.map.ViewLayoutTypeAction;
 import org.freeplane.features.map.IMapLifeCycleListener;
+import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.usagestats.UsageStatsManager;
 import org.freeplane.view.swing.map.mindmapmode.MMapViewController;
@@ -208,8 +209,8 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 	}
 
 	public void createFrame(final String[] args) {
-		Controller controller = Controller.getCurrentController();
-		ModeController modeController = controller.getModeController(MModeController.MODENAME);
+		final Controller controller = Controller.getCurrentController();
+		final ModeController modeController = controller.getModeController(MModeController.MODENAME);
 		controller.selectModeForBuild(modeController);
 		Compat.macMenuChanges();
 		new UserPropertiesUpdater().importOldDefaultStyle();
@@ -258,35 +259,48 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 		        });
 		        
 		        // Add map lifecycle listeners
-		        modeController.getMapController().addMapLifeCycleListener(new IMapLifeCycleListener() {
-		            @Override
-		            public void onCreate(MapModel map) {
-		                // Handle map creation
-		            }
-		            
-		            @Override
-		            public void onRemove(MapModel map) {
-		                String file = map.getFile() != null ? map.getFile().getAbsolutePath() : "";
-		                statsManager.onMapClosed(file);
-		            }
-		            
-		            @Override
-		            public void onSaved(MapModel map) {
-		                // Handle map saved
-		            }
-		            
-		            @Override
-		            public void afterMapChange(MapModel oldMap, MapModel newMap) {
-		                if (oldMap != null) {
-		                    String oldFile = oldMap.getFile() != null ? oldMap.getFile().getAbsolutePath() : "";
-		                    statsManager.onMapClosed(oldFile);
-		                }
-		                if (newMap != null) {
-		                    String newFile = newMap.getFile() != null ? newMap.getFile().getAbsolutePath() : "";
-		                    statsManager.onMapOpened(newFile);
-		                }
-		            }
-		        });
+        modeController.getMapController().addMapLifeCycleListener(new IMapLifeCycleListener() {
+            @Override
+            public void onCreate(MapModel map) {
+                // Handle map creation
+            }
+            
+            @Override
+            public void onRemove(MapModel map) {
+                String file = map.getFile() != null ? map.getFile().getAbsolutePath() : "";
+                statsManager.onMapClosed(file);
+            }
+            
+            @Override
+            public void onSavedAs(MapModel map) {
+                // Handle map saved as
+            }
+            
+            @Override
+            public void onSaved(MapModel map) {
+                // Handle map saved
+            }
+        });
+        
+        // Add map selection listener for map change events
+        Controller.getCurrentController().getMapViewManager().addMapSelectionListener(new IMapSelectionListener() {
+            @Override
+            public void afterMapChange(MapModel oldMap, MapModel newMap) {
+                if (oldMap != null) {
+                    String oldFile = oldMap.getFile() != null ? oldMap.getFile().getAbsolutePath() : "";
+                    statsManager.onMapClosed(oldFile);
+                }
+                if (newMap != null) {
+                    String newFile = newMap.getFile() != null ? newMap.getFile().getAbsolutePath() : "";
+                    statsManager.onMapOpened(newFile);
+                }
+            }
+            
+            @Override
+            public void beforeMapChange(MapModel oldMap, MapModel newMap) {
+                // Handle before map change
+            }
+        });
 		        
 		        // If a map is already open, notify UsageStatsManager
 		        if (controller.getMap() != null) {

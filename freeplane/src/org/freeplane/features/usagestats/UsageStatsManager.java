@@ -166,8 +166,10 @@ public class UsageStatsManager {
                 return "";
             }
             
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+            BufferedReader reader = null;
+            try {
+                reader = new BufferedReader(
+                        new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8));
                 String firstLine = reader.readLine();
                 if (firstLine != null && firstLine.contains("dcr_id=")) {
                     int startIndex = firstLine.indexOf("dcr_id=\"");
@@ -178,6 +180,10 @@ public class UsageStatsManager {
                             return firstLine.substring(startIndex, endIndex);
                         }
                     }
+                }
+            } finally {
+                if (reader != null) {
+                    try { reader.close(); } catch (IOException e) { }
                 }
             }
             return "";
@@ -218,8 +224,11 @@ public class UsageStatsManager {
             return records;
         }
         
-        try (Reader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
-             BufferedReader br = new BufferedReader(reader)) {
+        Reader reader = null;
+        BufferedReader br = null;
+        try {
+            reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
+            br = new BufferedReader(reader);
             StringBuilder sb = new StringBuilder();
             String line;
             while ((line = br.readLine()) != null) {
@@ -232,6 +241,13 @@ public class UsageStatsManager {
             }
         } catch (Exception e) {
             // Ignore loading errors
+        } finally {
+            if (br != null) {
+                try { br.close(); } catch (IOException e) { }
+            }
+            if (reader != null) {
+                try { reader.close(); } catch (IOException e) { }
+            }
         }
         
         return records;
@@ -321,8 +337,11 @@ public class UsageStatsManager {
     }
     
     private void saveRecordsToFile(File file, List<UsageRecord> records) {
-        try (Writer writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
-             BufferedWriter bw = new BufferedWriter(writer)) {
+        Writer writer = null;
+        BufferedWriter bw = null;
+        try {
+            writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
+            bw = new BufferedWriter(writer);
             
             bw.write("[");
             for (int i = 0; i < records.size(); i++) {
@@ -334,6 +353,13 @@ public class UsageStatsManager {
             bw.write("]");
         } catch (IOException e) {
             // Ignore save errors
+        } finally {
+            if (bw != null) {
+                try { bw.close(); } catch (IOException e) { }
+            }
+            if (writer != null) {
+                try { writer.close(); } catch (IOException e) { }
+            }
         }
     }
     
