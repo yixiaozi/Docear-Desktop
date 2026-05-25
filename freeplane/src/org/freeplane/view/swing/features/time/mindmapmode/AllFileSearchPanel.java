@@ -15,6 +15,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
@@ -42,7 +43,7 @@ public class AllFileSearchPanel extends JPanel {
 	private final JList<FileResult> resultList = new JList<FileResult>(listModel);
 	private JLabel statusLabel = new JLabel("加载中...");
 	
-	private final List<File> allFiles = new ArrayList<File>();
+	private final List<File> allFiles = new CopyOnWriteArrayList<File>();
 	
 	public static class FileResult {
 		final File file;
