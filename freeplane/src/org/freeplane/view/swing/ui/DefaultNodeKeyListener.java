@@ -3,12 +3,17 @@ package org.freeplane.view.swing.ui;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
+import javax.swing.JComponent;
 import javax.swing.JPopupMenu;
+import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.ControllerPopupMenuListener;
 import org.freeplane.core.ui.IEditHandler;
 import org.freeplane.core.ui.IEditHandler.FirstAction;
+import org.freeplane.core.ui.components.FreeplaneMenuBar;
+import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
@@ -50,7 +55,31 @@ public class DefaultNodeKeyListener implements KeyListener {
 			}
 			return;
 		}
-		if ((e.isAltDown() || e.isControlDown() || e.isMetaDown())) {
+		if (e.isAltDown() || e.isMetaDown()) {
+			return;
+		}
+		if (e.isControlDown()) {
+			String keyName = KeyEvent.getKeyText(e.getKeyCode());
+			LogUtils.info("DefaultNodeKeyListener: Ctrl+" + keyName + " pressed, keyCode=" + e.getKeyCode());
+			
+			final FreeplaneMenuBar freeplaneMenuBar = mapView.getModeController().getController().getViewController()
+			    .getFreeplaneMenuBar();
+			LogUtils.info("DefaultNodeKeyListener: FreeplaneMenuBar obtained: " + (freeplaneMenuBar != null));
+			
+			if (freeplaneMenuBar != null) {
+				KeyStroke keyStroke = KeyStroke.getKeyStrokeForEvent(e);
+				LogUtils.info("DefaultNodeKeyListener: KeyStroke: " + keyStroke);
+				
+				boolean processed = freeplaneMenuBar.processKeyBinding(keyStroke, e, JComponent.WHEN_IN_FOCUSED_WINDOW, true);
+				LogUtils.info("DefaultNodeKeyListener: FreeplaneMenuBar.processKeyBinding returned: " + processed);
+				
+				if (processed) {
+					e.consume();
+					LogUtils.info("DefaultNodeKeyListener: Event consumed, returning");
+					return;
+				}
+			}
+			LogUtils.info("DefaultNodeKeyListener: Ctrl+" + keyName + " not processed, returning");
 			return;
 		}
 		switch (e.getKeyCode()) {

@@ -977,16 +977,24 @@ public class MenuBuilder extends UIBuilder implements IKeyStrokeProcessor {
 	}
 
 	public boolean processKeyBinding(KeyStroke ks, KeyEvent event, int condition, boolean pressed, boolean consumed) {
+		LogUtils.info("MenuBuilder.processKeyBinding: ks=" + ks + ", condition=" + condition + ", consumed=" + consumed + ", pressed=" + pressed);
+		
 		if (!consumed && condition == JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT) {
 			Node node = accelerators.get(ks);
+			LogUtils.info("MenuBuilder.processKeyBinding: accelerator found for ks=" + ks + ": " + (node != null));
+			
 			if(node != null) {
 				JFreeplaneMenuItem item = (JFreeplaneMenuItem) node.getUserObject();
 				Action action = item.getAction();
+				LogUtils.info("MenuBuilder.processKeyBinding: action=" + (action != null ? action.getValue(Action.NAME) : "null"));
+				
 				if(action != null && SwingUtilities.notifyAction(action, ks, event, event.getComponent(), event.getModifiers())) {
+					LogUtils.info("MenuBuilder.processKeyBinding: action executed successfully");
 					return true;
 				}
 			}
 		}
+		LogUtils.info("MenuBuilder.processKeyBinding: returning false");
 		return false;
 	}
 	
