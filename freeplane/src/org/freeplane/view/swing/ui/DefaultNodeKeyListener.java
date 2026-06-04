@@ -12,8 +12,8 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.ControllerPopupMenuListener;
 import org.freeplane.core.ui.IEditHandler;
 import org.freeplane.core.ui.IEditHandler.FirstAction;
+import org.freeplane.core.ui.KeyBindingProcessor;
 import org.freeplane.core.ui.components.FreeplaneMenuBar;
-import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
@@ -59,27 +59,21 @@ public class DefaultNodeKeyListener implements KeyListener {
 			return;
 		}
 		if (e.isControlDown()) {
-			String keyName = KeyEvent.getKeyText(e.getKeyCode());
-			LogUtils.info("DefaultNodeKeyListener: Ctrl+" + keyName + " pressed, keyCode=" + e.getKeyCode());
-			
+			final KeyStroke keyStroke = KeyStroke.getKeyStrokeForEvent(e);
 			final FreeplaneMenuBar freeplaneMenuBar = mapView.getModeController().getController().getViewController()
 			    .getFreeplaneMenuBar();
-			LogUtils.info("DefaultNodeKeyListener: FreeplaneMenuBar obtained: " + (freeplaneMenuBar != null));
-			
-			if (freeplaneMenuBar != null) {
-				KeyStroke keyStroke = KeyStroke.getKeyStrokeForEvent(e);
-				LogUtils.info("DefaultNodeKeyListener: KeyStroke: " + keyStroke);
-				
-				boolean processed = freeplaneMenuBar.processKeyBinding(keyStroke, e, JComponent.WHEN_IN_FOCUSED_WINDOW, true);
-				LogUtils.info("DefaultNodeKeyListener: FreeplaneMenuBar.processKeyBinding returned: " + processed);
-				
-				if (processed) {
-					e.consume();
-					LogUtils.info("DefaultNodeKeyListener: Event consumed, returning");
-					return;
-				}
+			if (freeplaneMenuBar != null
+			        && freeplaneMenuBar.processKeyBinding(keyStroke, e, JComponent.WHEN_IN_FOCUSED_WINDOW, true)) {
+				e.consume();
+				return;
 			}
-			LogUtils.info("DefaultNodeKeyListener: Ctrl+" + keyName + " not processed, returning");
+			final ModeController modeController = mapView.getModeController();
+			final KeyBindingProcessor keyProcessor = modeController.getExtension(KeyBindingProcessor.class);
+			if (keyProcessor != null
+			        && keyProcessor.processKeyBinding(keyStroke, e, JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, true)) {
+				e.consume();
+				return;
+			}
 			return;
 		}
 		switch (e.getKeyCode()) {

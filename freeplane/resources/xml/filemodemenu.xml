@@ -10,7 +10,7 @@
 		</menu_submenu>
 		<menu_submenu name="edit" name_ref="edit">
 			<menu_category name="find">				
-				<menu_action accelerator="control G" action="FindAction"/>
+				<menu_action accelerator="control F" action="FindAction"/>
 				<menu_action accelerator="control shift G" action="QuickFindAction.FORWARD"/>
 				<menu_action action="QuickFindAction.BACK"/>
 				<menu_action action="OpenPathAction"/>
@@ -22,7 +22,7 @@
 						<menu_submenu name="toolbars" name_ref="menu_toolbars">
 							<menu_action action="ToggleMenubarAction" menu_key="MB_ToggleMenubarAction"/>
 							<menu_action action="ToggleToolbarAction"/>
-							<menu_action action="ShowFilterToolbarAction" accelerator="control F"/>
+							<menu_action action="ShowFilterToolbarAction" accelerator="control shift L"/>
 							<menu_action action="ToggleScrollbarsAction"/>
 							<menu_action action="SetBooleanPropertyAction.presentation_mode" />
 							</menu_submenu>

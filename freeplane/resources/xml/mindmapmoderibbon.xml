@@ -281,12 +281,12 @@
 		<ribbon_task name="search_and_filter">
 			<ribbon_band name="filter" resize_policies="Mirror, High2Low">
 			    <ribbon_action action="EditFilterAction" priority="top"/>	
-                <ribbon_action action="FindAction" accelerator="control G" priority="top" />
-                <!--ribbon_action action="QuickFindAction.FORWARD" />
-                <ribbon_action action="QuickFindAction.BACK" /-->
-				<ribbon_action action="NodeListAction" accelerator="control shift F">
+                <ribbon_action action="NodeListAction" accelerator="control F" priority="top">
     				<ribbon_action action="AllMapsNodeListAction" />
                 </ribbon_action>
+                <ribbon_action action="FindAction" accelerator="control shift F" />
+                <!--ribbon_action action="QuickFindAction.FORWARD" />
+                <ribbon_action action="QuickFindAction.BACK" /-->
                 <ribbon_action action="UndoFilterAction" priority="medium"/>
 				<ribbon_action action="RedoFilterAction"/>
 				<ribbon_action action="ReapplyFilterAction" priority="medium"/>				
