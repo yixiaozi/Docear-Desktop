@@ -29,6 +29,7 @@ public class UsageStatsManager {
     public static final long MIN_SESSION_DURATION_MS = 1000L;
     
     private static UsageStatsManager instance;
+    private List<UsageRecord> recordsCache;
     private IdleDetector idleDetector;
     private UsageRecord currentRecord;
     private String currentMapPath;
@@ -219,12 +220,30 @@ public class UsageStatsManager {
             List<UsageRecord> records = loadRecordsFromFile(dateFile);
             records.add(record);
             saveRecordsToFile(dateFile, records);
+            invalidateRecordsCache();
         } catch (Exception e) {
             // Ignore save errors
         }
     }
-    
+
+    public synchronized void invalidateRecordsCache() {
+        recordsCache = null;
+    }
+
     public List<UsageRecord> loadAllRecords() {
+        synchronized (this) {
+            if (recordsCache != null) {
+                return new ArrayList<UsageRecord>(recordsCache);
+            }
+        }
+        final List<UsageRecord> loaded = loadAllRecordsFromDisk();
+        synchronized (this) {
+            recordsCache = loaded;
+            return new ArrayList<UsageRecord>(recordsCache);
+        }
+    }
+
+    private List<UsageRecord> loadAllRecordsFromDisk() {
         final List<UsageRecord> all = new ArrayList<UsageRecord>();
         try {
             final File dataDir = getStatsDataDir();

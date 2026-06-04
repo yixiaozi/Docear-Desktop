@@ -15,8 +15,11 @@ import java.util.Properties;
 import javax.swing.Box;
 import javax.swing.JComponent;
 import javax.swing.JMenu;
+import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.event.TreeModelEvent;
@@ -103,6 +106,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private FileReadManager fileTypeManager;
 	private TreeView view;
 	private JTabbedPane sideTabs;
+	private final boolean[] sideTabLoaded = new boolean[5];
 	private IWorkspaceSettingsHandler settings;
 	private volatile WorkspaceModel wsModel;
 	private AWorkspaceProject selectedProject = null;
@@ -270,10 +274,16 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		
 		sideTabs = new JTabbedPane();
 		sideTabs.add("\u5de5\u4f5c\u533a", getWorkspaceView());
-		sideTabs.add("\u641c\u7d22", new GlobalSearchTabPanel());
-		sideTabs.add("\u6587\u4ef6\u641c\u7d22", new MindMapFileSearchPanel());
-		sideTabs.add("\u5168\u90e8\u6587\u4ef6\u641c\u7d22", new AllFileSearchPanel());
-		sideTabs.add("\u6d3b\u52a8\u5206\u6790", new ActivityAnalysisPanel());
+		sideTabLoaded[0] = true;
+		sideTabs.add("\u641c\u7d22", new JPanel());
+		sideTabs.add("\u6587\u4ef6\u641c\u7d22", new JPanel());
+		sideTabs.add("\u5168\u90e8\u6587\u4ef6\u641c\u7d22", new JPanel());
+		sideTabs.add("\u6d3b\u52a8\u5206\u6790", new JPanel());
+		sideTabs.addChangeListener(new ChangeListener() {
+			public void stateChanged(final ChangeEvent e) {
+				ensureSideTabLoaded(sideTabs.getSelectedIndex());
+			}
+		});
 		
 		Box resizableTools = Box.createHorizontalBox();
 		resizableTools.add(sideTabs);
@@ -402,6 +412,35 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			LogUtils.severe(e);
 		}
 		
+	}
+
+	private void ensureSideTabLoaded(final int tabIndex) {
+		if (tabIndex < 0 || tabIndex >= sideTabLoaded.length || sideTabLoaded[tabIndex]) {
+			return;
+		}
+		JComponent panel = null;
+		switch (tabIndex) {
+			case 1:
+				panel = new GlobalSearchTabPanel();
+				break;
+			case 2:
+				panel = new MindMapFileSearchPanel();
+				break;
+			case 3:
+				panel = new AllFileSearchPanel();
+				break;
+			case 4:
+				final ActivityAnalysisPanel activityPanel = new ActivityAnalysisPanel();
+				activityPanel.refreshAnalysis();
+				panel = activityPanel;
+				break;
+			default:
+				break;
+		}
+		if (panel != null) {
+			sideTabs.setComponentAt(tabIndex, panel);
+			sideTabLoaded[tabIndex] = true;
+		}
 	}
 
 	private TreeView getWorkspaceView() {

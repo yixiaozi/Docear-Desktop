@@ -76,10 +76,10 @@ public class ActivityAnalysisPanel extends JPanel {
             }
         });
 
-        refreshAnalysis();
+        statusLabel.setText("\u70b9\u51fb\u5237\u65b0\u5f00\u59cb\u5206\u6790");
     }
 
-    private void refreshAnalysis() {
+    public void refreshAnalysis() {
         if (isScanning) {
             return;
         }

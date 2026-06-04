@@ -17,11 +17,17 @@ import org.freeplane.view.swing.map.MapViewController;
  * Shows usage statistics in the main map viewport (replacing the mind map canvas), toggled from Help ribbon.
  */
 public class UsageStatsReportService implements IExtension, IMapSelectionListener, IMapViewChangeListener {
-	private final UsageStatsReportPanel viewportPanel;
+	private UsageStatsReportPanel viewportPanel;
 	private boolean reportInViewport;
 
 	public UsageStatsReportService() {
-		this.viewportPanel = new UsageStatsReportPanel();
+	}
+
+	private UsageStatsReportPanel getViewportPanel() {
+		if (viewportPanel == null) {
+			viewportPanel = new UsageStatsReportPanel();
+		}
+		return viewportPanel;
 	}
 
 	public static void install(final MModeController modeController) {
@@ -55,9 +61,9 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 
 	private void showInMapViewport() {
 		final MapViewController mapViewController = getMapViewController();
-		mapViewController.getScrollPane().setViewportView(viewportPanel);
+		mapViewController.getScrollPane().setViewportView(getViewportPanel());
 		reportInViewport = true;
-		viewportPanel.refresh();
+		getViewportPanel().refresh();
 	}
 
 	private void hideFromMapViewport() {
@@ -77,7 +83,7 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 			return;
 		}
 		final Component view = getMapViewController().getScrollPane().getViewport().getView();
-		if (view != viewportPanel) {
+		if (viewportPanel != null && view != viewportPanel) {
 			showInMapViewport();
 		}
 	}
@@ -90,7 +96,7 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 			return;
 		}
 		ensureReportStillInViewport();
-		viewportPanel.refresh();
+		getViewportPanel().refresh();
 	}
 
 	public void beforeViewChange(final Component oldView, final Component newView) {
@@ -103,7 +109,7 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
 				ensureReportStillInViewport();
-				viewportPanel.refresh();
+				getViewportPanel().refresh();
 			}
 		});
 	}

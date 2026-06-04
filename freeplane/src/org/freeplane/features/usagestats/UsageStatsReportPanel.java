@@ -60,6 +60,8 @@ public class UsageStatsReportPanel extends JPanel {
 	private final JTable detailTable = new JTable(detailTableModel);
 	private final JButton refreshButton = new JButton("\u5237\u65b0");
 	private String displayedMapPath = "";
+	private int refreshGeneration = 0;
+	private int detailLoadGeneration = 0;
 
 	public UsageStatsReportPanel() {
 		super(new BorderLayout(4, 4));
@@ -78,7 +80,7 @@ public class UsageStatsReportPanel extends JPanel {
 				onSummaryRowSelected();
 			}
 		});
-		refresh();
+		headerSummary.setText("\u70b9\u51fb\u5237\u65b0\u52a0\u8f7d\u6d3b\u52a8\u8bb0\u5f55");
 	}
 
 	private void buildUi() {
@@ -104,45 +106,54 @@ public class UsageStatsReportPanel extends JPanel {
 	}
 
 	public void refresh() {
-		SwingUtilities.invokeLater(new Runnable() {
-			public void run() {
-				refreshImpl();
-			}
-		});
-	}
-
-	private void refreshImpl() {
 		final int selectedRow = summaryTable.getSelectedRow();
 		String selectedPath = null;
 		if (selectedRow >= 0 && selectedRow < summaryRowMapPaths.size()) {
 			selectedPath = summaryRowMapPaths.get(selectedRow);
 		}
-
-		summaryRowMapPaths.clear();
-		while (summaryTableModel.getRowCount() > 0) {
-			summaryTableModel.removeRow(0);
-		}
-
 		String currentPath = "";
 		final MapModel map = Controller.getCurrentController().getMap();
 		if (map != null && map.getFile() != null) {
 			currentPath = map.getFile().getAbsolutePath();
 		}
-
-		final List<MapUsageSummary> summaries = new ArrayList<MapUsageSummary>(
-		        UsageStatsManager.getInstance().summarizeByMap().values());
-		Collections.sort(summaries, new Comparator<MapUsageSummary>() {
-			public int compare(final MapUsageSummary a, final MapUsageSummary b) {
-				final long diff = b.getEffectiveDurationMs() - a.getEffectiveDurationMs();
-				if (diff > 0L) {
-					return 1;
-				}
-				if (diff < 0L) {
-					return -1;
-				}
-				return 0;
+		final String pathToRestore = selectedPath;
+		final String openMapPath = currentPath;
+		headerSummary.setText("\u52a0\u8f7d\u4e2d...");
+		final int generation = ++refreshGeneration;
+		new Thread(new Runnable() {
+			public void run() {
+				final List<MapUsageSummary> summaries = new ArrayList<MapUsageSummary>(
+				        UsageStatsManager.getInstance().summarizeByMap().values());
+				Collections.sort(summaries, new Comparator<MapUsageSummary>() {
+					public int compare(final MapUsageSummary a, final MapUsageSummary b) {
+						final long diff = b.getEffectiveDurationMs() - a.getEffectiveDurationMs();
+						if (diff > 0L) {
+							return 1;
+						}
+						if (diff < 0L) {
+							return -1;
+						}
+						return 0;
+					}
+				});
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						if (generation != refreshGeneration) {
+							return;
+						}
+						applySummaryRefresh(summaries, pathToRestore, openMapPath);
+					}
+				});
 			}
-		});
+		}).start();
+	}
+
+	private void applySummaryRefresh(final List<MapUsageSummary> summaries, final String selectedPath,
+	        final String currentPath) {
+		summaryRowMapPaths.clear();
+		while (summaryTableModel.getRowCount() > 0) {
+			summaryTableModel.removeRow(0);
+		}
 
 		int rowToSelect = -1;
 		for (final MapUsageSummary summary : summaries) {
@@ -164,7 +175,8 @@ public class UsageStatsReportPanel extends JPanel {
 			if (selectedPath != null && summary.matchesPath(selectedPath)) {
 				rowToSelect = rowIndex;
 			}
-			else if (rowToSelect < 0 && !currentPath.isEmpty() && summary.matchesPath(currentPath)) {
+			else if (rowToSelect < 0 && currentPath != null && !currentPath.isEmpty()
+			        && summary.matchesPath(currentPath)) {
 				rowToSelect = rowIndex;
 			}
 		}
@@ -191,35 +203,50 @@ public class UsageStatsReportPanel extends JPanel {
 		}
 		final String mapPath = summaryRowMapPaths.get(row);
 		displayedMapPath = mapPath;
-		final MapUsageSummary summary = UsageStatsManager.getInstance().summarizeForMap(mapPath);
-		headerSummary.setText("<html><b>" + summary.getDisplayName() + "</b> \u2014 "
-		        + "\u6253\u5f00 " + summary.getSessionCount() + " \u6b21\uFF0C"
-		        + "\u6709\u6548 " + UsageStatsManager.formatDuration(summary.getEffectiveDurationMs()) + "</html>");
-		detailTitle.setText(summary.getDisplayName() + " \u2014 \u6253\u5f00\u8bb0\u5f55\uff08\u4ece\u65b0\u5230\u65e7\uff09");
-		loadDetailSessions(mapPath);
-	}
-
-	private void loadDetailSessions(final String mapPath) {
-		while (detailTableModel.getRowCount() > 0) {
-			detailTableModel.removeRow(0);
-		}
-		final List<UsageRecord> records = UsageStatsManager.getInstance().loadRecordsForMap(mapPath);
-		for (final UsageRecord record : records) {
-			final long effectiveMs = effectiveDuration(record);
-			final long totalMs = totalDuration(record);
-			final String start = record.getStartTime() > 0L
-			        ? DATE_TIME_FORMAT.format(new Date(record.getStartTime()))
-			        : "-";
-			final String end = record.getEndTime() > 0L
-			        ? DATE_TIME_FORMAT.format(new Date(record.getEndTime()))
-			        : "-";
-			detailTableModel.addRow(new Object[] {
-			        start,
-			        end,
-			        UsageStatsManager.formatDuration(totalMs),
-			        UsageStatsManager.formatDuration(effectiveMs)
-			});
-		}
+		detailTitle.setText("\u52a0\u8f7d\u4e2d...");
+		final int generation = ++detailLoadGeneration;
+		new Thread(new Runnable() {
+			public void run() {
+				final MapUsageSummary summary = UsageStatsManager.getInstance().summarizeForMap(mapPath);
+				final List<UsageRecord> records = UsageStatsManager.getInstance().loadRecordsForMap(mapPath);
+				final List<Object[]> detailRows = new ArrayList<Object[]>();
+				for (final UsageRecord record : records) {
+					final long effectiveMs = effectiveDuration(record);
+					final long totalMs = totalDuration(record);
+					final String start = record.getStartTime() > 0L
+					        ? DATE_TIME_FORMAT.format(new Date(record.getStartTime()))
+					        : "-";
+					final String end = record.getEndTime() > 0L
+					        ? DATE_TIME_FORMAT.format(new Date(record.getEndTime()))
+					        : "-";
+					detailRows.add(new Object[] {
+					        start,
+					        end,
+					        UsageStatsManager.formatDuration(totalMs),
+					        UsageStatsManager.formatDuration(effectiveMs)
+					});
+				}
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						if (generation != detailLoadGeneration || !mapPath.equals(displayedMapPath)) {
+							return;
+						}
+						headerSummary.setText("<html><b>" + summary.getDisplayName() + "</b> \u2014 "
+						        + "\u6253\u5f00 " + summary.getSessionCount() + " \u6b21\uFF0C"
+						        + "\u6709\u6548 "
+						        + UsageStatsManager.formatDuration(summary.getEffectiveDurationMs()) + "</html>");
+						detailTitle.setText(summary.getDisplayName()
+						        + " \u2014 \u6253\u5f00\u8bb0\u5f55\uff08\u4ece\u65b0\u5230\u65e7\uff09");
+						while (detailTableModel.getRowCount() > 0) {
+							detailTableModel.removeRow(0);
+						}
+						for (final Object[] rowData : detailRows) {
+							detailTableModel.addRow(rowData);
+						}
+					}
+				});
+			}
+		}).start();
 	}
 
 	private void clearDetailTable() {
