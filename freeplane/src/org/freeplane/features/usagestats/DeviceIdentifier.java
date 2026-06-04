@@ -10,9 +10,11 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
+import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Enumeration;
 import java.util.UUID;
 
 public class DeviceIdentifier {
@@ -95,37 +97,34 @@ public class DeviceIdentifier {
     }
     
     private static String generateDeviceId() {
-        StringBuilder sb = new StringBuilder();
-        
-        String computerName = System.getenv("COMPUTERNAME");
-        if (computerName == null) {
-            computerName = System.getenv("HOSTNAME");
+        String macAddress = getMacAddress();
+        if (macAddress != null && !macAddress.isEmpty()) {
+            return hashString(macAddress);
         }
-        if (computerName != null) {
-            sb.append(computerName).append("|");
-        }
-        
-        String userName = System.getProperty("user.name");
-        if (userName != null) {
-            sb.append(userName).append("|");
-        }
-        
-        String osName = System.getProperty("os.name");
-        if (osName != null) {
-            sb.append(osName).append("|");
-        }
-        
-        String osArch = System.getProperty("os.arch");
-        if (osArch != null) {
-            sb.append(osArch).append("|");
-        }
-        
-        String rawId = sb.toString();
-        if (!rawId.isEmpty()) {
-            return hashString(rawId);
-        }
-        
         return UUID.randomUUID().toString();
+    }
+    
+    private static String getMacAddress() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+                if (iface.isLoopback() || !iface.isUp()) {
+                    continue;
+                }
+                byte[] mac = iface.getHardwareAddress();
+                if (mac != null) {
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < mac.length; i++) {
+                        sb.append(String.format("%02X%s", mac[i], (i < mac.length - 1) ? "-" : ""));
+                    }
+                    return sb.toString();
+                }
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        return null;
     }
     
     private static String hashString(String input) {
