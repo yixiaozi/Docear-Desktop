@@ -79,6 +79,7 @@ import org.freeplane.features.link.NodeLinks;
 import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.INodeView;
+import org.freeplane.features.map.LastModifiedNodeSelector;
 import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
@@ -1848,9 +1849,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		selectedsValid = true;
 		final NodeView selectedView = getSelected();
 		if(selectedView == null){
-			final NodeView root = getRoot();
-			selectAsTheOnlyOneSelected(root);
-			centerNode(root, false);
+			selectLastModifiedNodeOrRoot();
 			return;
 		}
 		final NodeModel selectedNode = selectedView.getModel();
@@ -1876,7 +1875,32 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 				return;
 			}
 		}
-		selectAsTheOnlyOneSelected(getRoot());
+		selectLastModifiedNodeOrRoot();
+	}
+
+	private void selectLastModifiedNodeOrRoot() {
+		final NodeModel lastModified = LastModifiedNodeSelector.find(getModel().getRootNode());
+		if (lastModified != null) {
+			unfoldAncestorsOf(lastModified);
+			final NodeView nodeView = getNodeView(lastModified);
+			if (nodeView != null) {
+				selectAsTheOnlyOneSelected(nodeView);
+				centerNode(nodeView, false);
+				return;
+			}
+		}
+		final NodeView root = getRoot();
+		selectAsTheOnlyOneSelected(root);
+		centerNode(root, false);
+	}
+
+	private void unfoldAncestorsOf(final NodeModel node) {
+		final MapController mapController = getModeController().getMapController();
+		for (NodeModel parent = node.getParentNode(); parent != null; parent = parent.getParentNode()) {
+			if (mapController.isFolded(parent)) {
+				mapController.setFolded(parent, false);
+			}
+		}
 	}
 
 	/*
