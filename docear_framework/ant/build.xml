@@ -239,7 +239,7 @@
 		</antcall>
 	</target>
 
-	<target name="build_formula" unless="skip_formula">
+	<target name="build_formula" depends="build_script" unless="skip_formula">
 		<antcall target="makePlugin" inheritall="false">
 			<param name="anttarget" value="dist"/>
 			<param name="targetdir" value="plugins"/>

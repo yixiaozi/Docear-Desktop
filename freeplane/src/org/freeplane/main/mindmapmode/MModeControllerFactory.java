@@ -82,6 +82,7 @@ import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.SummaryNode;
 import org.freeplane.features.map.mindmapmode.ChangeNodeLevelController;
+import org.freeplane.features.map.LastSelectionMapExtensionIO;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.map.mindmapmode.NewParentNode;
 import org.freeplane.features.mapio.mindmapmode.MMapIO;
@@ -165,6 +166,7 @@ public class MModeControllerFactory {
 	private MUIFactory uiFactory;
 
 	private void createAddIns() {
+		LastSelectionMapExtensionIO.install(modeController);
 		UsageStatsReportService.install(modeController);
 		final JComponent tabs = (JComponent) modeController.getUserInputListenerFactory().getToolBar("/format").getComponent(1);
 		tabs.add("\u63d0\u9192", new ReminderTabPanel(modeController));

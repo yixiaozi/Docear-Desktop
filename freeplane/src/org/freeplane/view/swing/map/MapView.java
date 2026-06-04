@@ -80,6 +80,7 @@ import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.INodeView;
 import org.freeplane.features.map.LastModifiedNodeSelector;
+import org.freeplane.features.map.LastSelectionMapExtension;
 import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
@@ -1849,7 +1850,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		selectedsValid = true;
 		final NodeView selectedView = getSelected();
 		if(selectedView == null){
-			selectLastModifiedNodeOrRoot();
+			selectSavedOrLastModifiedOrRoot();
 			return;
 		}
 		final NodeModel selectedNode = selectedView.getModel();
@@ -1875,23 +1876,41 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 				return;
 			}
 		}
-		selectLastModifiedNodeOrRoot();
+		selectSavedOrLastModifiedOrRoot();
 	}
 
-	private void selectLastModifiedNodeOrRoot() {
-		final NodeModel lastModified = LastModifiedNodeSelector.find(getModel().getRootNode());
-		if (lastModified != null) {
-			unfoldAncestorsOf(lastModified);
-			final NodeView nodeView = getNodeView(lastModified);
-			if (nodeView != null) {
-				selectAsTheOnlyOneSelected(nodeView);
-				centerNode(nodeView, false);
-				return;
+	private void selectSavedOrLastModifiedOrRoot() {
+		final LastSelectionMapExtension lastSelection = LastSelectionMapExtension.get(getModel());
+		if (lastSelection != null) {
+			final String savedId = lastSelection.getLastSelectedNodeId();
+			if (savedId != null && !savedId.isEmpty()) {
+				final NodeModel savedNode = getModel().getNodeForID(savedId);
+				if (savedNode != null && selectNodeIfPossible(savedNode)) {
+					return;
+				}
 			}
+		}
+		final NodeModel lastModified = LastModifiedNodeSelector.find(getModel().getRootNode());
+		if (lastModified != null && selectNodeIfPossible(lastModified)) {
+			return;
 		}
 		final NodeView root = getRoot();
 		selectAsTheOnlyOneSelected(root);
 		centerNode(root, false);
+	}
+
+	private boolean selectNodeIfPossible(final NodeModel node) {
+		if (node == null) {
+			return false;
+		}
+		unfoldAncestorsOf(node);
+		final NodeView nodeView = getNodeView(node);
+		if (nodeView == null) {
+			return false;
+		}
+		selectAsTheOnlyOneSelected(nodeView);
+		centerNode(nodeView, false);
+		return true;
 	}
 
 	private void unfoldAncestorsOf(final NodeModel node) {
