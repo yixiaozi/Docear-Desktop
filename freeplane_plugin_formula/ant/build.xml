@@ -17,8 +17,24 @@
 	<property name="build.compiler" value="modern" />
 	<property name="classpath" value="${framework.jar}:${freeplane.jars}:${external.jars}:${freeplanescript.jar}"/>
 
-	<target name="build">
+	<!-- Formula compiles against classes from the script plugin JAR. -->
+	<target name="ensure_script_plugin">
+		<available file="${freeplanescript.jar}" property="script.plugin.jar.present"/>
+	</target>
+
+	<target name="build_script_plugin" unless="script.plugin.jar.present">
+		<ant antfile="ant/build.xml" target="dist" dir="${workspace}/freeplane_plugin_script" inheritall="false"/>
+	</target>
+
+	<target name="build" depends="ensure_script_plugin,build_script_plugin">
 		<mkdir dir="${build}" />
+		<fail message="Missing script plugin jar: ${freeplanescript.jar}. Build freeplane_plugin_script first.">
+			<condition>
+				<not>
+					<available file="${freeplanescript.jar}"/>
+				</not>
+			</condition>
+		</fail>
 		<javac srcdir="${src}" destdir="${build}" classpath="${classpath}" debug="${debug}" 
 			source="${java_source_version}" target="${java_target_version}" encoding="utf8">
 		</javac>

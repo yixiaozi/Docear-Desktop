@@ -326,7 +326,7 @@
 				<ribbon_action action="FoldAllAction" accelerator="alt HOME" priority="top" />
    				<ribbon_action action="UnfoldOneLevelAction" accelerator="alt PAGE_DOWN" />
                 <ribbon_action action="FoldOneLevelAction" accelerator="alt PAGE_UP" />
-				<ribbon_action action="NextPresentationItemAction"  accelerator="control shift SPACE"/>
+				<ribbon_action action="NextPresentationItemAction"/>
 			</ribbon_band>		   
 			<ribbon_band name="navigate_select" resize_policies="Mirror">
 				<ribbon_action action="SelectAllAction" accelerator="control A" priority="medium"/>
