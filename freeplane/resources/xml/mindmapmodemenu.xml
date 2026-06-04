@@ -428,6 +428,7 @@
 			<menu_action action="DocumentationAction" />	
 			<menu_action action="OnlineReference" />	
 			<menu_action action="HotKeyInfoAction"/>
+			<menu_action action="ToggleUsageStatsReportAction"/>
 			<menu_separator />
 		</menu_submenu>
 	</menu_category>

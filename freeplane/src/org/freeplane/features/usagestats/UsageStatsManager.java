@@ -13,6 +13,8 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 
@@ -23,6 +25,8 @@ public class UsageStatsManager {
     private static final String DATA_DIR = "data";
     private static final String DATE_FORMAT = "yyyy-MM-dd";
     private static final String FILE_EXTENSION = ".json";
+    /** Sessions shorter than this are excluded from reports and session counts. */
+    public static final long MIN_SESSION_DURATION_MS = 1000L;
     
     private static UsageStatsManager instance;
     private IdleDetector idleDetector;
@@ -220,6 +224,133 @@ public class UsageStatsManager {
         }
     }
     
+    public List<UsageRecord> loadAllRecords() {
+        final List<UsageRecord> all = new ArrayList<UsageRecord>();
+        try {
+            final File dataDir = getStatsDataDir();
+            if (dataDir == null || !dataDir.isDirectory()) {
+                return all;
+            }
+            final File[] deviceDirs = dataDir.listFiles();
+            if (deviceDirs == null) {
+                return all;
+            }
+            for (final File deviceDir : deviceDirs) {
+                if (!deviceDir.isDirectory()) {
+                    continue;
+                }
+                final File[] dateFiles = deviceDir.listFiles();
+                if (dateFiles == null) {
+                    continue;
+                }
+                for (final File dateFile : dateFiles) {
+                    if (dateFile.isFile() && dateFile.getName().endsWith(FILE_EXTENSION)) {
+                        all.addAll(loadRecordsFromFile(dateFile));
+                    }
+                }
+            }
+        }
+        catch (Exception e) {
+            // Ignore
+        }
+        return all;
+    }
+
+    public static boolean isSignificantSession(final UsageRecord record) {
+        if (record == null) {
+            return false;
+        }
+        long effectiveMs = record.getEffectiveDurationMs();
+        if (effectiveMs <= 0L && record.getEndTime() > record.getStartTime()) {
+            effectiveMs = record.getEndTime() - record.getStartTime() - record.getIdleDurationMs();
+        }
+        if (effectiveMs <= 0L) {
+            effectiveMs = record.getTotalDurationMs();
+        }
+        return effectiveMs >= MIN_SESSION_DURATION_MS;
+    }
+
+    public MapUsageSummary summarizeForMap(final String mapPath) {
+        final MapUsageSummary summary = new MapUsageSummary(mapPath);
+        if (mapPath == null || mapPath.isEmpty()) {
+            return summary;
+        }
+        for (final UsageRecord record : loadAllRecords()) {
+            if (summary.matchesPath(record.getMapPath()) && isSignificantSession(record)) {
+                summary.addRecord(record);
+            }
+        }
+        return summary;
+    }
+
+    public List<UsageRecord> loadRecordsForMap(final String mapPath) {
+        final List<UsageRecord> result = new ArrayList<UsageRecord>();
+        if (mapPath == null || mapPath.isEmpty()) {
+            return result;
+        }
+        final MapUsageSummary matcher = new MapUsageSummary(mapPath);
+        for (final UsageRecord record : loadAllRecords()) {
+            if (matcher.matchesPath(record.getMapPath()) && isSignificantSession(record)) {
+                result.add(record);
+            }
+        }
+        Collections.sort(result, new Comparator<UsageRecord>() {
+            public int compare(final UsageRecord a, final UsageRecord b) {
+                final long diff = b.getEndTime() - a.getEndTime();
+                if (diff > 0L) {
+                    return 1;
+                }
+                if (diff < 0L) {
+                    return -1;
+                }
+                return 0;
+            }
+        });
+        return result;
+    }
+
+    public java.util.Map<String, MapUsageSummary> summarizeByMap() {
+        final java.util.LinkedHashMap<String, MapUsageSummary> byPath = new java.util.LinkedHashMap<String, MapUsageSummary>();
+        for (final UsageRecord record : loadAllRecords()) {
+            if (!isSignificantSession(record)) {
+                continue;
+            }
+            final String path = record.getMapPath();
+            if (path == null || path.isEmpty()) {
+                continue;
+            }
+            MapUsageSummary summary = byPath.get(path);
+            if (summary == null) {
+                summary = new MapUsageSummary(path);
+                byPath.put(path, summary);
+            }
+            summary.addRecord(record);
+        }
+        return byPath;
+    }
+
+    public static String formatDuration(final long millis) {
+        if (millis <= 0L) {
+            return "0\u79d2";
+        }
+        long seconds = millis / 1000L;
+        final long hours = seconds / 3600L;
+        seconds %= 3600L;
+        final long minutes = seconds / 60L;
+        seconds %= 60L;
+        final StringBuilder sb = new StringBuilder();
+        if (hours > 0L) {
+            sb.append(hours).append("\u5c0f\u65f6");
+        }
+        if (minutes > 0L) {
+            sb.append(minutes).append("\u5206");
+        }
+        if (seconds > 0L || sb.length() == 0) {
+            sb.append(seconds).append("\u79d2");
+        }
+        return sb.toString();
+    }
+
     private List<UsageRecord> loadRecordsFromFile(File file) {
         List<UsageRecord> records = new ArrayList<UsageRecord>();
         

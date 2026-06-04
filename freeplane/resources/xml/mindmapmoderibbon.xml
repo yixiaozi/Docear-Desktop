@@ -447,7 +447,8 @@
 			<ribbon_band name="help_misc" resize_policies="Mirror" orderPriority="0">
                 <ribbon_action action="OpenUserDirAction" priority="top" mandatory="true"/>
 			    <ribbon_action action="GettingStartedAction" accelerator="F1" mandatory="true"/>
-			    <ribbon_action action="HotKeyInfoAction" mandatory="true"/>  
+			    <ribbon_action action="HotKeyInfoAction" mandatory="true"/>
+			    <ribbon_action action="ToggleUsageStatsReportAction" priority="medium"/>
 			</ribbon_band>			
 		</ribbon_task>	
 		
