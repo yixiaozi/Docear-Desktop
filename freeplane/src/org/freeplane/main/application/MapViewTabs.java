@@ -53,15 +53,38 @@ import org.freeplane.view.swing.ui.DefaultMapMouseListener;
 
 class MapViewTabs implements IMapViewChangeListener {
 // // 	final private Controller controller;
+	private static MapViewTabs instance;
 	private Component mContentComponent;
 	private JTabbedPane mTabbedPane = null;
 	final private Vector<Component> mTabbedPaneMapViews;
 	private boolean mTabbedPaneSelectionUpdate = true;
 	private TabbedPaneUI tabbedPaneUI;
+	private int nextTabInsertIndex = -1;
 	
 	private static final int MAX_TAB_SHORTCUT = 9;
 
+	static MapViewTabs getInstance() {
+		return instance;
+	}
+
+	void setNextTabInsertIndex(final int index) {
+		nextTabInsertIndex = index;
+	}
+
+	int getTabIndexForMapView(final Component mapView) {
+		if (mapView == null) {
+			return -1;
+		}
+		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
+			if (mTabbedPaneMapViews.get(i) == mapView) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
 	public MapViewTabs( final ViewController fm, final JComponent contentComponent) {
+		instance = this;
 //		this.controller = controller;
 		mContentComponent = contentComponent;
 		mTabbedPane = new JTabbedPane();
@@ -165,11 +188,21 @@ class MapViewTabs implements IMapViewChangeListener {
 				return;
 			}
 		}
-		mTabbedPaneMapViews.add(pNewMap);
 		final String title = formatTabTitle(pNewMap.getName());
-		mTabbedPane.addTab(title, new JPanel());
-		mTabbedPane.setSelectedIndex(mTabbedPane.getTabCount() - 1);
+		final int insertIndex = resolveInsertIndex();
+		mTabbedPaneMapViews.insertElementAt(pNewMap, insertIndex);
+		mTabbedPane.insertTab(title, null, new JPanel(), null, insertIndex);
+		mTabbedPane.setSelectedIndex(insertIndex);
 		setTabsVisible();
+	}
+
+	private int resolveInsertIndex() {
+		if (nextTabInsertIndex >= 0) {
+			final int index = Math.min(nextTabInsertIndex, mTabbedPane.getTabCount());
+			nextTabInsertIndex = -1;
+			return index;
+		}
+		return mTabbedPane.getTabCount();
 	}
 
 	public void afterViewClose(final Component pOldMapView) {

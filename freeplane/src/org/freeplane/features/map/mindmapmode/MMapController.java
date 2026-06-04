@@ -782,6 +782,8 @@ public class MMapController extends MapController {
 			newModel.setExternalModificationDetected(false);
 			newModel.setPendingExternalReload(false);
 			fireMapCreated(newModel);
+			org.freeplane.main.application.MapViewTabOrder.preserveIndexForNextOpenedMapView(
+			    org.freeplane.main.application.MapViewTabOrder.getIndexOfCurrentMapViewTab());
 			controller.close(true);
 			final File reloadedFile = newModel.getFile();
 			if (reloadedFile != null && reloadedFile.canWrite()) {
