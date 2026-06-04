@@ -6,8 +6,6 @@ import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Graphics;
 import java.awt.event.ComponentListener;
-import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.io.File;
@@ -20,15 +18,11 @@ import java.util.Map;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
-import javax.swing.JButton;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
-import javax.swing.AbstractAction;
-import javax.swing.KeyStroke;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.TreeModelEvent;
@@ -135,19 +129,14 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		
 		initTransferHandler();
 		
+		initSearchField();
 		workspaceBox = Box.createVerticalBox();
 		workspaceBox.add(new JScrollPane(mTree));		
 		this.add(workspaceBox, BorderLayout.CENTER);
-		this.add(createSearchPanel(), BorderLayout.NORTH);
-		
 	}
 
-	private Component createSearchPanel() {
-		JPanel searchPanel = new JPanel(new BorderLayout(4, 0));
-		searchPanel.setBorder(BorderFactory.createEmptyBorder(2, view_margin, 2, view_margin));
-		final JLabel searchLabel = new JLabel("\u641c\u7d22:");
-		searchLabel.setToolTipText("\u70b9\u51fb\u6267\u884c\u641c\u7d22");
-		searchPanel.add(searchLabel, BorderLayout.WEST);
+	/** Search field kept for filter API; UI hidden per product request. */
+	private void initSearchField() {
 		m_display = new JTextField();
 		m_display.getDocument().addDocumentListener(new DocumentListener() {
 			public void removeUpdate(DocumentEvent e) {
@@ -160,34 +149,6 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 				handleClearedSearchInput();
 			}
 		});
-		m_display.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "workspace.search.apply");
-		m_display.getActionMap().put("workspace.search.apply", new AbstractAction() {
-			private static final long serialVersionUID = 1L;
-			public void actionPerformed(java.awt.event.ActionEvent e) {
-				applySearchFilter(true);
-			}
-		});
-		m_display.addActionListener(new java.awt.event.ActionListener() {
-			public void actionPerformed(java.awt.event.ActionEvent e) {
-				applySearchFilter(true);
-			}
-		});
-		searchPanel.add(m_display, BorderLayout.CENTER);
-		JButton searchButton = new JButton("\u641c\u7d22");
-		searchButton.addActionListener(new java.awt.event.ActionListener() {
-			public void actionPerformed(java.awt.event.ActionEvent e) {
-				applySearchFilter(true);
-			}
-		});
-		searchPanel.add(searchButton, BorderLayout.EAST);
-		searchLabel.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mouseClicked(MouseEvent e) {
-				applySearchFilter(true);
-				m_display.requestFocusInWindow();
-			}
-		});
-		return searchPanel;
 	}
 
 	private void handleClearedSearchInput() {

@@ -15,6 +15,7 @@ import java.util.Properties;
 import javax.swing.Box;
 import javax.swing.JComponent;
 import javax.swing.JMenu;
+import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
@@ -87,6 +88,10 @@ import org.freeplane.plugin.workspace.model.project.IProjectSelectionListener;
 import org.freeplane.plugin.workspace.model.project.ProjectSelectionEvent;
 import org.freeplane.plugin.workspace.nodes.DefaultFileNode;
 import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
+import org.freeplane.view.swing.features.time.mindmapmode.ActivityAnalysisPanel;
+import org.freeplane.view.swing.features.time.mindmapmode.AllFileSearchPanel;
+import org.freeplane.view.swing.features.time.mindmapmode.GlobalSearchTabPanel;
+import org.freeplane.view.swing.features.time.mindmapmode.MindMapFileSearchPanel;
 import org.freeplane.view.swing.map.NodeView;
 import org.freeplane.view.swing.ui.mindmapmode.MNodeDropListener;
 
@@ -97,6 +102,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 
 	private FileReadManager fileTypeManager;
 	private TreeView view;
+	private JTabbedPane sideTabs;
 	private IWorkspaceSettingsHandler settings;
 	private volatile WorkspaceModel wsModel;
 	private AWorkspaceProject selectedProject = null;
@@ -238,23 +244,22 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		
 		
 		final OneTouchCollapseResizer otcr = new OneTouchCollapseResizer(Direction.LEFT, CollapseDirection.COLLAPSE_LEFT);
-		otcr.addCollapseListener(getWorkspaceView());
 		ResizerEventAdapter adapter = new ResizerEventAdapter() {
 			
 			public void componentResized(ResizeEvent event) {
-				if(event.getComponent().equals(getView())) {
+				if(event.getComponent().equals(sideTabs)) {
 					getWorkspaceSettings().setProperty(WorkspaceSettings.WORKSPACE_VIEW_WIDTH, String.valueOf(((JComponent) event.getComponent()).getPreferredSize().width));
 				}
 			}
 
 			public void componentCollapsed(ResizeEvent event) {
-				if(event.getComponent().equals(getView())) {
+				if(event.getComponent().equals(sideTabs)) {
 					getWorkspaceSettings().setProperty(WorkspaceSettings.WORKSPACE_VIEW_COLLAPSED, "true");
 				}
 			}
 
 			public void componentExpanded(ResizeEvent event) {
-				if(event.getComponent().equals(getView())) {
+				if(event.getComponent().equals(sideTabs)) {
 					getWorkspaceSettings().setProperty(WorkspaceSettings.WORKSPACE_VIEW_COLLAPSED, "false");
 				}
 			}			
@@ -263,14 +268,21 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		otcr.addResizerListener(adapter);
 		otcr.addCollapseListener(adapter);
 		
+		sideTabs = new JTabbedPane();
+		sideTabs.add("\u5de5\u4f5c\u533a", getWorkspaceView());
+		sideTabs.add("\u641c\u7d22", new GlobalSearchTabPanel());
+		sideTabs.add("\u6587\u4ef6\u641c\u7d22", new MindMapFileSearchPanel());
+		sideTabs.add("\u5168\u90e8\u6587\u4ef6\u641c\u7d22", new AllFileSearchPanel());
+		sideTabs.add("\u6d3b\u52a8\u5206\u6790", new ActivityAnalysisPanel());
+		
 		Box resizableTools = Box.createHorizontalBox();
-		resizableTools.add(getWorkspaceView());
+		resizableTools.add(sideTabs);
 		this.viewUpdater = new Runnable() {
 			public void run() {
 				boolean expanded = true;
 				try {
 					int width = Integer.parseInt(getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_VIEW_WIDTH, "250"));
-					getWorkspaceView().setPreferredSize(new Dimension(width, 100));
+					sideTabs.setPreferredSize(new Dimension(width, 100));
 				}
 				catch (Exception e) {
 					// blindly accept
