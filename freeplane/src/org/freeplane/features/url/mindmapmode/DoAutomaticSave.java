@@ -38,6 +38,7 @@ import org.freeplane.features.url.UrlManager;
 
 public class DoAutomaticSave extends TimerTask {
 	static final String AUTOSAVE_EXTENSION = "autosave";
+	private static final long EXTERNAL_CHANGE_CHECK_PAUSE_MS = 3000L;
 	/**
 	 * This value is compared with the result of
 	 * getNumberOfChangesSinceLastSave(). If the values coincide, no further
@@ -138,6 +139,9 @@ public class DoAutomaticSave extends TimerTask {
 
 	private boolean handleExternalChange(final MMapModel mModel) {
 		try {
+			if (mModel.isExternalChangeCheckPaused()) {
+				return false;
+			}
 			final File file = mModel.getFile();
 			if (file == null) {
 				return false;
@@ -159,10 +163,13 @@ public class DoAutomaticSave extends TimerTask {
 			}
 			if (model.getNumberOfChangesSinceLastSave() == 0 && Controller.getCurrentController().getMap() == model) {
 				mModel.setExternalModificationDetected(true);
-				mModel.setKnownFileTimestamp(actualTimestamp);
+				mModel.pauseExternalChangeCheck(EXTERNAL_CHANGE_CHECK_PAUSE_MS);
 				EventQueue.invokeLater(new Runnable() {
 					public void run() {
 						try {
+							if (Controller.getCurrentController().getMap() != model) {
+								return;
+							}
 							final ModeController currentModeController = Controller.getCurrentModeController();
 							if (currentModeController instanceof MModeController) {
 								((MMapController) ((MModeController) currentModeController).getMapController()).restoreCurrentMapPreservingSelection();
@@ -173,6 +180,13 @@ public class DoAutomaticSave extends TimerTask {
 						}
 						finally {
 							mModel.setExternalModificationDetected(false);
+							final MapModel currentMap = Controller.getCurrentController().getMap();
+							if (currentMap instanceof MMapModel) {
+								final MMapModel currentModel = (MMapModel) currentMap;
+								currentModel.setExternalModificationDetected(false);
+								currentModel.syncKnownFileTimestampFromDisk();
+								currentModel.pauseExternalChangeCheck(EXTERNAL_CHANGE_CHECK_PAUSE_MS);
+							}
 						}
 					}
 				});

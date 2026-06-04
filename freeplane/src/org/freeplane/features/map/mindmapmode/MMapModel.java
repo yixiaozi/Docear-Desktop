@@ -43,6 +43,7 @@ public class MMapModel extends MapModel {
 	private int titleNumber = 0;
 	private long knownFileTimestamp;
 	private boolean externalModificationDetected;
+	private long externalChangeCheckPausedUntil;
 
 	/**
 	 * The current version and all other version that don't need XML update for
@@ -60,6 +61,7 @@ public class MMapModel extends MapModel {
 		});
 		knownFileTimestamp = 0L;
 		externalModificationDetected = false;
+		externalChangeCheckPausedUntil = 0L;
 	}
 
 	@Override
@@ -160,5 +162,20 @@ public class MMapModel extends MapModel {
 
 	public void setExternalModificationDetected(boolean externalModificationDetected) {
 		this.externalModificationDetected = externalModificationDetected;
+	}
+
+	public boolean isExternalChangeCheckPaused() {
+		return System.currentTimeMillis() < externalChangeCheckPausedUntil;
+	}
+
+	public void pauseExternalChangeCheck(final long milliseconds) {
+		externalChangeCheckPausedUntil = System.currentTimeMillis() + milliseconds;
+	}
+
+	public void syncKnownFileTimestampFromDisk() {
+		final File file = getFile();
+		if (file != null && file.exists()) {
+			knownFileTimestamp = file.lastModified();
+		}
 	}
 }

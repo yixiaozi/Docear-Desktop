@@ -770,7 +770,7 @@ public class MMapController extends MapController {
 			return newDocumentationMap(url);
 		}
 		
-		final URL alternativeURL = MFileManager.getController(getMModeController()).getAlternativeURL(url, AlternativeFileMode.ALL);
+		final URL alternativeURL = MFileManager.getController(getMModeController()).getAlternativeURL(url, AlternativeFileMode.ALL, false);
 		if(alternativeURL == null)
 			return false;
 		Controller.getCurrentController().getViewController().setWaitingCursor(true);
@@ -779,10 +779,6 @@ public class MMapController extends MapController {
 			((MFileManager)MFileManager.getController()).loadAndLock(alternativeURL, newModel);
 			newModel.setURL(url);
 			newModel.setSaved(alternativeURL.equals(url));
-			final File currentFile = newModel.getFile();
-			if (currentFile != null && currentFile.exists()) {
-				newModel.setKnownFileTimestamp(currentFile.lastModified());
-			}
 			newModel.setExternalModificationDetected(false);
 			fireMapCreated(newModel);
 			controller.close(true);
@@ -792,13 +788,15 @@ public class MMapController extends MapController {
 				newModel.setReadOnly(false);
 			}
 			newMapView(newModel);
-			newModel.scheduleTimerForAutomaticSaving();
 			if (selectedNodeId != null) {
 				final NodeModel selectedNode = newModel.getNodeForID(selectedNodeId);
 				if (selectedNode != null) {
 					select(selectedNode);
 				}
 			}
+			newModel.syncKnownFileTimestampFromDisk();
+			newModel.pauseExternalChangeCheck(3000L);
+			newModel.scheduleTimerForAutomaticSaving();
 			return true;
 		}
 		finally {

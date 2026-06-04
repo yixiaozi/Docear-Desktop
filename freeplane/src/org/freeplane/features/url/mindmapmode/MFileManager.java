@@ -416,13 +416,17 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
  	}
 
 	public URL getAlternativeURL(final URL url, AlternativeFileMode mode){
+		return getAlternativeURL(url, mode, true);
+	}
+
+	public URL getAlternativeURL(final URL url, AlternativeFileMode mode, final boolean touchFileTimestamp){
 		try {
 	        final File file = Compat.urlToFile(url);
 	        if(file == null){
 	        	return url;
 	        }
 	        File alternativeFile;
-	        alternativeFile = getAlternativeFile(file, mode);
+	        alternativeFile = getAlternativeFile(file, mode, touchFileTimestamp);
 	        if(alternativeFile != null)
 		        return Compat.fileToUrl(alternativeFile);
 	        else
@@ -437,11 +441,15 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 
 	public enum AlternativeFileMode{ALL, AUTOSAVE};
 	public File getAlternativeFile(final File file, AlternativeFileMode mode){
+		return getAlternativeFile(file, mode, true);
+	}
+
+	public File getAlternativeFile(final File file, AlternativeFileMode mode, final boolean touchFileTimestamp){
 		final File[] revisions = findFileRevisions(file, MFileManager.backupDir(file), mode);
 		if(revisions.length == 0 && mode == AlternativeFileMode.AUTOSAVE)
 			return file;
 		final File selectedFile = getNewestRevision(file, revisions);
-		if(file.equals(selectedFile)){
+		if(touchFileTimestamp && file.equals(selectedFile)){
 			boolean success = file.setLastModified(System.currentTimeMillis());
 			if (!success)
 				LogUtils.warn("Unable to set the last modification time for " + file);
@@ -801,9 +809,12 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 				map.setSaved(true);
 			}
 			writeToFile(map, file);
-			if (!isInternal && file != null && file.exists()) {
-				map.setKnownFileTimestamp(file.lastModified());
-				map.setExternalModificationDetected(false);
+			if (file != null && file.exists()) {
+				final File mapFile = map.getFile();
+				if (!isInternal || (mapFile != null && mapFile.equals(file))) {
+					map.setKnownFileTimestamp(file.lastModified());
+					map.setExternalModificationDetected(false);
+				}
 			}
 			map.scheduleTimerForAutomaticSaving();
 			return true;
