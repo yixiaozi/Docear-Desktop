@@ -110,6 +110,7 @@ import org.freeplane.features.time.CreationModificationPlugin;
 import org.freeplane.features.ui.ToggleToolbarAction;
 import org.freeplane.features.ui.ViewController;
 import org.freeplane.features.url.UrlManager;
+import org.freeplane.features.url.mindmapmode.ExternalModificationMapSelectionListener;
 import org.freeplane.features.url.mindmapmode.MFileManager;
 import org.freeplane.features.url.mindmapmode.SaveAll;
 import org.freeplane.main.mindmapmode.stylemode.SModeControllerFactory;
@@ -254,6 +255,8 @@ public class MModeControllerFactory {
 		IconController.install(new MIconController(modeController));
 		new ProgressFactory().installActions(modeController);
 		final MapController mapController = modeController.getMapController();
+		controller.getMapViewManager().addMapSelectionListener(
+		    new ExternalModificationMapSelectionListener((MMapController) mapController));
 		EdgeController.install(new MEdgeController(modeController));
 		CloudController.install(new MCloudController(modeController));
 		NoteController.install(new MNoteController(modeController));

@@ -780,6 +780,7 @@ public class MMapController extends MapController {
 			newModel.setURL(url);
 			newModel.setSaved(alternativeURL.equals(url));
 			newModel.setExternalModificationDetected(false);
+			newModel.setPendingExternalReload(false);
 			fireMapCreated(newModel);
 			controller.close(true);
 			final File reloadedFile = newModel.getFile();

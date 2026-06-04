@@ -43,6 +43,7 @@ public class MMapModel extends MapModel {
 	private int titleNumber = 0;
 	private long knownFileTimestamp;
 	private boolean externalModificationDetected;
+	private boolean pendingExternalReload;
 	private long externalChangeCheckPausedUntil;
 
 	/**
@@ -61,6 +62,7 @@ public class MMapModel extends MapModel {
 		});
 		knownFileTimestamp = 0L;
 		externalModificationDetected = false;
+		pendingExternalReload = false;
 		externalChangeCheckPausedUntil = 0L;
 	}
 
@@ -162,6 +164,14 @@ public class MMapModel extends MapModel {
 
 	public void setExternalModificationDetected(boolean externalModificationDetected) {
 		this.externalModificationDetected = externalModificationDetected;
+	}
+
+	public boolean isPendingExternalReload() {
+		return pendingExternalReload;
+	}
+
+	public void setPendingExternalReload(boolean pendingExternalReload) {
+		this.pendingExternalReload = pendingExternalReload;
 	}
 
 	public boolean isExternalChangeCheckPaused() {

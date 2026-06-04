@@ -161,35 +161,45 @@ public class DoAutomaticSave extends TimerTask {
 			if (mModel.isExternalModificationDetected()) {
 				return true;
 			}
-			if (model.getNumberOfChangesSinceLastSave() == 0 && Controller.getCurrentController().getMap() == model) {
-				mModel.setExternalModificationDetected(true);
-				mModel.pauseExternalChangeCheck(EXTERNAL_CHANGE_CHECK_PAUSE_MS);
-				EventQueue.invokeLater(new Runnable() {
-					public void run() {
-						try {
-							if (Controller.getCurrentController().getMap() != model) {
-								return;
+			if (mModel.isPendingExternalReload()
+			        && model.getNumberOfChangesSinceLastSave() == 0
+			        && Controller.getCurrentController().getMap() != model) {
+				return true;
+			}
+			if (model.getNumberOfChangesSinceLastSave() == 0) {
+				if (Controller.getCurrentController().getMap() == model) {
+					mModel.setExternalModificationDetected(true);
+					mModel.pauseExternalChangeCheck(EXTERNAL_CHANGE_CHECK_PAUSE_MS);
+					EventQueue.invokeLater(new Runnable() {
+						public void run() {
+							try {
+								if (Controller.getCurrentController().getMap() != model) {
+									return;
+								}
+								final ModeController currentModeController = Controller.getCurrentModeController();
+								if (currentModeController instanceof MModeController) {
+									((MMapController) ((MModeController) currentModeController).getMapController()).restoreCurrentMapPreservingSelection();
+								}
 							}
-							final ModeController currentModeController = Controller.getCurrentModeController();
-							if (currentModeController instanceof MModeController) {
-								((MMapController) ((MModeController) currentModeController).getMapController()).restoreCurrentMapPreservingSelection();
+							catch (Exception e) {
+								LogUtils.warn(e);
+							}
+							finally {
+								mModel.setExternalModificationDetected(false);
+								final MapModel currentMap = Controller.getCurrentController().getMap();
+								if (currentMap instanceof MMapModel) {
+									final MMapModel currentModel = (MMapModel) currentMap;
+									currentModel.setExternalModificationDetected(false);
+									currentModel.syncKnownFileTimestampFromDisk();
+									currentModel.pauseExternalChangeCheck(EXTERNAL_CHANGE_CHECK_PAUSE_MS);
+								}
 							}
 						}
-						catch (Exception e) {
-							LogUtils.warn(e);
-						}
-						finally {
-							mModel.setExternalModificationDetected(false);
-							final MapModel currentMap = Controller.getCurrentController().getMap();
-							if (currentMap instanceof MMapModel) {
-								final MMapModel currentModel = (MMapModel) currentMap;
-								currentModel.setExternalModificationDetected(false);
-								currentModel.syncKnownFileTimestampFromDisk();
-								currentModel.pauseExternalChangeCheck(EXTERNAL_CHANGE_CHECK_PAUSE_MS);
-							}
-						}
-					}
-				});
+					});
+					return true;
+				}
+				mModel.setPendingExternalReload(true);
+				mModel.setKnownFileTimestamp(actualTimestamp);
 				return true;
 			}
 			if (!mModel.isExternalModificationDetected()) {
