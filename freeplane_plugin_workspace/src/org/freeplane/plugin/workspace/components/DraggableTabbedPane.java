@@ -53,6 +53,14 @@ public class DraggableTabbedPane extends JTabbedPane {
 		if (fromIndex == toIndex) {
 			return;
 		}
+		int finalIndex = toIndex;
+		if (fromIndex < toIndex) {
+			finalIndex = toIndex - 1;
+		}
+		if (reorderListener != null) {
+			reorderListener.tabReordered(fromIndex, finalIndex);
+			return;
+		}
 		final Component component = getComponentAt(fromIndex);
 		final String title = getTitleAt(fromIndex);
 		final Icon icon = getIconAt(fromIndex);
@@ -61,24 +69,17 @@ public class DraggableTabbedPane extends JTabbedPane {
 		final int selectedIndex = getSelectedIndex();
 
 		remove(fromIndex);
-		if (fromIndex < toIndex) {
-			toIndex--;
-		}
-		insertTab(title, icon, component, tip, toIndex);
-		setEnabledAt(toIndex, enabled);
+		insertTab(title, icon, component, tip, finalIndex);
+		setEnabledAt(finalIndex, enabled);
 
 		if (selectedIndex == fromIndex) {
-			setSelectedIndex(toIndex);
+			setSelectedIndex(finalIndex);
 		}
-		else if (fromIndex < selectedIndex && toIndex >= selectedIndex) {
+		else if (fromIndex < selectedIndex && finalIndex >= selectedIndex) {
 			setSelectedIndex(selectedIndex - 1);
 		}
-		else if (fromIndex > selectedIndex && toIndex <= selectedIndex) {
+		else if (fromIndex > selectedIndex && finalIndex <= selectedIndex) {
 			setSelectedIndex(selectedIndex + 1);
-		}
-
-		if (reorderListener != null) {
-			reorderListener.tabReordered(fromIndex, toIndex);
 		}
 	}
 }

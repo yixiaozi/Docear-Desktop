@@ -126,6 +126,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private DraggableTabbedPane sideTabs;
 	private final List<String> sideTabOrder = new ArrayList<String>();
 	private final Map<String, Boolean> sideTabLoaded = new HashMap<String, Boolean>();
+	private final Map<String, JComponent> sideTabComponents = new HashMap<String, JComponent>();
 	private IWorkspaceSettingsHandler settings;
 	private volatile WorkspaceModel wsModel;
 	private AWorkspaceProject selectedProject = null;
@@ -295,7 +296,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		loadSideTabOrder();
 		sideTabs = new DraggableTabbedPane();
 		for (final String tabId : sideTabOrder) {
-			sideTabs.add(getSideTabTitle(tabId), createSideTabPlaceholder(tabId));
+			final JComponent component = createSideTabPlaceholder(tabId);
+			sideTabComponents.put(tabId, component);
+			sideTabs.add(getSideTabTitle(tabId), component);
 			if (TAB_WORKSPACE.equals(tabId)) {
 				sideTabLoaded.put(tabId, Boolean.TRUE);
 			}
@@ -307,8 +310,10 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		});
 		sideTabs.setTabReorderListener(new DraggableTabbedPane.TabReorderListener() {
 			public void tabReordered(final int fromIndex, final int toIndex) {
+				final String selectedTabId = getSelectedSideTabId();
 				final String tabId = sideTabOrder.remove(fromIndex);
 				sideTabOrder.add(toIndex, tabId);
+				rebuildSideTabs(selectedTabId);
 				persistSideTabOrder();
 			}
 		});
@@ -524,6 +529,33 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		return new JPanel();
 	}
 
+	private String getSelectedSideTabId() {
+		final int selectedIndex = sideTabs.getSelectedIndex();
+		if (selectedIndex >= 0 && selectedIndex < sideTabOrder.size()) {
+			return sideTabOrder.get(selectedIndex);
+		}
+		return TAB_WORKSPACE;
+	}
+
+	private void rebuildSideTabs(final String selectedTabId) {
+		sideTabs.removeAll();
+		for (final String tabId : sideTabOrder) {
+			JComponent component = sideTabComponents.get(tabId);
+			if (component == null) {
+				component = createSideTabPlaceholder(tabId);
+				sideTabComponents.put(tabId, component);
+			}
+			sideTabs.add(getSideTabTitle(tabId), component);
+		}
+		final int selectedIndex = sideTabOrder.indexOf(selectedTabId);
+		if (selectedIndex >= 0) {
+			sideTabs.setSelectedIndex(selectedIndex);
+		}
+		else if (sideTabs.getTabCount() > 0) {
+			sideTabs.setSelectedIndex(0);
+		}
+	}
+
 	private void ensureSideTabLoaded(final int tabIndex) {
 		if (tabIndex < 0 || tabIndex >= sideTabOrder.size()) {
 			return;
@@ -551,6 +583,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			panel = activityPanel;
 		}
 		if (panel != null) {
+			sideTabComponents.put(tabId, panel);
 			sideTabs.setComponentAt(tabIndex, panel);
 			sideTabLoaded.put(tabId, Boolean.TRUE);
 		}
