@@ -22,6 +22,7 @@ import org.freeplane.features.mapio.MapIO;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.plugin.workspace.actions.EditFavoriteTagsAction;
+import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 import org.freeplane.plugin.workspace.actions.ToggleFavoriteAction;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
@@ -69,6 +70,7 @@ public class LinkTypeFileNode extends ALinkNode implements IWorkspaceNodeActionL
 					WorkspacePopupMenuBuilder.SEPARATOR,
 					ToggleFavoriteAction.KEY,
 					EditFavoriteTagsAction.KEY,
+					MindMapOpenLocationAction.KEY,
 					WorkspacePopupMenuBuilder.SEPARATOR,
 					"workspace.action.node.refresh"
 			});

@@ -510,7 +510,7 @@ public final class FavoritesAndTagsStore {
 		if (value == null || value.length() == 0) {
 			return tags;
 		}
-		final String[] parts = value.split(",");
+		final String[] parts = TagTextUtils.normalizeSeparators(value).split(",");
 		for (int i = 0; i < parts.length; i++) {
 			final String trimmed = parts[i].trim();
 			if (trimmed.length() > 0) {

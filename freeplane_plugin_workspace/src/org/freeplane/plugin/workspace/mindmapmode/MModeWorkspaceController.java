@@ -52,6 +52,7 @@ import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
 import org.freeplane.plugin.workspace.actions.EditFavoriteTagsAction;
 import org.freeplane.plugin.workspace.actions.FileNodeDeleteAction;
+import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 import org.freeplane.plugin.workspace.actions.ToggleFavoriteAction;
 import org.freeplane.plugin.workspace.actions.FileNodeNewFileAction;
 import org.freeplane.plugin.workspace.actions.FileNodeNewMindmapAction;
@@ -388,6 +389,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		WorkspaceController.addAction(new PhysicalFolderSortOrderAction());
 		WorkspaceController.addAction(new ToggleFavoriteAction());
 		WorkspaceController.addAction(new EditFavoriteTagsAction());
+		WorkspaceController.addAction(new MindMapOpenLocationAction());
 	}
 	
 	private IProjectSelectionListener getWSSelectionListener(final RibbonMapChangeAdapter mapChangeAdapter) {

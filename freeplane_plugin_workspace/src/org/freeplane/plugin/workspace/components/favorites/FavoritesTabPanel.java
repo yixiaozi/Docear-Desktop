@@ -3,7 +3,6 @@ package org.freeplane.plugin.workspace.components.favorites;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.FlowLayout;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
@@ -38,6 +37,7 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mapio.MapIO;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
+import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 import org.freeplane.plugin.workspace.features.favorites.FavoriteEntry;
 import org.freeplane.plugin.workspace.features.favorites.FavoriteUriUtils;
 import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
@@ -51,7 +51,7 @@ public class FavoritesTabPanel extends JPanel {
 	private final FavoritesAndTagsStore store = FavoritesAndTagsStore.getInstance();
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList favoritesList = new JList(listModel);
-	private final JPanel tagFilterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+	private final JPanel tagFilterPanel = new JPanel(new WrapFlowLayout());
 	private final JLabel statusLabel = new JLabel();
 	private final Runnable refreshListener = new Runnable() {
 		public void run() {
@@ -77,7 +77,9 @@ public class FavoritesTabPanel extends JPanel {
 	}
 
 	private void buildTagFilterPanel() {
-		tagFilterPanel.setBorder(BorderFactory.createTitledBorder(TextUtils.getText("workspace.favorites.filter.label")));
+		tagFilterPanel.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createTitledBorder(TextUtils.getText("workspace.favorites.filter.label")),
+				BorderFactory.createEmptyBorder(4, 4, 4, 4)));
 		rebuildTagButtons();
 	}
 
@@ -90,6 +92,7 @@ public class FavoritesTabPanel extends JPanel {
 		}
 		tagFilterPanel.revalidate();
 		tagFilterPanel.repaint();
+		getParent().revalidate();
 	}
 
 	private Set getAvailableTags() {
@@ -97,8 +100,8 @@ public class FavoritesTabPanel extends JPanel {
 	}
 
 	private JToggleButton createTagButton(final String tag, final String label) {
-		final JToggleButton button = new JToggleButton(label);
-		button.setSelected(tag == null ? activeTagFilter == null : tag.equals(activeTagFilter));
+		final boolean selected = tag == null ? activeTagFilter == null : tag.equals(activeTagFilter);
+		final JToggleButton button = TagChipFactory.createFilterChip(tag, label, selected);
 		button.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				activeTagFilter = tag;
@@ -168,6 +171,16 @@ public class FavoritesTabPanel extends JPanel {
 			}
 		});
 		popup.add(openItem);
+		final JMenuItem openLocationItem = new JMenuItem(TextUtils.getText("workspace.action.mindmap.open.location.label"));
+		openLocationItem.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent event) {
+				final File file = entry.getFile();
+				if (file != null) {
+					MindMapOpenLocationAction.openContainingFolder(file);
+				}
+			}
+		});
+		popup.add(openLocationItem);
 		final JMenuItem editTagsItem = new JMenuItem(TextUtils.getText("workspace.action.favorites.edit.tags.label"));
 		editTagsItem.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent event) {
@@ -261,10 +274,6 @@ public class FavoritesTabPanel extends JPanel {
 
 		private String formatEntryLabel(final FavoriteEntry entry) {
 			final StringBuilder builder = new StringBuilder(entry.getDisplayName());
-			final File file = entry.getFile();
-			if (file != null && file.getParentFile() != null) {
-				builder.append(" \u2014 ").append(file.getParentFile().getName());
-			}
 			if (!entry.getTags().isEmpty()) {
 				builder.append("  [");
 				boolean first = true;

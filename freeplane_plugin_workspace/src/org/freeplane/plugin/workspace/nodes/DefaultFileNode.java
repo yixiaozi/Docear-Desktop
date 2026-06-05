@@ -19,6 +19,7 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.mapio.MapIO;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.workspace.actions.EditFavoriteTagsAction;
+import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 import org.freeplane.plugin.workspace.actions.ToggleFavoriteAction;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
@@ -212,6 +213,7 @@ public class DefaultFileNode extends AWorkspaceTreeNode implements IWorkspaceNod
 					WorkspacePopupMenuBuilder.SEPARATOR,
 					ToggleFavoriteAction.KEY,
 					EditFavoriteTagsAction.KEY,
+					MindMapOpenLocationAction.KEY,
 					WorkspacePopupMenuBuilder.SEPARATOR,
 					"workspace.action.node.refresh"
 			});
