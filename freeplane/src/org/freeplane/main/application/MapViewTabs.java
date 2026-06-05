@@ -27,6 +27,8 @@ import java.awt.event.ContainerEvent;
 import java.awt.event.ContainerListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -60,6 +62,7 @@ class MapViewTabs implements IMapViewChangeListener {
 	private boolean mTabbedPaneSelectionUpdate = true;
 	private TabbedPaneUI tabbedPaneUI;
 	private int nextTabInsertIndex = -1;
+	private int dragTabIndex = -1;
 	
 	private static final int MAX_TAB_SHORTCUT = 9;
 
@@ -106,6 +109,26 @@ class MapViewTabs implements IMapViewChangeListener {
 		final FileOpener fileOpener = new FileOpener();
 		new DropTarget(mTabbedPane, fileOpener);
 		mTabbedPane.addMouseListener(new DefaultMapMouseListener());
+		mTabbedPane.addMouseListener(new MouseAdapter() {
+			public void mousePressed(final MouseEvent e) {
+				if (!mTabbedPane.isEnabled() || !SwingUtilities.isLeftMouseButton(e)) {
+					return;
+				}
+				dragTabIndex = mTabbedPane.indexAtLocation(e.getX(), e.getY());
+			}
+
+			public void mouseReleased(final MouseEvent e) {
+				if (dragTabIndex < 0 || !SwingUtilities.isLeftMouseButton(e)) {
+					dragTabIndex = -1;
+					return;
+				}
+				final int dropIndex = mTabbedPane.indexAtLocation(e.getX(), e.getY());
+				if (dropIndex >= 0 && dropIndex != dragTabIndex) {
+					reorderTab(dragTabIndex, dropIndex);
+				}
+				dragTabIndex = -1;
+			}
+		});
 
 		//DOCEAR - MapViewTabs: keep track on not MapView tab additions
 		mTabbedPane.addContainerListener(new ContainerListener() {
@@ -203,6 +226,43 @@ class MapViewTabs implements IMapViewChangeListener {
 			return index;
 		}
 		return mTabbedPane.getTabCount();
+	}
+
+	private void reorderTab(int fromIndex, int toIndex) {
+		if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) {
+			return;
+		}
+		if (fromIndex >= mTabbedPaneMapViews.size() || toIndex >= mTabbedPaneMapViews.size()) {
+			return;
+		}
+		final int selectedBefore = mTabbedPane.getSelectedIndex();
+		final Component movedMapView = mTabbedPaneMapViews.remove(fromIndex);
+		final String title = mTabbedPane.getTitleAt(fromIndex);
+
+		mTabbedPaneSelectionUpdate = false;
+		mTabbedPane.removeTabAt(fromIndex);
+		if (fromIndex < toIndex) {
+			toIndex--;
+		}
+		mTabbedPaneMapViews.insertElementAt(movedMapView, toIndex);
+		mTabbedPane.insertTab(title, null, new JPanel(), null, toIndex);
+
+		int newSelectedIndex = selectedBefore;
+		if (selectedBefore == fromIndex) {
+			newSelectedIndex = toIndex;
+		}
+		else if (fromIndex < selectedBefore && toIndex >= selectedBefore) {
+			newSelectedIndex = selectedBefore - 1;
+		}
+		else if (fromIndex > selectedBefore && toIndex <= selectedBefore) {
+			newSelectedIndex = selectedBefore + 1;
+		}
+		if (newSelectedIndex >= 0 && newSelectedIndex < mTabbedPane.getTabCount()) {
+			mTabbedPane.putClientProperty("ChangedEventConsumed", "true");
+			mTabbedPane.setSelectedIndex(newSelectedIndex);
+		}
+		mTabbedPaneSelectionUpdate = true;
+		tabSelectionChanged();
 	}
 
 	public void afterViewClose(final Component pOldMapView) {

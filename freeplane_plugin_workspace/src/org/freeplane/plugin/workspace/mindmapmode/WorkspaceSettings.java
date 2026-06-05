@@ -24,6 +24,7 @@ final class WorkspaceSettings implements IWorkspaceSettingsHandler {
 	public static final String WORKSPACE_VIEW_COLLAPSED = MModeWorkspaceController.class.getPackage().getName().toLowerCase(Locale.ENGLISH)+".view.collapsed";
 	public static final String WORKSPACE_MODEL_PROJECTS = MModeWorkspaceController.class.getPackage().getName().toLowerCase(Locale.ENGLISH)+".model.projects";
 	public static final String WORKSPACE_MODEL_PROJECTS_SEPARATOR = ",";
+	public static final String WORKSPACE_SIDE_TAB_ORDER = MModeWorkspaceController.class.getPackage().getName().toLowerCase(Locale.ENGLISH)+".side.tab.order";
 	
 	private static final String USER_SETTINGS_FILENAME = "user.settings";
 	private Properties properties = new Properties();

@@ -9,14 +9,17 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import javax.swing.Box;
 import javax.swing.JComponent;
 import javax.swing.JMenu;
 import javax.swing.JPanel;
-import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
@@ -47,7 +50,9 @@ import org.freeplane.features.ui.ViewController;
 import org.freeplane.features.url.UrlManager;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
+import org.freeplane.plugin.workspace.actions.EditFavoriteTagsAction;
 import org.freeplane.plugin.workspace.actions.FileNodeDeleteAction;
+import org.freeplane.plugin.workspace.actions.ToggleFavoriteAction;
 import org.freeplane.plugin.workspace.actions.FileNodeNewFileAction;
 import org.freeplane.plugin.workspace.actions.FileNodeNewMindmapAction;
 import org.freeplane.plugin.workspace.actions.NodeCopyAction;
@@ -69,8 +74,11 @@ import org.freeplane.plugin.workspace.actions.WorkspaceNewMapAction;
 import org.freeplane.plugin.workspace.actions.WorkspaceNewProjectAction;
 import org.freeplane.plugin.workspace.actions.WorkspaceProjectOpenLocationAction;
 import org.freeplane.plugin.workspace.actions.WorkspaceRemoveProjectAction;
+import org.freeplane.plugin.workspace.components.DraggableTabbedPane;
 import org.freeplane.plugin.workspace.components.IWorkspaceView;
 import org.freeplane.plugin.workspace.components.TreeView;
+import org.freeplane.plugin.workspace.components.favorites.FavoritesTabPanel;
+import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
 import org.freeplane.plugin.workspace.creator.DefaultFileNodeCreator;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
 import org.freeplane.plugin.workspace.features.AWorkspaceModeExtension;
@@ -100,13 +108,24 @@ import org.freeplane.view.swing.ui.mindmapmode.MNodeDropListener;
 
 public class MModeWorkspaceController extends AWorkspaceModeExtension {
 
+	private static final String TAB_WORKSPACE = "workspace";
+	private static final String TAB_FAVORITES = "favorites";
+	private static final String TAB_SEARCH = "search";
+	private static final String TAB_FILE_SEARCH = "file_search";
+	private static final String TAB_ALL_FILE_SEARCH = "all_file_search";
+	private static final String TAB_ACTIVITY = "activity";
+	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
+			TAB_WORKSPACE, TAB_FAVORITES, TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY
+	};
+
 	abstract class ResizerEventAdapter implements ResizerListener, ComponentCollapseListener {
 	}
 
 	private FileReadManager fileTypeManager;
 	private TreeView view;
-	private JTabbedPane sideTabs;
-	private final boolean[] sideTabLoaded = new boolean[5];
+	private DraggableTabbedPane sideTabs;
+	private final List<String> sideTabOrder = new ArrayList<String>();
+	private final Map<String, Boolean> sideTabLoaded = new HashMap<String, Boolean>();
 	private IWorkspaceSettingsHandler settings;
 	private volatile WorkspaceModel wsModel;
 	private AWorkspaceProject selectedProject = null;
@@ -240,6 +259,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	
 	private void setupModel(ModeController modeController) {
 		load();
+		FavoritesAndTagsStore.getInstance().reloadAllProjects();
 	}
 
 	private void setupView(ModeController modeController) {
@@ -272,16 +292,24 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		otcr.addResizerListener(adapter);
 		otcr.addCollapseListener(adapter);
 		
-		sideTabs = new JTabbedPane();
-		sideTabs.add("\u5de5\u4f5c\u533a", getWorkspaceView());
-		sideTabLoaded[0] = true;
-		sideTabs.add("\u641c\u7d22", new JPanel());
-		sideTabs.add("\u6587\u4ef6\u641c\u7d22", new JPanel());
-		sideTabs.add("\u5168\u90e8\u6587\u4ef6\u641c\u7d22", new JPanel());
-		sideTabs.add("\u6d3b\u52a8\u5206\u6790", new JPanel());
+		loadSideTabOrder();
+		sideTabs = new DraggableTabbedPane();
+		for (final String tabId : sideTabOrder) {
+			sideTabs.add(getSideTabTitle(tabId), createSideTabPlaceholder(tabId));
+			if (TAB_WORKSPACE.equals(tabId)) {
+				sideTabLoaded.put(tabId, Boolean.TRUE);
+			}
+		}
 		sideTabs.addChangeListener(new ChangeListener() {
 			public void stateChanged(final ChangeEvent e) {
 				ensureSideTabLoaded(sideTabs.getSelectedIndex());
+			}
+		});
+		sideTabs.setTabReorderListener(new DraggableTabbedPane.TabReorderListener() {
+			public void tabReordered(final int fromIndex, final int toIndex) {
+				final String tabId = sideTabOrder.remove(fromIndex);
+				sideTabOrder.add(toIndex, tabId);
+				persistSideTabOrder();
 			}
 		});
 		
@@ -353,6 +381,8 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		WorkspaceController.addAction(new FileNodeDeleteAction());
 		
 		WorkspaceController.addAction(new PhysicalFolderSortOrderAction());
+		WorkspaceController.addAction(new ToggleFavoriteAction());
+		WorkspaceController.addAction(new EditFavoriteTagsAction());
 	}
 	
 	private IProjectSelectionListener getWSSelectionListener(final RibbonMapChangeAdapter mapChangeAdapter) {
@@ -397,6 +427,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			sb.append(prjId);
 		}
 		getWorkspaceSettings().setProperty(WorkspaceSettings.WORKSPACE_MODEL_PROJECTS, sb.toString());
+		saveSideTabOrder();
 		try {
 			getWorkspaceSettings().store();
 		}
@@ -414,32 +445,114 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		
 	}
 
+	private void loadSideTabOrder() {
+		sideTabOrder.clear();
+		final Set<String> seen = new HashSet<String>();
+		final String savedOrder = getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_SIDE_TAB_ORDER, "");
+		if (savedOrder.length() > 0) {
+			for (final String part : savedOrder.split(",")) {
+				final String tabId = part.trim();
+				if (isValidSideTabId(tabId) && !seen.contains(tabId)) {
+					sideTabOrder.add(tabId);
+					seen.add(tabId);
+				}
+			}
+		}
+		for (final String tabId : DEFAULT_SIDE_TAB_ORDER) {
+			if (!seen.contains(tabId)) {
+				sideTabOrder.add(tabId);
+			}
+		}
+	}
+
+	private void saveSideTabOrder() {
+		final StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < sideTabOrder.size(); i++) {
+			if (i > 0) {
+				sb.append(',');
+			}
+			sb.append(sideTabOrder.get(i));
+		}
+		getWorkspaceSettings().setProperty(WorkspaceSettings.WORKSPACE_SIDE_TAB_ORDER, sb.toString());
+	}
+
+	private void persistSideTabOrder() {
+		saveSideTabOrder();
+		try {
+			getWorkspaceSettings().store();
+		}
+		catch (final Exception e) {
+			LogUtils.severe("could not store side tab order.", e);
+		}
+	}
+
+	private boolean isValidSideTabId(final String tabId) {
+		for (final String validId : DEFAULT_SIDE_TAB_ORDER) {
+			if (validId.equals(tabId)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private String getSideTabTitle(final String tabId) {
+		if (TAB_WORKSPACE.equals(tabId)) {
+			return "\u5de5\u4f5c\u533a";
+		}
+		if (TAB_FAVORITES.equals(tabId)) {
+			return "\u6536\u85cf";
+		}
+		if (TAB_SEARCH.equals(tabId)) {
+			return "\u641c\u7d22";
+		}
+		if (TAB_FILE_SEARCH.equals(tabId)) {
+			return "\u6587\u4ef6\u641c\u7d22";
+		}
+		if (TAB_ALL_FILE_SEARCH.equals(tabId)) {
+			return "\u5168\u90e8\u6587\u4ef6\u641c\u7d22";
+		}
+		if (TAB_ACTIVITY.equals(tabId)) {
+			return "\u6d3b\u52a8\u5206\u6790";
+		}
+		return tabId;
+	}
+
+	private JComponent createSideTabPlaceholder(final String tabId) {
+		if (TAB_WORKSPACE.equals(tabId)) {
+			return getWorkspaceView();
+		}
+		return new JPanel();
+	}
+
 	private void ensureSideTabLoaded(final int tabIndex) {
-		if (tabIndex < 0 || tabIndex >= sideTabLoaded.length || sideTabLoaded[tabIndex]) {
+		if (tabIndex < 0 || tabIndex >= sideTabOrder.size()) {
+			return;
+		}
+		final String tabId = sideTabOrder.get(tabIndex);
+		if (Boolean.TRUE.equals(sideTabLoaded.get(tabId))) {
 			return;
 		}
 		JComponent panel = null;
-		switch (tabIndex) {
-			case 1:
-				panel = new GlobalSearchTabPanel();
-				break;
-			case 2:
-				panel = new MindMapFileSearchPanel();
-				break;
-			case 3:
-				panel = new AllFileSearchPanel();
-				break;
-			case 4:
-				final ActivityAnalysisPanel activityPanel = new ActivityAnalysisPanel();
-				activityPanel.refreshAnalysis();
-				panel = activityPanel;
-				break;
-			default:
-				break;
+		if (TAB_FAVORITES.equals(tabId)) {
+			panel = new FavoritesTabPanel();
+		}
+		else if (TAB_SEARCH.equals(tabId)) {
+			panel = new GlobalSearchTabPanel();
+		}
+		else if (TAB_FILE_SEARCH.equals(tabId)) {
+			panel = new MindMapFileSearchPanel();
+		}
+		else if (TAB_ALL_FILE_SEARCH.equals(tabId)) {
+			panel = new AllFileSearchPanel();
+		}
+		else if (TAB_ACTIVITY.equals(tabId)) {
+			final ActivityAnalysisPanel activityPanel = new ActivityAnalysisPanel();
+			activityPanel.refreshAnalysis();
+			panel = activityPanel;
 		}
 		if (panel != null) {
 			sideTabs.setComponentAt(tabIndex, panel);
-			sideTabLoaded[tabIndex] = true;
+			sideTabLoaded.put(tabId, Boolean.TRUE);
 		}
 	}
 
