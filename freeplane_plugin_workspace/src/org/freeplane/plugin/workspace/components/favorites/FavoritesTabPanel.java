@@ -92,7 +92,8 @@ public class FavoritesTabPanel extends JPanel {
 		}
 		tagFilterPanel.revalidate();
 		tagFilterPanel.repaint();
-		getParent().revalidate();
+		revalidate();
+		repaint();
 	}
 
 	private Set getAvailableTags() {

@@ -556,6 +556,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		else if (sideTabs.getTabCount() > 0) {
 			sideTabs.setSelectedIndex(0);
 		}
+		ensureSideTabLoaded(sideTabs.getSelectedIndex());
 	}
 
 	private void ensureSideTabLoaded(final int tabIndex) {
