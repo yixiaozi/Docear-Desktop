@@ -21,6 +21,7 @@ import java.util.Set;
 import javax.swing.Box;
 import javax.swing.JComponent;
 import javax.swing.JMenu;
+import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -43,7 +44,9 @@ import org.freeplane.core.ui.components.ResizerListener;
 import org.freeplane.core.ui.ribbon.RibbonMapChangeAdapter;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.core.util.WorkspaceSearchFileMenuBridge;
 import org.freeplane.features.link.LinkController;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
@@ -89,6 +92,7 @@ import org.freeplane.plugin.workspace.components.TreeView;
 import org.freeplane.plugin.workspace.components.favorites.FavoritesTabPanel;
 import org.freeplane.plugin.workspace.components.nodepins.PinnedNodesTabInstaller;
 import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
+import org.freeplane.plugin.workspace.features.favorites.SearchFileContextMenuHelper;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsIndex;
 import org.freeplane.plugin.workspace.creator.DefaultFileNodeCreator;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
@@ -109,7 +113,9 @@ import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 import org.freeplane.plugin.workspace.model.project.IProjectSelectionListener;
 import org.freeplane.plugin.workspace.model.project.ProjectSelectionEvent;
 import org.freeplane.plugin.workspace.nodes.DefaultFileNode;
+import org.freeplane.plugin.workspace.nodes.FolderTypeMyFilesNode;
 import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
+import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 import org.freeplane.view.swing.features.time.mindmapmode.ActivityAnalysisPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.AllFileSearchPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.GlobalSearchTabPanel;
@@ -461,6 +467,11 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		WorkspaceController.addAction(new PhysicalFolderSortOrderAction());
 		WorkspaceController.addAction(new ToggleFavoriteAction());
 		WorkspaceController.addAction(new EditFavoriteTagsAction());
+		WorkspaceSearchFileMenuBridge.setProvider(new WorkspaceSearchFileMenuBridge.Provider() {
+			public boolean appendFavoriteItems(final JPopupMenu menu, final File file) {
+				return SearchFileContextMenuHelper.appendFavoriteItems(menu, file);
+			}
+		});
 		WorkspaceController.addAction(new MindMapOpenLocationAction());
 		WorkspaceController.addAction(new MindMapPopupOpenLocationAction());
 		WorkspaceController.addAction(new MindMapNodeOpenLocationAction());
@@ -775,9 +786,13 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	}
 
 	public URI getDefaultProjectHome() {
+		final File fixed = MindMapDataRootResolver.getFixedDataRoot();
+		if (fixed != null) {
+			return fixed.toURI();
+		}
 		File home = URIUtils.getAbsoluteFile(WorkspaceController.getApplicationHome());
 		home = new File(home, "projects");
-		return  home.toURI();
+		return home.toURI();
 	}
 
 	public void shutdown() {
@@ -811,34 +826,94 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if(this.viewUpdater != null) {
 			this.viewUpdater.run();
 		}
-		String[] projectsIds = getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_MODEL_PROJECTS, "").split(WorkspaceSettings.WORKSPACE_MODEL_PROJECTS_SEPARATOR);
-		for (final String projectID : projectsIds) {
-			final String projectHome = getWorkspaceSettings().getProperty(projectID);
-			if(projectHome == null) {
-				continue;
-			}
-			try {
-				SwingUtilities.invokeAndWait(new Runnable() {
-					public void run() {
-						AWorkspaceProject project = null;
-						try {
-							project = AWorkspaceProject.create(projectID, URIUtils.createURI(projectHome));
-							getModel().addProject(project);
-							getProjectLoader().loadProject(project);
-						}
-						catch (Exception e) {
-							LogUtils.severe(e);
-							if(project != null) {
-								getModel().removeProject(project);
-							}
+		loadFixedDataRootProject();
+		getWorkspaceView().repaint();
+	}
+
+	private void loadFixedDataRootProject() {
+		final File dataRoot = MindMapDataRootResolver.getFixedDataRoot();
+		if (dataRoot == null) {
+			LogUtils.severe("Fixed data root is missing or not a directory: "
+			        + MindMapDataRootResolver.FIXED_DATA_ROOT_PATH);
+			return;
+		}
+		try {
+			SwingUtilities.invokeAndWait(new Runnable() {
+				public void run() {
+					AWorkspaceProject project = null;
+					try {
+						final String projectId = MindMapDataRootResolver.resolveProjectIdForDataRoot(dataRoot);
+						project = AWorkspaceProject.create(projectId, dataRoot.toURI());
+						getModel().addProject(project);
+						loadProjectResilient(project);
+					}
+					catch (Exception e) {
+						LogUtils.severe(e);
+						if (project != null) {
+							getModel().removeProject(project);
 						}
 					}
-				});
-			} catch (Exception e) {
-				LogUtils.severe(e);
+				}
+			});
+		}
+		catch (Exception e) {
+			LogUtils.severe(e);
+		}
+	}
+
+	private void loadProjectResilient(final AWorkspaceProject project) throws IOException {
+		try {
+			getProjectLoader().loadProject(project);
+		}
+		catch (IOException e) {
+			LogUtils.warn("Project settings damaged, rebuilding workspace tree from folder: " + e.getMessage());
+			backupAndRemoveProjectSettings(project);
+			getProjectLoader().loadProject(project);
+		}
+		ensureMyFilesPopulatedFromDisk(project);
+	}
+
+	private void backupAndRemoveProjectSettings(final AWorkspaceProject project) {
+		final File settingsFile = new File(URIUtils.getAbsoluteFile(project.getProjectDataPath()), "settings.xml");
+		if (!settingsFile.exists()) {
+			return;
+		}
+		final File backup = new File(settingsFile.getParentFile(),
+		    "settings.xml.corrupt." + System.currentTimeMillis());
+		if (!settingsFile.renameTo(backup)) {
+			settingsFile.delete();
+		}
+	}
+
+	private void ensureMyFilesPopulatedFromDisk(final AWorkspaceProject project) {
+		if (project == null || project.getModel() == null || project.getModel().getRoot() == null) {
+			return;
+		}
+		FolderTypeMyFilesNode myFiles = null;
+		final ProjectRootNode root = (ProjectRootNode) project.getModel().getRoot();
+		for (int i = 0; i < root.getChildCount(); i++) {
+			final AWorkspaceTreeNode child = root.getChildAt(i);
+			if (child instanceof FolderTypeMyFilesNode) {
+				myFiles = (FolderTypeMyFilesNode) child;
+				break;
 			}
 		}
-		getWorkspaceView().repaint();
+		if (myFiles == null) {
+			return;
+		}
+		if (myFiles.getChildCount() > 0) {
+			return;
+		}
+		final File dataRoot = URIUtils.getAbsoluteFile(project.getProjectHome());
+		if (dataRoot == null) {
+			return;
+		}
+		final File[] entries = dataRoot.listFiles();
+		if (entries == null || entries.length == 0) {
+			return;
+		}
+		LogUtils.info("My files empty in project settings, rescanning: " + dataRoot.getAbsolutePath());
+		myFiles.refresh();
 	}
 
 	@Override

@@ -1,8 +1,10 @@
 package org.freeplane.core.util;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.ArrayList;
@@ -30,6 +32,9 @@ import org.freeplane.features.url.UrlManager;
 public final class MindMapDataRootResolver {
 
 	public static final String SCAN_ROOT_PROPERTY = "mindmap_data_scan_root";
+	/** Unified data directory for workspace, search, reminders, and side tabs. */
+	public static final String FIXED_DATA_ROOT_PATH = "E:\\yixiaozi";
+	public static final String FIXED_PROJECT_ID = "yixiaozi";
 	private static final String WORKSPACE_CONTROLLER = "org.freeplane.plugin.workspace.WorkspaceController";
 	private static final String WORKSPACE_SETTINGS_PROJECTS_KEY =
 	    "org.freeplane.plugin.workspace.mindmapmode.model.projects";
@@ -38,7 +43,81 @@ public final class MindMapDataRootResolver {
 	private MindMapDataRootResolver() {
 	}
 
+	public static File getFixedDataRoot() {
+		final File root = new File(FIXED_DATA_ROOT_PATH);
+		return root.isDirectory() ? root : null;
+	}
+
+	/** Finds project id from dataRoot/_data/settings.xml; falls back to FIXED_PROJECT_ID. */
+	public static String resolveProjectIdForDataRoot(final File dataRoot) {
+		if (dataRoot == null || !dataRoot.isDirectory()) {
+			return FIXED_PROJECT_ID;
+		}
+		final File dataParent = new File(dataRoot, "_data");
+		if (!dataParent.isDirectory()) {
+			return FIXED_PROJECT_ID;
+		}
+		final File[] children = dataParent.listFiles();
+		if (children == null) {
+			return FIXED_PROJECT_ID;
+		}
+		File bestDataDir = null;
+		long bestModified = 0L;
+		for (int i = 0; i < children.length; i++) {
+			final File child = children[i];
+			if (child == null || !child.isDirectory()) {
+				continue;
+			}
+			final File settingsFile = new File(child, "settings.xml");
+			if (!settingsFile.isFile()) {
+				continue;
+			}
+			final long modified = settingsFile.lastModified();
+			if (bestDataDir == null || modified >= bestModified) {
+				bestDataDir = child;
+				bestModified = modified;
+			}
+		}
+		if (bestDataDir == null) {
+			return FIXED_PROJECT_ID;
+		}
+		final String projectId = readProjectIdFromSettings(new File(bestDataDir, "settings.xml"));
+		if (projectId != null && projectId.length() > 0) {
+			return projectId;
+		}
+		return bestDataDir.getName();
+	}
+
+	private static String readProjectIdFromSettings(final File settingsFile) {
+		BufferedReader reader = null;
+		try {
+			reader = new BufferedReader(new InputStreamReader(new FileInputStream(settingsFile), "UTF-8"));
+			String line;
+			while ((line = reader.readLine()) != null) {
+				final int idIndex = line.indexOf("ID=\"");
+				if (idIndex >= 0) {
+					final int start = idIndex + 4;
+					final int end = line.indexOf('\"', start);
+					if (end > start) {
+						return line.substring(start, end);
+					}
+				}
+			}
+		}
+		catch (final Exception e) {
+			LogUtils.warn("could not read project id from " + settingsFile.getAbsolutePath() + ": " + e.getMessage());
+		}
+		finally {
+			FileUtils.silentlyClose(reader);
+		}
+		return null;
+	}
+
 	public static File getPrimaryScanRoot() {
+		final File fixed = getFixedDataRoot();
+		if (fixed != null) {
+			return fixed;
+		}
 		final File configured = getConfiguredRoot();
 		if (configured != null) {
 			return configured;
@@ -68,6 +147,7 @@ public final class MindMapDataRootResolver {
 
 	public static File[] getScanRoots() {
 		final Set roots = new LinkedHashSet();
+		addCanonicalRoot(roots, getFixedDataRoot());
 		final File configured = getConfiguredRoot();
 		if (configured != null) {
 			addCanonicalRoot(roots, configured);

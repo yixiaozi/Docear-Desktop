@@ -163,7 +163,7 @@ public class AllFileSearchPanel extends JPanel {
 		resultList.addMouseListener(new java.awt.event.MouseAdapter() {
 			@Override
 			public void mouseClicked(java.awt.event.MouseEvent e) {
-				if (e.getClickCount() >= 1 && !e.isPopupTrigger()) {
+				if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() >= 1) {
 					openSelectedResult();
 				}
 			}

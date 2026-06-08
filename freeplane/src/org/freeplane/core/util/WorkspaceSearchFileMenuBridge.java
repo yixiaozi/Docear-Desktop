@@ -1,66 +1,43 @@
 package org.freeplane.core.util;
 
 import java.io.File;
-import java.lang.reflect.Method;
 
 import javax.swing.JPopupMenu;
 
 /**
- * Invokes workspace favorite/tag menu helpers when the workspace plugin is loaded.
+ * Bridge for file-search side tabs to append workspace favorite/tag menu items.
+ * The workspace plugin registers a provider at startup (OSGi bundles cannot be loaded by reflection from core).
  */
 public final class WorkspaceSearchFileMenuBridge {
 
-	private static final String WORKSPACE_CONTROLLER =
-	    "org.freeplane.plugin.workspace.WorkspaceController";
+	public interface Provider {
+		boolean appendFavoriteItems(JPopupMenu menu, File file);
+	}
+
+	private static volatile Provider provider;
 
 	private WorkspaceSearchFileMenuBridge() {
+	}
+
+	public static void setProvider(final Provider newProvider) {
+		provider = newProvider;
 	}
 
 	public static boolean appendFavoriteItems(final JPopupMenu menu, final File file) {
 		if (menu == null || file == null) {
 			return false;
 		}
-		try {
-			final Class workspace = loadWorkspaceClass(WORKSPACE_CONTROLLER);
-			final Method method = workspace.getMethod("appendSearchFileContextMenuItems",
-			    new Class[] { JPopupMenu.class, File.class });
-			final Object result = method.invoke(null, new Object[] { menu, file });
-			return result instanceof Boolean && ((Boolean) result).booleanValue();
-		}
-		catch (final Exception e) {
-			LogUtils.warn("Workspace search file menu unavailable: " + e.getMessage());
+		final Provider active = provider;
+		if (active == null) {
+			LogUtils.warn("Workspace search file menu provider is not registered");
 			return false;
 		}
-	}
-
-	private static Class loadWorkspaceClass(final String className) throws ClassNotFoundException {
-		final ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
-		final ClassLoader bridgeLoader = WorkspaceSearchFileMenuBridge.class.getClassLoader();
-		ClassNotFoundException last = null;
-		if (contextLoader != null) {
-			try {
-				return Class.forName(className, true, contextLoader);
-			}
-			catch (final ClassNotFoundException e) {
-				last = e;
-			}
-		}
-		if (bridgeLoader != null && bridgeLoader != contextLoader) {
-			try {
-				return Class.forName(className, true, bridgeLoader);
-			}
-			catch (final ClassNotFoundException e) {
-				last = e;
-			}
-		}
 		try {
-			return Class.forName(className);
+			return active.appendFavoriteItems(menu, file);
 		}
-		catch (final ClassNotFoundException e) {
-			if (last != null) {
-				throw last;
-			}
-			throw e;
+		catch (final Exception e) {
+			LogUtils.warn("Workspace search file menu failed: " + e.getMessage());
+			return false;
 		}
 	}
 }
