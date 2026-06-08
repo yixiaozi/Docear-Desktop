@@ -82,6 +82,18 @@ final class TodoistMappingStore {
 		return mappings.keySet();
 	}
 
+	java.util.Set getAllMappedTaskIds() {
+		java.util.Set ids = new java.util.HashSet();
+		for (Iterator it = mappings.keySet().iterator(); it.hasNext();) {
+			String key = (String) it.next();
+			String taskId = getTaskIdOnly(key);
+			if (taskId != null && taskId.length() > 0) {
+				ids.add(taskId);
+			}
+		}
+		return ids;
+	}
+
 	void save() {
 		OutputStream out = null;
 		try {

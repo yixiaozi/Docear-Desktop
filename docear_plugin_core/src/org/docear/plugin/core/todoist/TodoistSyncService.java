@@ -1,5 +1,6 @@
 package org.docear.plugin.core.todoist;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -66,18 +67,42 @@ public final class TodoistSyncService {
 			try {
 				String sectionId = client.ensureSection(result.projectId, sectionName, sectionStore);
 				if (taskId != null && taskId.length() > 0) {
-					if (hash.equals(storedHash)) {
+					TodoistTaskLocation location = client.getTaskLocation(taskId);
+					boolean needsRelocate = !client.isTaskInLocation(location, result.projectId, sectionId);
+					if (hash.equals(storedHash) && !needsRelocate) {
 						result.addSkipped(record, sectionName);
 						if (callback != null) {
 							callback.onSkipped(line);
 						}
 					}
-					else {
-						client.updateTask(taskId, record, result.projectId, sectionId);
+					else if (location.exists) {
+						boolean needsContentUpdate = !hash.equals(storedHash);
+						if (needsRelocate) {
+							client.relocateTaskTo(taskId, result.projectId, sectionId);
+						}
+						if (needsContentUpdate) {
+							client.updateTaskContent(taskId, record);
+						}
 						store.putMapping(key, taskId, record.remindAt, hash);
-						result.addUpdated(record, sectionName);
+						if (needsRelocate) {
+							result.addMoved(record, sectionName);
+							if (callback != null) {
+								callback.onUpdated(TextUtils.getText("todoist.sync.live.moved") + " " + line);
+							}
+						}
+						else {
+							result.addUpdated(record, sectionName);
+							if (callback != null) {
+								callback.onUpdated(line);
+							}
+						}
+					}
+					else {
+						taskId = client.createTask(record, result.projectId, sectionId);
+						store.putMapping(key, taskId, record.remindAt, hash);
+						result.addCreated(record, sectionName);
 						if (callback != null) {
-							callback.onUpdated(line);
+							callback.onCreated(line);
 						}
 					}
 				}
@@ -99,6 +124,7 @@ public final class TodoistSyncService {
 				LogUtils.warn("Todoist sync failed for " + key, e);
 			}
 		}
+		cleanupMisplacedTasks(client, result, store, callback, activeKeys);
 		status(callback, TextUtils.getText("todoist.sync.status.cleanup"));
 		for (Iterator it = store.keySet().iterator(); it.hasNext();) {
 			String key = (String) it.next();
@@ -130,6 +156,79 @@ public final class TodoistSyncService {
 		sectionStore.save();
 		finish(callback, result);
 		return result;
+	}
+
+	private static void cleanupMisplacedTasks(TodoistApiClient client, TodoistSyncResult result,
+			TodoistMappingStore store, TodoistSyncProgressCallback callback, Set activeKeys) {
+		status(callback, TextUtils.getText("todoist.sync.status.repair"));
+		final Set mappedTaskIds = store.getAllMappedTaskIds();
+		try {
+			closeOrphansInWrongProjects(client, result, callback, mappedTaskIds);
+			closeDuplicateTasksInProject(client, result.projectId, activeKeys, mappedTaskIds, result, callback);
+		}
+		catch (Exception e) {
+			result.failed++;
+			String failedLine = TextUtils.getText("todoist.sync.repair.failed") + ": " + e.getMessage();
+			result.failedLines.add(failedLine);
+			if (callback != null) {
+				callback.onFailed(failedLine);
+			}
+			LogUtils.warn("Todoist repair pass failed", e);
+		}
+	}
+
+	private static void closeOrphansInWrongProjects(TodoistApiClient client, TodoistSyncResult result,
+			TodoistSyncProgressCallback callback, Set mappedTaskIds) throws IOException {
+		final List projectIds = client.findAllProjectIdsByName(result.projectName);
+		for (int p = 0; p < projectIds.size(); p++) {
+			String projectId = (String) projectIds.get(p);
+			if (result.projectId.equals(projectId)) {
+				continue;
+			}
+			closeOrphanTasks(client, projectId, result.projectName, mappedTaskIds, result, callback, false, null);
+		}
+	}
+
+	private static void closeDuplicateTasksInProject(TodoistApiClient client, String projectId, Set activeKeys,
+			Set mappedTaskIds, TodoistSyncResult result, TodoistSyncProgressCallback callback) throws IOException {
+		closeOrphanTasks(client, projectId, result.projectName, mappedTaskIds, result, callback, true, activeKeys);
+	}
+
+	private static void closeOrphanTasks(TodoistApiClient client, String projectId, String projectName,
+			Set mappedTaskIds, TodoistSyncResult result, TodoistSyncProgressCallback callback,
+			boolean onlyActiveDuplicates, Set activeKeys) throws IOException {
+		final List orphanTaskIds = client.listDocearTaskIdsInProject(projectId);
+		for (int t = 0; t < orphanTaskIds.size(); t++) {
+			String orphanTaskId = (String) orphanTaskIds.get(t);
+			if (mappedTaskIds.contains(orphanTaskId)) {
+				continue;
+			}
+			if (onlyActiveDuplicates) {
+				String description = client.getTaskDescription(orphanTaskId);
+				String syncKey = TodoistApiClient.syncKeyFromDescription(description);
+				if (syncKey == null || !activeKeys.contains(syncKey)) {
+					continue;
+				}
+			}
+			try {
+				client.closeTask(orphanTaskId);
+				String line = TextUtils.format("todoist.sync.repair.closed_orphan",
+						new Object[] { projectName, orphanTaskId });
+				result.addClosed(line);
+				if (callback != null) {
+					callback.onClosed(TextUtils.getText("todoist.sync.live.repaired") + " " + line);
+				}
+			}
+			catch (Exception e) {
+				result.failed++;
+				String failedLine = "Close orphan " + orphanTaskId + ": " + e.getMessage();
+				result.failedLines.add(failedLine);
+				if (callback != null) {
+					callback.onFailed(failedLine);
+				}
+				LogUtils.warn("Todoist orphan cleanup failed for " + orphanTaskId, e);
+			}
+		}
 	}
 
 	private static void status(TodoistSyncProgressCallback callback, String message) {

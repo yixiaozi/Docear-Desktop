@@ -23,7 +23,11 @@ final class MindMapReminderScanner {
 		}
 		final List reminders = new ArrayList();
 		for (int i = 0; i < files.size(); i++) {
-			reminders.addAll(scanFile((File) files.get(i)));
+			File file = (File) files.get(i);
+			if (TodoistConfig.isImportTargetFile(file)) {
+				continue;
+			}
+			reminders.addAll(scanFile(file));
 		}
 		return reminders;
 	}

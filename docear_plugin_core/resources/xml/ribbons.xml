@@ -10,6 +10,7 @@
 			<ribbon_band name="help_misc" resize_policies="Mirror">
 				<ribbon_action action="QuickCaptureAction" priority="top" accelerator="control shift SPACE" />
 				<ribbon_action action="TodoistSyncAction" priority="top" />
+				<ribbon_action action="TodoistImportAction" priority="top" />
 				<ribbon_action action="TodoistSettingsAction" />
 			</ribbon_band>
 		</ribbon_task>

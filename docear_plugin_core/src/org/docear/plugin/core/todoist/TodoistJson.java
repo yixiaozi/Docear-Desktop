@@ -40,66 +40,405 @@ final class TodoistJson {
 	}
 
 	static String extractStringField(String json, String fieldName) {
-		if (json == null) {
-			return null;
-		}
-		String needle = "\"" + fieldName + "\":";
-		int idx = json.indexOf(needle);
-		if (idx < 0) {
-			return null;
-		}
-		idx += needle.length();
-		while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
-			idx++;
-		}
-		if (idx >= json.length()) {
-			return null;
-		}
-		char c = json.charAt(idx);
-		if (c == '"') {
-			return readQuotedString(json, idx + 1);
-		}
-		if (c == 'n') {
-			if (json.startsWith("null", idx)) {
-				return null;
-			}
-		}
-		return null;
+		return extractFieldValue(json, fieldName);
+	}
+
+	static String extractIdField(String json) {
+		return extractFieldValue(json, "id");
 	}
 
 	static String findIdByExactName(String json, String name) {
 		if (json == null || name == null) {
 			return null;
 		}
-		String needle = "\"name\":\"" + escapeForSearch(name) + "\"";
 		int idx = 0;
-		while (idx >= 0) {
-			idx = json.indexOf(needle, idx);
+		while (idx >= 0 && idx < json.length()) {
+			idx = json.indexOf("\"name\"", idx);
 			if (idx < 0) {
 				return null;
 			}
-			String object = extractObjectAround(json, idx);
-			if (object != null) {
-				String id = extractStringField(object, "id");
+			idx += 6;
+			idx = skipWhitespaceAndColon(json, idx);
+			if (idx < 0 || idx >= json.length() || json.charAt(idx) != '"') {
+				idx++;
+				continue;
+			}
+			String foundName = readQuotedString(json, idx + 1);
+			if (foundName != null && foundName.equals(name)) {
+				String object = extractObjectAround(json, idx);
+				String id = extractIdField(object);
 				if (id != null && id.length() > 0) {
 					return id;
 				}
 			}
-			idx += needle.length();
+			idx++;
 		}
 		return null;
 	}
 
 	static String extractNextCursor(String json) {
-		String cursor = extractStringField(json, "next_cursor");
+		String cursor = extractFieldValue(json, "next_cursor");
 		if (cursor == null || cursor.length() == 0 || "null".equals(cursor)) {
 			return null;
 		}
 		return cursor;
 	}
 
-	private static String escapeForSearch(String value) {
-		return value.replace("\\", "\\\\").replace("\"", "\\\"");
+	static void collectIdsByExactName(String json, String name, java.util.List ids) {
+		if (json == null || name == null || ids == null) {
+			return;
+		}
+		int idx = 0;
+		while (idx >= 0 && idx < json.length()) {
+			idx = json.indexOf("\"name\"", idx);
+			if (idx < 0) {
+				return;
+			}
+			idx += 6;
+			idx = skipWhitespaceAndColon(json, idx);
+			if (idx < 0 || idx >= json.length() || json.charAt(idx) != '"') {
+				idx++;
+				continue;
+			}
+			String foundName = readQuotedString(json, idx + 1);
+			if (foundName != null && foundName.equals(name)) {
+				String object = extractObjectAround(json, idx);
+				String id = extractIdField(object);
+				if (id != null && id.length() > 0 && !ids.contains(id)) {
+					ids.add(id);
+				}
+			}
+			idx++;
+		}
+	}
+
+	static void collectDocearTaskIds(String json, java.util.List taskIds) {
+		if (json == null || taskIds == null) {
+			return;
+		}
+		int idx = 0;
+		while (true) {
+			idx = json.indexOf("Docear reminder", idx);
+			if (idx < 0) {
+				return;
+			}
+			String object = extractObjectAround(json, idx);
+			if (object != null) {
+				String id = extractIdField(object);
+				if (id != null && id.length() > 0 && !taskIds.contains(id)) {
+					taskIds.add(id);
+				}
+			}
+			idx++;
+		}
+	}
+
+	static void collectImportTasks(String json, java.util.List tasks) {
+		if (json == null || tasks == null) {
+			return;
+		}
+		int idx = 0;
+		while (idx >= 0 && idx < json.length()) {
+			idx = findJsonKey(json, idx, "\"id\"");
+			if (idx < 0) {
+				return;
+			}
+			String object = extractObjectAround(json, idx);
+			if (isTaskObject(object)) {
+				TodoistImportTask task = parseImportTask(object);
+				if (task != null && !containsTaskId(tasks, task.id)) {
+					tasks.add(task);
+				}
+			}
+			idx += 4;
+		}
+	}
+
+	private static int findJsonKey(String json, int fromIndex, String key) {
+		int idx = fromIndex;
+		while (idx >= 0 && idx < json.length()) {
+			idx = json.indexOf(key, idx);
+			if (idx < 0) {
+				return -1;
+			}
+			if (!isJsonKeyAt(json, idx)) {
+				idx += key.length();
+				continue;
+			}
+			return idx;
+		}
+		return -1;
+	}
+
+	private static boolean isJsonKeyAt(String json, int keyStart) {
+		if (keyStart < 0 || keyStart >= json.length()) {
+			return false;
+		}
+		if (keyStart > 0) {
+			char before = json.charAt(keyStart - 1);
+			if (before != '{' && before != ',' && !Character.isWhitespace(before)) {
+				return false;
+			}
+		}
+		if (json.charAt(keyStart) != '"') {
+			return false;
+		}
+		int keyEnd = keyStart + 1;
+		while (keyEnd < json.length()) {
+			char c = json.charAt(keyEnd);
+			if (c == '"') {
+				break;
+			}
+			if (c == '\\') {
+				keyEnd++;
+			}
+			keyEnd++;
+		}
+		if (keyEnd >= json.length()) {
+			return false;
+		}
+		int afterKey = skipWhitespaceAndColon(json, keyEnd + 1);
+		if (afterKey < 0 || afterKey >= json.length()) {
+			return false;
+		}
+		char valueStart = json.charAt(afterKey);
+		return valueStart == '"' || valueStart == '-' || Character.isDigit(valueStart);
+	}
+
+	private static boolean isTaskObject(String object) {
+		if (object == null) {
+			return false;
+		}
+		if (object.indexOf("\"content\"") < 0) {
+			return false;
+		}
+		if (object.indexOf("\"project_id\"") < 0) {
+			return false;
+		}
+		return object.indexOf("\"checked\"") >= 0 || object.indexOf("\"is_deleted\"") >= 0
+				|| object.indexOf("\"user_id\"") >= 0 || object.indexOf("\"added_at\"") >= 0
+				|| object.indexOf("\"is_completed\"") >= 0;
+	}
+
+	static java.util.Map collectIdNamePairs(String json) {
+		java.util.Map names = new java.util.HashMap();
+		if (json == null) {
+			return names;
+		}
+		int idx = 0;
+		while (idx >= 0 && idx < json.length()) {
+			idx = json.indexOf("\"name\"", idx);
+			if (idx < 0) {
+				return names;
+			}
+			idx += 6;
+			idx = skipWhitespaceAndColon(json, idx);
+			if (idx < 0 || idx >= json.length() || json.charAt(idx) != '"') {
+				idx++;
+				continue;
+			}
+			String foundName = readQuotedString(json, idx + 1);
+			String object = extractObjectAround(json, idx);
+			String id = extractIdField(object);
+			if (id != null && id.length() > 0 && foundName != null && foundName.length() > 0) {
+				names.put(id, foundName);
+			}
+			idx++;
+		}
+		return names;
+	}
+
+	private static boolean containsTaskId(java.util.List tasks, String id) {
+		for (int i = 0; i < tasks.size(); i++) {
+			TodoistImportTask task = (TodoistImportTask) tasks.get(i);
+			if (id.equals(task.id)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static TodoistImportTask parseImportTask(String object) {
+		String id = extractIdField(object);
+		if (id == null || id.length() == 0) {
+			return null;
+		}
+		String content = extractFieldValue(object, "content");
+		String description = extractFieldValue(object, "description");
+		String projectId = extractFieldValue(object, "project_id");
+		String sectionId = extractFieldValue(object, "section_id");
+		long dueAt = parseDueMillis(object);
+		String dueString = extractDueString(object);
+		boolean recurring = dueString != null && dueString.toLowerCase().indexOf("every") >= 0;
+		return new TodoistImportTask(id, content, description, projectId, sectionId, dueAt, recurring, dueString);
+	}
+
+	private static long parseDueMillis(String taskJson) {
+		String dueDateTime = extractFieldValue(taskJson, "due_datetime");
+		if (dueDateTime != null && dueDateTime.length() > 0) {
+			long parsed = parseIsoDateTime(dueDateTime);
+			if (parsed > 0) {
+				return parsed;
+			}
+		}
+		long dueObjectMillis = parseDueObjectMillis(taskJson);
+		if (dueObjectMillis > 0) {
+			return dueObjectMillis;
+		}
+		return parseDeadlineMillis(taskJson);
+	}
+
+	private static long parseDueObjectMillis(String taskJson) {
+		int dueIdx = findJsonKey(taskJson, 0, "\"due\"");
+		if (dueIdx < 0) {
+			return 0L;
+		}
+		String dueObject = extractObjectAround(taskJson, dueIdx);
+		if (dueObject == null || dueObject.indexOf("\"date\"") < 0) {
+			return 0L;
+		}
+		String datetime = extractFieldValue(dueObject, "datetime");
+		if (datetime != null && datetime.length() > 0) {
+			long parsed = parseIsoDateTime(datetime);
+			if (parsed > 0) {
+				return parsed;
+			}
+		}
+		String date = extractFieldValue(dueObject, "date");
+		if (date != null && date.length() > 0) {
+			return parseIsoDateTime(date + "T09:00:00");
+		}
+		return 0L;
+	}
+
+	private static long parseDeadlineMillis(String taskJson) {
+		int deadlineIdx = findJsonKey(taskJson, 0, "\"deadline\"");
+		if (deadlineIdx < 0) {
+			return 0L;
+		}
+		String deadlineObject = extractObjectAround(taskJson, deadlineIdx);
+		if (deadlineObject == null) {
+			return 0L;
+		}
+		if (deadlineObject.indexOf("null") >= 0 && deadlineObject.length() < 16) {
+			return 0L;
+		}
+		String date = extractFieldValue(deadlineObject, "date");
+		if (date != null && date.length() > 0) {
+			return parseIsoDateTime(date + "T09:00:00");
+		}
+		return 0L;
+	}
+
+	private static String extractDueString(String taskJson) {
+		int dueIdx = taskJson.indexOf("\"due\"");
+		if (dueIdx < 0) {
+			return extractFieldValue(taskJson, "due_string");
+		}
+		String dueObject = extractObjectAround(taskJson, dueIdx);
+		if (dueObject == null) {
+			return null;
+		}
+		return extractFieldValue(dueObject, "string");
+	}
+
+	private static long parseIsoDateTime(String value) {
+		if (value == null || value.length() < 10) {
+			return 0L;
+		}
+		try {
+			String normalized = value.trim();
+			if (normalized.endsWith("Z")) {
+				normalized = normalized.substring(0, normalized.length() - 1) + "+0000";
+			}
+			java.text.SimpleDateFormat format;
+			if (normalized.indexOf('T') >= 0) {
+				if (normalized.indexOf('+') > 10 || normalized.lastIndexOf('-') > 10) {
+					format = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
+				}
+				else {
+					format = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+				}
+			}
+			else {
+				format = new java.text.SimpleDateFormat("yyyy-MM-dd");
+				format.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+			}
+			java.util.Date date = format.parse(normalized);
+			return date != null ? date.getTime() : 0L;
+		}
+		catch (Exception e) {
+			return 0L;
+		}
+	}
+
+	private static String extractFieldValue(String json, String fieldName) {
+		if (json == null) {
+			return null;
+		}
+		String needle = "\"" + fieldName + "\"";
+		int idx = 0;
+		while (idx >= 0) {
+			idx = json.indexOf(needle, idx);
+			if (idx < 0) {
+				return null;
+			}
+			int afterKey = idx + needle.length();
+			if (afterKey < json.length() && json.charAt(afterKey) == '"') {
+				idx++;
+				continue;
+			}
+			idx = skipWhitespaceAndColon(json, afterKey);
+			if (idx < 0 || idx >= json.length()) {
+				return null;
+			}
+			char c = json.charAt(idx);
+			if (c == '"') {
+				return readQuotedString(json, idx + 1);
+			}
+			if (c == 'n' && json.startsWith("null", idx)) {
+				return null;
+			}
+			if (c == '-' || Character.isDigit(c)) {
+				return readNumberToken(json, idx);
+			}
+			idx = afterKey + 1;
+		}
+		return null;
+	}
+
+	private static int skipWhitespaceAndColon(String json, int idx) {
+		while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
+			idx++;
+		}
+		if (idx >= json.length() || json.charAt(idx) != ':') {
+			return -1;
+		}
+		idx++;
+		while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
+			idx++;
+		}
+		return idx;
+	}
+
+	private static String readNumberToken(String json, int start) {
+		int idx = start;
+		if (idx < json.length() && json.charAt(idx) == '-') {
+			idx++;
+		}
+		int begin = start;
+		while (idx < json.length()) {
+			char c = json.charAt(idx);
+			if (Character.isDigit(c)) {
+				idx++;
+				continue;
+			}
+			break;
+		}
+		if (idx == begin || (idx == begin + 1 && json.charAt(begin) == '-')) {
+			return null;
+		}
+		return json.substring(begin, idx);
 	}
 
 	private static String readQuotedString(String json, int start) {
@@ -108,7 +447,33 @@ final class TodoistJson {
 		for (int idx = start; idx < json.length(); idx++) {
 			char c = json.charAt(idx);
 			if (escaped) {
-				sb.append(c);
+				if (c == 'u') {
+					if (idx + 4 < json.length()) {
+						try {
+							int code = Integer.parseInt(json.substring(idx + 1, idx + 5), 16);
+							sb.append((char) code);
+							idx += 4;
+						}
+						catch (NumberFormatException e) {
+							sb.append(c);
+						}
+					}
+					else {
+						sb.append(c);
+					}
+				}
+				else if (c == 'n') {
+					sb.append('\n');
+				}
+				else if (c == 'r') {
+					sb.append('\r');
+				}
+				else if (c == 't') {
+					sb.append('\t');
+				}
+				else {
+					sb.append(c);
+				}
 				escaped = false;
 				continue;
 			}

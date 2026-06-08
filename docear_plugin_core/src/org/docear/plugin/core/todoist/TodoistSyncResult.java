@@ -38,6 +38,10 @@ final class TodoistSyncResult {
 		updatedLines.add(formatLine(sectionName, record));
 	}
 
+	void addMoved(TodoistReminderRecord record, String sectionName) {
+		addUpdated(record, sectionName);
+	}
+
 	void addSkipped(TodoistReminderRecord record, String sectionName) {
 		skipped++;
 		skippedLines.add(formatLine(sectionName, record));

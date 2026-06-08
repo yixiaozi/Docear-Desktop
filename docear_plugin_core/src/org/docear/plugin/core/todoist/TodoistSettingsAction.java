@@ -29,6 +29,8 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 
 	static void showSettingsDialog() {
 		final JTextField projectField = new JTextField(TodoistConfig.getProjectName(), 32);
+		final JTextField projectIdField = new JTextField(TodoistConfig.getProjectId(), 32);
+		final JTextField importTargetField = new JTextField(TodoistConfig.getImportTargetFile().getAbsolutePath(), 32);
 		final JPasswordField tokenField = new JPasswordField(TodoistConfig.getApiToken(), 32);
 		final JPanel panel = new JPanel(new GridBagLayout());
 		GridBagConstraints c = new GridBagConstraints();
@@ -52,6 +54,24 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		panel.add(projectField, c);
 		c.gridx = 0;
 		c.gridy = 2;
+		c.fill = GridBagConstraints.NONE;
+		c.weightx = 0;
+		panel.add(new JLabel(TextUtils.getText("todoist.settings.project_id")), c);
+		c.gridx = 1;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		c.weightx = 1.0;
+		panel.add(projectIdField, c);
+		c.gridx = 0;
+		c.gridy = 3;
+		c.fill = GridBagConstraints.NONE;
+		c.weightx = 0;
+		panel.add(new JLabel(TextUtils.getText("todoist.settings.import_target")), c);
+		c.gridx = 1;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		c.weightx = 1.0;
+		panel.add(importTargetField, c);
+		c.gridx = 0;
+		c.gridy = 4;
 		c.gridwidth = 2;
 		panel.add(new JLabel(TextUtils.getText("todoist.settings.hint")), c);
 
@@ -63,5 +83,10 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		}
 		TodoistConfig.setApiToken(new String(tokenField.getPassword()));
 		TodoistConfig.setProjectName(projectField.getText());
+		String projectId = projectIdField.getText().trim();
+		if (projectId.length() > 0) {
+			TodoistConfig.setProjectId(projectId, projectField.getText().trim());
+		}
+		TodoistConfig.setImportTargetFile(importTargetField.getText());
 	}
 }

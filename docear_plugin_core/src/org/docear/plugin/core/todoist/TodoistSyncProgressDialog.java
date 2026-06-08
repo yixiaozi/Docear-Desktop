@@ -44,9 +44,12 @@ final class TodoistSyncProgressDialog extends JDialog implements TodoistSyncProg
 	private int totalScanned;
 	private volatile boolean finished;
 	private TodoistSyncResult finalResult;
+	private final boolean importMode;
 
-	private TodoistSyncProgressDialog(Frame owner) {
-		super(owner, TextUtils.getText("todoist.sync.title"), false);
+	private TodoistSyncProgressDialog(Frame owner, boolean importMode) {
+		super(owner, importMode ? TextUtils.getText("todoist.import.title") : TextUtils.getText("todoist.sync.title"),
+				false);
+		this.importMode = importMode;
 		setLayout(new BorderLayout(8, 8));
 		((JPanel) getContentPane()).setBorder(new EmptyBorder(10, 10, 10, 10));
 
@@ -93,11 +96,18 @@ final class TodoistSyncProgressDialog extends JDialog implements TodoistSyncProg
 		setMinimumSize(new Dimension(640, 420));
 		setSize(720, 480);
 		setLocationRelativeTo(owner);
-		appendLog(TextUtils.getText("todoist.sync.live.start"));
+		appendLog(importMode ? TextUtils.getText("todoist.import.live.start")
+				: TextUtils.getText("todoist.sync.live.start"));
 	}
 
 	static TodoistSyncProgressDialog open(Frame owner) {
-		TodoistSyncProgressDialog dialog = new TodoistSyncProgressDialog(owner);
+		TodoistSyncProgressDialog dialog = new TodoistSyncProgressDialog(owner, false);
+		dialog.setVisible(true);
+		return dialog;
+	}
+
+	static TodoistSyncProgressDialog openImport(Frame owner) {
+		TodoistSyncProgressDialog dialog = new TodoistSyncProgressDialog(owner, true);
 		dialog.setVisible(true);
 		return dialog;
 	}
@@ -205,8 +215,10 @@ final class TodoistSyncProgressDialog extends JDialog implements TodoistSyncProg
 					countFailed = result.failed;
 					countClosed = result.closed;
 				}
-				appendLog(TextUtils.getText("todoist.sync.live.done"));
-				statusLabel.setText(TextUtils.getText("todoist.sync.live.done"));
+				appendLog(importMode ? TextUtils.getText("todoist.import.live.done")
+						: TextUtils.getText("todoist.sync.live.done"));
+				statusLabel.setText(importMode ? TextUtils.getText("todoist.import.live.done")
+						: TextUtils.getText("todoist.sync.live.done"));
 				progressLabel.setText("");
 				updateSummary();
 				updateTabTitles();
@@ -220,10 +232,18 @@ final class TodoistSyncProgressDialog extends JDialog implements TodoistSyncProg
 
 	private void updateSummary() {
 		String project = finalResult != null && finalResult.projectName != null ? finalResult.projectName
-				: TodoistConfig.getProjectName();
-		String summary = TextUtils.format("todoist.sync.summary", new Object[] {
-				Integer.valueOf(totalScanned), project, Integer.valueOf(countCreated), Integer.valueOf(countUpdated),
-				Integer.valueOf(countSkipped), Integer.valueOf(countClosed), Integer.valueOf(countFailed) });
+				: (importMode ? TodoistConfig.getImportTargetFile().getAbsolutePath() : TodoistConfig.getProjectName());
+		String summary;
+		if (importMode) {
+			summary = TextUtils.format("todoist.import.summary", new Object[] {
+					Integer.valueOf(totalScanned), project, Integer.valueOf(countCreated),
+					Integer.valueOf(countFailed) });
+		}
+		else {
+			summary = TextUtils.format("todoist.sync.summary", new Object[] {
+					Integer.valueOf(totalScanned), project, Integer.valueOf(countCreated), Integer.valueOf(countUpdated),
+					Integer.valueOf(countSkipped), Integer.valueOf(countClosed), Integer.valueOf(countFailed) });
+		}
 		summaryLabel.setText("<html>" + escapeHtml(summary).replace("\n", "<br/>") + "</html>");
 	}
 

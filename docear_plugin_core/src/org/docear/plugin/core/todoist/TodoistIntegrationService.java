@@ -14,8 +14,10 @@ public final class TodoistIntegrationService {
 		TodoistConfig.registerDefaults();
 		TodoistConfig.getApiToken();
 		modeController.addAction(new TodoistSyncAction());
+		modeController.addAction(new TodoistImportAction());
 		modeController.addAction(new TodoistSettingsAction());
 		Controller.getCurrentController().addAction(modeController.getAction(TodoistSyncAction.KEY));
+		Controller.getCurrentController().addAction(modeController.getAction(TodoistImportAction.KEY));
 		Controller.getCurrentController().addAction(modeController.getAction(TodoistSettingsAction.KEY));
 		modeController.addMenuContributor(new IMenuContributor() {
 			public void updateMenus(ModeController mc, MenuBuilder builder) {
@@ -32,6 +34,7 @@ public final class TodoistIntegrationService {
 		}
 		builder.addSeparator(menuPath, MenuBuilder.AS_CHILD);
 		builder.addAction(menuPath, modeController.getAction(TodoistSyncAction.KEY), MenuBuilder.AS_CHILD);
+		builder.addAction(menuPath, modeController.getAction(TodoistImportAction.KEY), MenuBuilder.AS_CHILD);
 		builder.addAction(menuPath, modeController.getAction(TodoistSettingsAction.KEY), MenuBuilder.AS_CHILD);
 	}
 }
