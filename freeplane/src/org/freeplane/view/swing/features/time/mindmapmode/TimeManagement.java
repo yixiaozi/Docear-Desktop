@@ -315,6 +315,7 @@ class TimeManagement implements PropertyChangeListener, IMapSelectionListener {
 	public final static String REMINDER_HOOK_NAME = "plugins/TimeManagementReminder.xml";
 	private static TimeManagement sCurrentlyOpenTimeManagement = null;
 	private JDialog dialog;
+	private SimpleReminderDialogPanel simpleReminderPanel;
 	private final ReminderHook reminderHook;
 	private PatternFormat dateFormat;
 	private INodeChangeListener nodeChangeListener;
@@ -370,30 +371,37 @@ class TimeManagement implements PropertyChangeListener, IMapSelectionListener {
 
 	void showDialog() {
 		if (TimeManagement.sCurrentlyOpenTimeManagement != null) {
-			TimeManagement.sCurrentlyOpenTimeManagement.dialog.getContentPane().setVisible(true);
+			TimeManagement.sCurrentlyOpenTimeManagement.dialog.toFront();
+			TimeManagement.sCurrentlyOpenTimeManagement.simpleReminderPanel.focusInput();
 			return;
 		}
 		TimeManagement.sCurrentlyOpenTimeManagement = this;
-		dialog = new JDialog(Controller.getCurrentController().getViewController().getFrame(), false /*not modal*/);
-		final JTimePanel timePanel =createTimePanel(dialog, true, 4);
-		nodeSelectionListener = new INodeSelectionListener() {
-			public void onSelect(NodeModel node) {
-				timePanel.update(node);
+		dialog = new JDialog(Controller.getCurrentController().getViewController().getFrame(), true);
+		simpleReminderPanel = new SimpleReminderDialogPanel(reminderHook, new Runnable() {
+			public void run() {
+				disposeDialog();
 			}
-			
-			public void onDeselect(NodeModel node) {
+		});
+		nodeSelectionListener = new INodeSelectionListener() {
+			public void onSelect(final NodeModel node) {
+				simpleReminderPanel.loadFromSelectedNode();
+			}
+
+			public void onDeselect(final NodeModel node) {
 			}
 		};
 		getMindMapController().getMapController().addNodeSelectionListener(nodeSelectionListener);
 		nodeChangeListener = new INodeChangeListener() {
-			public void nodeChanged(NodeChangeEvent event) {
+			public void nodeChanged(final NodeChangeEvent event) {
 				final NodeModel node = event.getNode();
-				if(event.getProperty().equals(ReminderExtension.class) && node.equals(getMindMapController().getMapController().getSelectedNode()))
-						timePanel.update(node);
+				if (event.getProperty().equals(ReminderExtension.class)
+						&& node.equals(getMindMapController().getMapController().getSelectedNode())) {
+					simpleReminderPanel.loadFromSelectedNode();
+				}
 			}
 		};
 		getMindMapController().getMapController().addNodeChangeListener(nodeChangeListener);
-		
+
 		dialog.setTitle(getResourceString("plugins/TimeManagement.xml_WindowTitle"));
 		dialog.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 		dialog.addWindowListener(new WindowAdapter() {
@@ -403,9 +411,6 @@ class TimeManagement implements PropertyChangeListener, IMapSelectionListener {
 			}
 		});
 		final Action action = new AbstractAction() {
-			/**
-			 * 
-			 */
 			private static final long serialVersionUID = 1L;
 
 			public void actionPerformed(final ActionEvent arg0) {
@@ -413,10 +418,16 @@ class TimeManagement implements PropertyChangeListener, IMapSelectionListener {
 			}
 		};
 		UITools.addEscapeActionToDialog(dialog, action);
-		dialog.setContentPane(timePanel);
+		dialog.setContentPane(simpleReminderPanel);
+		dialog.getRootPane().setDefaultButton(simpleReminderPanel.getOkButton());
 		dialog.pack();
 		UITools.setBounds(dialog, -1, -1, dialog.getWidth(), dialog.getHeight());
 		dialog.setVisible(true);
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				simpleReminderPanel.focusInput();
+			}
+		});
 	}
 	
 	public JTimePanel createTimePanel(final Dialog dialog, boolean useTriple, int colCount) {

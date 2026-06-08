@@ -1,5 +1,6 @@
 package org.docear.plugin.core;
 
+import java.awt.Component;
 import java.awt.EventQueue;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
@@ -15,6 +16,7 @@ import java.util.Properties;
 
 import javax.swing.AbstractAction;
 import javax.swing.ImageIcon;
+import javax.swing.JComponent;
 import javax.swing.JMenu;
 import javax.swing.JOptionPane;
 import javax.swing.JViewport;
@@ -405,6 +407,7 @@ public class CoreConfiguration extends ALanguageController {
 				maximizeMapHandler.addCollapsableResizer(getFBarResizer());
 				maximizeMapHandler.addCollapsableResizer(getIconBarResizer());
 				maximizeMapHandler.addCollapsableResizer(getStatusLineResizer());
+				maximizeMapHandler.addCollapsableResizer(getFormatPanelResizer());
 			}
 		});
 		
@@ -764,6 +767,57 @@ public class CoreConfiguration extends ALanguageController {
 		WorkspaceController.getModeExtension(modeController).getIOController().registerNodeActionListener(AWorkspaceTreeNode.class, WorkspaceActionEvent.WSNODE_OPEN_DOCUMENT, new WorkspaceOpenDocumentListener());
 	}
 	
+	private OneTouchCollapseResizer getFormatPanelResizer() {
+		return new OneTouchCollapseResizer(Direction.RIGHT, CollapseDirection.COLLAPSE_RIGHT) {
+			private static final long serialVersionUID = 1L;
+			private static final String TABBEDPANE_VIEW_COLLAPSED = "tabbed_pane.collapsed";
+
+			private OneTouchCollapseResizer getFormatOtcr() {
+				final JComponent formatToolbar = Controller.getCurrentModeController()
+				    .getUserInputListenerFactory().getToolBar("/format");
+				if (formatToolbar == null || formatToolbar.getComponentCount() == 0) {
+					return null;
+				}
+				final Component component = formatToolbar.getComponent(0);
+				if (component instanceof OneTouchCollapseResizer) {
+					return (OneTouchCollapseResizer) component;
+				}
+				return null;
+			}
+
+			@Override
+			public boolean isExpanded() {
+				final OneTouchCollapseResizer otcr = getFormatOtcr();
+				if (otcr != null) {
+					return otcr.isExpanded();
+				}
+				return !Boolean.parseBoolean(ResourceController.getResourceController().getProperty(
+				    TABBEDPANE_VIEW_COLLAPSED, "false"));
+			}
+
+			@Override
+			public void setExpanded(boolean enabled) {
+				final OneTouchCollapseResizer otcr = getFormatOtcr();
+				if (otcr != null && enabled != otcr.isExpanded()) {
+					otcr.setExpanded(enabled);
+				}
+			}
+
+			@Override
+			protected void initDefaults() {
+				super.initDefaults();
+				ResourceController.getResourceController().addPropertyChangeListener(new IFreeplanePropertyListener() {
+					@Override
+					public void propertyChanged(String propertyName, String newValue, String oldValue) {
+						if (TABBEDPANE_VIEW_COLLAPSED.equals(propertyName)) {
+							fireCollapseStateChanged(null, !Boolean.parseBoolean(newValue));
+						}
+					}
+				});
+			}
+		};
+	}
+
 	private OneTouchCollapseResizer getStatusLineResizer() {
 		return new OneTouchCollapseResizer(Direction.DOWN, CollapseDirection.COLLAPSE_DOWN) {
 			private static final long serialVersionUID = 1L;
