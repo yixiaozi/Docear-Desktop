@@ -51,6 +51,8 @@ import org.freeplane.features.url.UrlManager;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
 import org.freeplane.plugin.workspace.actions.EditFavoriteTagsAction;
+import org.freeplane.plugin.workspace.actions.EditNodePinTagsAction;
+import org.freeplane.plugin.workspace.actions.ToggleNodePinAction;
 import org.freeplane.plugin.workspace.actions.FileNodeDeleteAction;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 import org.freeplane.plugin.workspace.actions.ToggleFavoriteAction;
@@ -79,7 +81,9 @@ import org.freeplane.plugin.workspace.components.DraggableTabbedPane;
 import org.freeplane.plugin.workspace.components.IWorkspaceView;
 import org.freeplane.plugin.workspace.components.TreeView;
 import org.freeplane.plugin.workspace.components.favorites.FavoritesTabPanel;
+import org.freeplane.plugin.workspace.components.nodepins.PinnedNodesTabInstaller;
 import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
+import org.freeplane.plugin.workspace.features.nodepins.NodePinsIndex;
 import org.freeplane.plugin.workspace.creator.DefaultFileNodeCreator;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
 import org.freeplane.plugin.workspace.features.AWorkspaceModeExtension;
@@ -143,6 +147,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		setupActions(modeController);
 		setupModel(modeController);
 		setupView(modeController);
+		setupPinnedNodesTab(modeController);
 	}
 	
 	private void setupController(ModeController modeController) {
@@ -201,6 +206,10 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				final WorkspaceProjectOpenLocationAction openLocAction = new WorkspaceProjectOpenLocationAction();
 				builder.addAction(MENU_PROJECT_KEY, openLocAction, MenuBuilder.AS_CHILD);
 				
+				builder.addSeparator("/node_popup", MenuBuilder.AS_CHILD);
+				builder.addAction("/node_popup", WorkspaceController.getAction(ToggleNodePinAction.KEY), MenuBuilder.AS_CHILD);
+				builder.addAction("/node_popup", WorkspaceController.getAction(EditNodePinTagsAction.KEY), MenuBuilder.AS_CHILD);
+
 				projectMenu.getPopupMenu().addPopupMenuListener(new PopupMenuListener() {
 					public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
 						rmProjectAction.setEnabled();
@@ -262,6 +271,11 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private void setupModel(ModeController modeController) {
 		load();
 		FavoritesAndTagsStore.getInstance().reloadAllProjects();
+		NodePinsIndex.getInstance().rescan();
+	}
+
+	private void setupPinnedNodesTab(final ModeController modeController) {
+		PinnedNodesTabInstaller.install(modeController);
 	}
 
 	private void setupView(ModeController modeController) {
@@ -390,6 +404,12 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		WorkspaceController.addAction(new ToggleFavoriteAction());
 		WorkspaceController.addAction(new EditFavoriteTagsAction());
 		WorkspaceController.addAction(new MindMapOpenLocationAction());
+		final ToggleNodePinAction toggleNodePinAction = new ToggleNodePinAction();
+		WorkspaceController.addAction(toggleNodePinAction);
+		modeController.getMapController().addListenerForAction(toggleNodePinAction);
+		final EditNodePinTagsAction editNodePinTagsAction = new EditNodePinTagsAction();
+		WorkspaceController.addAction(editNodePinTagsAction);
+		modeController.getMapController().addListenerForAction(editNodePinTagsAction);
 	}
 	
 	private IProjectSelectionListener getWSSelectionListener(final RibbonMapChangeAdapter mapChangeAdapter) {

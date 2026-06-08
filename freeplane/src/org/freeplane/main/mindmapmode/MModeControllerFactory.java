@@ -87,6 +87,7 @@ import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.map.mindmapmode.NewParentNode;
 import org.freeplane.features.mapio.mindmapmode.MMapIO;
 import org.freeplane.features.mode.Controller;
+import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.features.nodelocation.LocationController;
 import org.freeplane.features.nodelocation.mindmapmode.MLocationController;
@@ -174,6 +175,7 @@ public class MModeControllerFactory {
 		tabs.add("\u5468\u671f\u63d0\u9192", new EnhancedAllRecurringRemindersTabPanel());
 		tabs.add("\u5f85\u529e", new TodoTabPanel(modeController));
 		tabs.add("\u5168\u90e8\u5f85\u529e", new EnhancedAllTodosTabPanel());
+		installWorkspacePinnedNodesTab(modeController, tabs);
 		tabs.add("\u5168\u90e8\u53d1\u5e03", new EnhancedAllPublishTabPanel());
 		tabs.add("\u6700\u8fd1\u4fee\u6539", new EnhancedAllRecentlyModified());
 		new AttributePanelManager(modeController);
@@ -390,5 +392,24 @@ public class MModeControllerFactory {
 				return icon;
 			}
 		});
+	}
+
+	private void installWorkspacePinnedNodesTab(final ModeController modeController, final JComponent tabsComponent) {
+		if (!(tabsComponent instanceof JTabbedPane)) {
+			return;
+		}
+		try {
+			final Class installerClass = Class
+					.forName("org.freeplane.plugin.workspace.components.nodepins.PinnedNodesTabInstaller");
+			final java.lang.reflect.Method method = installerClass.getMethod("tryInstall", ModeController.class,
+					JTabbedPane.class);
+			method.invoke(null, modeController, (JTabbedPane) tabsComponent);
+		}
+		catch (final ClassNotFoundException e) {
+			// workspace plugin not loaded
+		}
+		catch (final Exception e) {
+			LogUtils.warn(e);
+		}
 	}
 }
