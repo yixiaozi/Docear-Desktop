@@ -183,8 +183,11 @@ public class FolderFileNode extends DefaultFileNode implements TreeExpansionList
 	}
 
 	public void treeExpanded(TreeExpansionEvent event) {
-		if(!inRefresh && getChildCount() <= 0) {
+		if (!inRefresh && getChildCount() <= 0) {
 			loadDirectoryFiles(getFile());
+			if (getModel() != null) {
+				getModel().reload(this);
+			}
 		}
 	}
 

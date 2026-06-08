@@ -32,7 +32,7 @@ public final class FavoriteUriUtils {
 	}
 
 	public static String toStoredUri(final AWorkspaceTreeNode node) {
-		final File file = WorkspaceMindMapUtils.getMindMapFile(node);
+		final File file = WorkspaceMindMapUtils.getWorkspaceFile(node);
 		if (file == null) {
 			return null;
 		}

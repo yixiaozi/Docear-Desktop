@@ -15,6 +15,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.features.map.LastSelectionMapExtension;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
@@ -35,7 +36,6 @@ import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 final class QuickCaptureController {
 	private static final String PROP_INBOX_DIRECTORY = "quickcapture.inbox_directory";
 	private static final String PROP_INBOX_FILENAME = "quickcapture.inbox_filename";
-	private static final String DEFAULT_INBOX_DIRECTORY = "E:\\yixiaozi";
 	private static final String DEFAULT_INBOX_FILENAME = "\u6536\u4ef6\u7bb1.mm";
 	private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm", Locale.CHINA);
 
@@ -160,12 +160,15 @@ final class QuickCaptureController {
 	}
 
 	private static File resolveInboxFile() {
-		final String dirPath = ResourceController.getResourceController().getProperty(PROP_INBOX_DIRECTORY,
-		        DEFAULT_INBOX_DIRECTORY);
+		String dirPath = ResourceController.getResourceController().getProperty(PROP_INBOX_DIRECTORY, "");
 		final String filename = ResourceController.getResourceController().getProperty(PROP_INBOX_FILENAME,
 		        DEFAULT_INBOX_FILENAME);
 		if (dirPath == null || dirPath.trim().length() == 0) {
-			return null;
+			final File scanRoot = MindMapDataRootResolver.getPrimaryScanRoot();
+			if (scanRoot == null) {
+				return null;
+			}
+			dirPath = scanRoot.getAbsolutePath();
 		}
 		final File dir = new File(dirPath.trim());
 		if (!dir.isDirectory() && !dir.mkdirs()) {

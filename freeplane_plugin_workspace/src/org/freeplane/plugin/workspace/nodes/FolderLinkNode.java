@@ -266,8 +266,11 @@ public class FolderLinkNode extends AFolderNode implements IWorkspaceNodeActionL
 	}
 	
 	public void treeExpanded(TreeExpansionEvent event) {
-		if(!inRefresh && getChildCount() <= 0) {
+		if (!inRefresh && getChildCount() <= 0) {
 			loadDirectoryFiles(getFile());
+			if (getModel() != null) {
+				getModel().reload(this);
+			}
 		}
 	}
 

@@ -435,6 +435,8 @@
 	</menu_category>
 	<menu_category name="map_popup">		
 		<menu_action action="ToggleFullScreenAction" />
+		<!-- DOCEAR: hidden map popup items (rarely used) -->
+		<!--
 		<menu_action action="ToggleMenubarAction" menu_key="MP_ToggleMenubarAction"/>
 		<menu_action action="ToggleToolbarAction" />
 		<menu_action action="ShowFilterToolbarAction" />
@@ -446,20 +448,21 @@
 		<menu_action action="ShowFormatPanel" />
 		<menu_action action="ShowHideNoteAction" accelerator="control GREATER" />
 			<menu_separator />
-		<menu_action action="MapBackgroundColorAction" />	
-			<menu_separator />
 		<menu_action action="ViewLayoutTypeAction.OUTLINE" />
 		<menu_action action="FitToPage" />
 		<menu_action action="CenterSelectedNodeAction"  />
 		<menu_action action="MoveToRootAction" accelerator="ESCAPE" />
-		<menu_action action="GotoNodeAction"/>				
+		<menu_action action="GotoNodeAction"/>
+		-->
+			<menu_separator />
+		<menu_action action="MapBackgroundColorAction" />	
 	</menu_category>
 	<menu_category name="node_popup">
-	    <!-- DOCEAR -->
+	    <!-- DOCEAR: hidden node popup items (rarely used) -->
+	    <!--
 	    <menu_category name="pdf_management" plugin="org.docear.plugin.pdfutilities" menu_key="pdf_management"/>
 	    <menu_category name="reference_management" plugin="org.docear.plugin.bibtex" menu_key="reference_management"/>
-	    <menu_category name="monitoring" plugin="org.docear.plugin.pdfutilities" menu_key="monitoring"/>  
-	    <!-- DOCEAR -->        
+	    <menu_category name="monitoring" plugin="org.docear.plugin.pdfutilities" menu_key="monitoring"/>
 		<menu_action action="EditLongAction" accelerator="alt ENTER" />
 		<menu_action action="EditDetailsInDialogAction"  />
 		<menu_action action="EditDetailsAction"/>
@@ -498,11 +501,12 @@
 		<menu_action action="CopyAction" accelerator="control C" />
 		<menu_action action="CopySingleAction" accelerator="control shift C" />
 		<menu_action action="CopyIDAction" />
-		<menu_action action="CopyNodeURIAction" />
 		<menu_action action="PasteAction" accelerator="control V" />
-		<menu_action action="SortNodes" />
 		<menu_action action="UndoAction" />
 		<menu_action action="RedoAction" />
+	    -->
+		<menu_action action="CopyNodeURIAction" />
+		<menu_action action="SortNodes" />
 		</menu_category>
 	<menu_category name="main_toolbar">
 		<menu_separator />

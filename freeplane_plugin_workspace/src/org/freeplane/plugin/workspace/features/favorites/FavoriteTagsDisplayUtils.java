@@ -12,18 +12,15 @@ public final class FavoriteTagsDisplayUtils {
 	}
 
 	public static Set getFavoriteTags(final AWorkspaceTreeNode node) {
-		if (!WorkspaceMindMapUtils.isMindMapNode(node)) {
+		if (!WorkspaceMindMapUtils.isWorkspaceFileNode(node)) {
 			return Collections.EMPTY_SET;
 		}
-		final String uri = WorkspaceMindMapUtils.getMindMapUri(node);
+		final String uri = WorkspaceMindMapUtils.getWorkspaceFileUri(node);
 		if (uri == null) {
 			return Collections.EMPTY_SET;
 		}
-		final FavoritesAndTagsStore store = FavoritesAndTagsStore.getInstance();
-		if (!store.isFavorite(uri)) {
-			return Collections.EMPTY_SET;
-		}
-		return store.getTags(uri);
+		final Set tags = FavoritesAndTagsStore.getInstance().getTags(uri);
+		return tags == null ? Collections.EMPTY_SET : tags;
 	}
 
 	public static String formatTagsSuffixHtml(final AWorkspaceTreeNode node, final boolean selected) {

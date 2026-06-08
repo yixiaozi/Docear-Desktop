@@ -54,6 +54,7 @@ import org.freeplane.plugin.workspace.mindmapmode.FileFolderDropHandler;
 import org.freeplane.plugin.workspace.mindmapmode.InputController;
 import org.freeplane.plugin.workspace.mindmapmode.VirtualFolderDropHandler;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
+import org.freeplane.plugin.workspace.model.MyFilesTreeDisplayHelper;
 import org.freeplane.plugin.workspace.model.WorkspaceModel;
 import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 import org.freeplane.plugin.workspace.model.project.IProjectSelectionListener;
@@ -222,10 +223,10 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		if (!(root instanceof AWorkspaceTreeNode)) {
 			return;
 		}
-		List<AWorkspaceTreeNode> projects = getRawChildren((AWorkspaceTreeNode) root);
-		for (AWorkspaceTreeNode project : projects) {
+		final List<AWorkspaceTreeNode> topNodes = getRawChildren((AWorkspaceTreeNode) root);
+		for (AWorkspaceTreeNode node : topNodes) {
 			try {
-				project.refresh();
+				node.refresh();
 			}
 			catch (Exception e) {
 				LogUtils.warn(e);
@@ -350,7 +351,7 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		if (children.isEmpty()) {
 			return;
 		}
-		mTree.expandPath(node.getTreePath());
+		mTree.expandPath(getDisplayTreePath(node));
 		for (AWorkspaceTreeNode child : children) {
 			expandVisiblePathsRecursive(child);
 		}
@@ -460,18 +461,52 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		}
 	}
 
+	private List<AWorkspaceTreeNode> getHoistedWorkspaceRootChildren() {
+		if (sourceModel == null) {
+			return null;
+		}
+		try {
+			final List projects = WorkspaceController.getCurrentModel().getProjects();
+			if (projects == null || projects.size() != 1) {
+				return null;
+			}
+			final org.freeplane.plugin.workspace.model.project.AWorkspaceProject project =
+			    (org.freeplane.plugin.workspace.model.project.AWorkspaceProject) projects.get(0);
+			return MyFilesTreeDisplayHelper.getDisplayChildren(project.getModel().getRoot());
+		}
+		catch (Exception e) {
+			LogUtils.warn(e);
+			return null;
+		}
+	}
+
 	private List<AWorkspaceTreeNode> getRawChildren(AWorkspaceTreeNode parent) {
 		List<AWorkspaceTreeNode> children = new ArrayList<AWorkspaceTreeNode>();
 		if (parent == null) {
 			return children;
 		}
 		try {
+			if (sourceModel != null && parent == sourceModel.getRoot()) {
+				final List<AWorkspaceTreeNode> hoisted = getHoistedWorkspaceRootChildren();
+				if (hoisted != null && !hoisted.isEmpty()) {
+					return hoisted;
+				}
+			}
+			if (MyFilesTreeDisplayHelper.isProjectRoot(parent)) {
+				final List<AWorkspaceTreeNode> hoisted = MyFilesTreeDisplayHelper.getDisplayChildren(parent);
+				if (hoisted != null) {
+					return hoisted;
+				}
+			}
 			boolean useSourceModel = sourceModel != null && parent == sourceModel.getRoot();
 			int count = useSourceModel ? sourceModel.getChildCount(parent) : parent.getChildCount();
 			for (int i = 0; i < count; i++) {
 				Object child = useSourceModel ? sourceModel.getChild(parent, i) : parent.getChildAt(i);
 				if (child instanceof AWorkspaceTreeNode) {
-					children.add((AWorkspaceTreeNode) child);
+					final AWorkspaceTreeNode treeChild = (AWorkspaceTreeNode) child;
+					if (!MyFilesTreeDisplayHelper.isHiddenWorkspaceFolder(treeChild)) {
+						children.add(treeChild);
+					}
 				}
 			}
 		}
@@ -550,6 +585,42 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 	
 	public void setPreferredSize(Dimension size) {
 		super.setPreferredSize(new Dimension(Math.max(size.width, getMinimumSize().width), Math.max(size.height, getMinimumSize().height)));	
+	}
+
+	/**
+	 * Tree path compatible with {@link TreeModelProxy} when "My files" children are hoisted
+	 * above the project root (skips hidden project / my-files nodes in the ancestry).
+	 */
+	public TreePath getDisplayTreePath(AWorkspaceTreeNode node) {
+		if (node == null) {
+			return null;
+		}
+		final List<Object> path = new ArrayList<Object>();
+		AWorkspaceTreeNode current = node;
+		while (current != null) {
+			path.add(0, current);
+			current = getDisplayParent(current);
+		}
+		return new TreePath(path.toArray());
+	}
+
+	private AWorkspaceTreeNode getDisplayParent(AWorkspaceTreeNode node) {
+		final AWorkspaceTreeNode parent = node.getParent();
+		if (parent == null) {
+			return null;
+		}
+		if (parent instanceof FolderTypeMyFilesNode) {
+			final AWorkspaceTreeNode projectRoot = parent.getParent();
+			if (projectRoot != null && MyFilesTreeDisplayHelper.isProjectRoot(projectRoot)
+			        && getHoistedWorkspaceRootChildren() != null) {
+				return sourceModel != null ? sourceModel.getRoot() : projectRoot;
+			}
+			return projectRoot;
+		}
+		if (MyFilesTreeDisplayHelper.isProjectRoot(parent) && getHoistedWorkspaceRootChildren() != null) {
+			return sourceModel != null ? sourceModel.getRoot() : parent;
+		}
+		return parent;
 	}
 
 	public void expandPath(final TreePath treePath) {
@@ -676,7 +747,7 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 				}
 				runAfterModelChangeWhileFiltering();
 			} else {
-				TreeModelEvent out = withProxySource(e);
+				TreeModelEvent out = toDisplayModelEvent(withProxySource(e));
 				for (TreeModelListener l : copy) {
 					switch (eventKind) {
 					case 0: l.treeNodesChanged(out); break;
@@ -686,6 +757,24 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 					}
 				}
 			}
+		}
+
+		private TreeModelEvent toDisplayModelEvent(TreeModelEvent e) {
+			TreePath path = e.getTreePath();
+			if (path == null && e.getPath() != null) {
+				path = new TreePath(e.getPath());
+			}
+			if (path != null && path.getLastPathComponent() instanceof AWorkspaceTreeNode) {
+				final TreePath displayPath = TreeView.this.getDisplayTreePath(
+				    (AWorkspaceTreeNode) path.getLastPathComponent());
+				if (displayPath != null) {
+					path = displayPath;
+				}
+			}
+			if (e.getChildIndices() == null && e.getChildren() == null) {
+				return new TreeModelEvent(this, path);
+			}
+			return new TreeModelEvent(this, path, e.getChildIndices(), e.getChildren());
 		}
 
 		private void runAfterModelChangeWhileFiltering() {
@@ -743,9 +832,8 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		}
 
 		public Object getChild(Object parent, int index) {
-			if(parent == null) return null;
-			if (!hasSearchFilter()) {
-				return model.getChild(parent, index);
+			if (parent == null) {
+				return null;
 			}
 			if (!(parent instanceof AWorkspaceTreeNode)) {
 				return model.getChild(parent, index);
@@ -754,13 +842,12 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 			if (index < 0 || index >= children.size()) {
 				throw new ArrayIndexOutOfBoundsException(index);
 			}
-			return children.get(index);			
+			return children.get(index);
 		}
 
 		public int getChildCount(Object parent) {
-			if(parent == null) return 0;
-			if (!hasSearchFilter()) {
-				return model.getChildCount(parent);
+			if (parent == null) {
+				return 0;
 			}
 			if (!(parent instanceof AWorkspaceTreeNode)) {
 				return model.getChildCount(parent);
@@ -769,10 +856,10 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		}
 
 		public boolean isLeaf(Object node) {
-			if (!hasSearchFilter()) {
+			if (!(node instanceof AWorkspaceTreeNode)) {
 				return model.isLeaf(node);
 			}
-			return getChildCount(node) == 0;
+			return ((AWorkspaceTreeNode) node).isLeaf();
 		}
 
 		public void valueForPathChanged(TreePath path, Object newValue) {
@@ -787,9 +874,6 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		}
 
 		public int getIndexOfChild(Object parent, Object child) {
-			if (!hasSearchFilter()) {
-				return model.getIndexOfChild(parent, child);
-			}
 			if (!(parent instanceof AWorkspaceTreeNode) || !(child instanceof AWorkspaceTreeNode)) {
 				return model.getIndexOfChild(parent, child);
 			}

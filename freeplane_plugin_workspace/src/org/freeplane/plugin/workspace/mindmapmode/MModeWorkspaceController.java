@@ -2,6 +2,8 @@ package org.freeplane.plugin.workspace.mindmapmode;
 
 import java.awt.Container;
 import java.awt.Dimension;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.dnd.DropTarget;
 import java.awt.dnd.DropTargetDropEvent;
 import java.io.File;
@@ -21,6 +23,7 @@ import javax.swing.JComponent;
 import javax.swing.JMenu;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.PopupMenuEvent;
@@ -50,10 +53,13 @@ import org.freeplane.features.ui.ViewController;
 import org.freeplane.features.url.UrlManager;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
+import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
 import org.freeplane.plugin.workspace.actions.EditFavoriteTagsAction;
 import org.freeplane.plugin.workspace.actions.EditNodePinTagsAction;
 import org.freeplane.plugin.workspace.actions.ToggleNodePinAction;
 import org.freeplane.plugin.workspace.actions.FileNodeDeleteAction;
+import org.freeplane.plugin.workspace.actions.MindMapNodeOpenLocationAction;
+import org.freeplane.plugin.workspace.actions.MindMapPopupOpenLocationAction;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 import org.freeplane.plugin.workspace.actions.ToggleFavoriteAction;
 import org.freeplane.plugin.workspace.actions.FileNodeNewFileAction;
@@ -119,6 +125,11 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private static final String TAB_FILE_SEARCH = "file_search";
 	private static final String TAB_ALL_FILE_SEARCH = "all_file_search";
 	private static final String TAB_ACTIVITY = "activity";
+	private static final int SIDE_TAB_PRELOAD_DELAY_MS = 5000;
+	private static final int SIDE_TAB_PRELOAD_STAGGER_MS = 800;
+	private static final String[] BACKGROUND_PRELOAD_TAB_IDS = {
+			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY
+	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
 			TAB_WORKSPACE, TAB_FAVORITES, TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY
 	};
@@ -206,6 +217,8 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				final WorkspaceProjectOpenLocationAction openLocAction = new WorkspaceProjectOpenLocationAction();
 				builder.addAction(MENU_PROJECT_KEY, openLocAction, MenuBuilder.AS_CHILD);
 				
+				builder.addAction("/map_popup", WorkspaceController.getAction(MindMapPopupOpenLocationAction.KEY), MenuBuilder.AS_CHILD);
+				builder.addAction("/node_popup", WorkspaceController.getAction(MindMapNodeOpenLocationAction.KEY), MenuBuilder.AS_CHILD);
 				builder.addSeparator("/node_popup", MenuBuilder.AS_CHILD);
 				builder.addAction("/node_popup", WorkspaceController.getAction(ToggleNodePinAction.KEY), MenuBuilder.AS_CHILD);
 				builder.addAction("/node_popup", WorkspaceController.getAction(EditNodePinTagsAction.KEY), MenuBuilder.AS_CHILD);
@@ -360,14 +373,59 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		this.viewUpdater.run();
 		
 		getWorkspaceView().setModel(getModel());
+		// Expand workspace root only so top-level entries are visible; leave folders collapsed.
 		getView().expandPath(getModel().getRoot().getTreePath());
-		for(AWorkspaceProject project : getModel().getProjects()) {
-			getView().expandPath(project.getModel().getRoot().getTreePath());
-		}
 		
 		getView().getNodeTypeIconManager().addNodeTypeIconHandler(LinkTypeFileNode.class, new LinkTypeFileIconHandler());
 		getView().getNodeTypeIconManager().addNodeTypeIconHandler(DefaultFileNode.class, new DefaultFileNodeIconHandler());
 		getView().refreshView();
+		scheduleScanCachePreload();
+		scheduleSideTabBackgroundPreload();
+	}
+
+	private void scheduleScanCachePreload() {
+		try {
+			final Class cacheClass = Class.forName("org.freeplane.core.util.WorkspaceSideTabScanCache");
+			cacheClass.getMethod("schedulePreload", new Class[0]).invoke(null, new Object[0]);
+		}
+		catch (final Exception e) {
+			LogUtils.warn(e);
+		}
+	}
+
+	/**
+	 * After startup, silently create scan-heavy side tabs so their data is ready before the user opens them.
+	 */
+	private void scheduleSideTabBackgroundPreload() {
+		final Timer timer = new Timer(SIDE_TAB_PRELOAD_DELAY_MS, new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				((Timer) e.getSource()).stop();
+				preloadSideTabsSequentially(0);
+			}
+		});
+		timer.setRepeats(false);
+		timer.start();
+	}
+
+	private void preloadSideTabsSequentially(final int preloadIndex) {
+		if (preloadIndex >= BACKGROUND_PRELOAD_TAB_IDS.length) {
+			return;
+		}
+		final String tabId = BACKGROUND_PRELOAD_TAB_IDS[preloadIndex];
+		if (sideTabOrder.contains(tabId)) {
+			final int tabIndex = sideTabOrder.indexOf(tabId);
+			if (tabIndex >= 0) {
+				ensureSideTabLoaded(tabIndex);
+			}
+		}
+		final Timer nextTimer = new Timer(SIDE_TAB_PRELOAD_STAGGER_MS, new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				((Timer) e.getSource()).stop();
+				preloadSideTabsSequentially(preloadIndex + 1);
+			}
+		});
+		nextTimer.setRepeats(false);
+		nextTimer.start();
 	}
 		
 	private void setupActions(ModeController modeController) {
@@ -404,6 +462,8 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		WorkspaceController.addAction(new ToggleFavoriteAction());
 		WorkspaceController.addAction(new EditFavoriteTagsAction());
 		WorkspaceController.addAction(new MindMapOpenLocationAction());
+		WorkspaceController.addAction(new MindMapPopupOpenLocationAction());
+		WorkspaceController.addAction(new MindMapNodeOpenLocationAction());
 		final ToggleNodePinAction toggleNodePinAction = new ToggleNodePinAction();
 		WorkspaceController.addAction(toggleNodePinAction);
 		modeController.getMapController().addListenerForAction(toggleNodePinAction);

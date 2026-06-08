@@ -226,7 +226,16 @@ public abstract class AWorkspaceTreeNode implements Cloneable, TreeNode, Destruc
 		return children.get(childIndex); 
 	}
 
+	/** Raw model children (ignores display-only hoisting on project roots). */
+	public AWorkspaceTreeNode getModelChildAt(int childIndex) {
+		return children.get(childIndex);
+	}
+
 	public int getChildCount() {
+		return children.size();
+	}
+
+	public int getModelChildCount() {
 		return children.size();
 	}
 

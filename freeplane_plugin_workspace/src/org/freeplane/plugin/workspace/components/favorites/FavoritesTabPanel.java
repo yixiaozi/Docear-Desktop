@@ -237,9 +237,14 @@ public class FavoritesTabPanel extends JPanel {
 			return;
 		}
 		try {
-			final URL mapUrl = Compat.fileToUrl(file);
-			final MapIO mapIO = (MapIO) Controller.getCurrentModeController().getExtension(MapIO.class);
-			mapIO.newMap(mapUrl);
+			final URL fileUrl = Compat.fileToUrl(file);
+			if (WorkspaceMindMapUtils.isMindMapFileName(file.getName())) {
+				final MapIO mapIO = (MapIO) Controller.getCurrentModeController().getExtension(MapIO.class);
+				mapIO.newMap(fileUrl);
+			}
+			else {
+				Controller.getCurrentController().getViewController().openDocument(fileUrl);
+			}
 		}
 		catch (final Exception e) {
 			LogUtils.severe(e);
@@ -367,7 +372,7 @@ public class FavoritesTabPanel extends JPanel {
 					return true;
 				}
 				final String uri = FavoriteUriUtils.normalizeToStoredUri(extractUriFromTransfer(transferable));
-				if (uri != null && WorkspaceMindMapUtils.isMindMapUri(uri)) {
+				if (uri != null && WorkspaceMindMapUtils.isWorkspaceFileUri(uri)) {
 					store.addFavorite(uri);
 					persist();
 					return true;

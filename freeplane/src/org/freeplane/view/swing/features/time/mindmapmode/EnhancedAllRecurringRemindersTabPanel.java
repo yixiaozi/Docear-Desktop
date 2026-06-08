@@ -43,6 +43,7 @@ import javax.xml.parsers.SAXParserFactory;
 
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -54,7 +55,6 @@ import org.xml.sax.helpers.DefaultHandler;
 
 public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
-	private static final String HARD_CODED_SCAN_ROOT = "E:\\yixiaozi";
 
 	private static final class ReminderRecord {
 		private final File file;
@@ -265,9 +265,11 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 
 	private List collectAllMindmapFiles() {
 		Set roots = new HashSet();
-		File fixedRoot = new File(HARD_CODED_SCAN_ROOT);
-		if (fixedRoot.exists() && fixedRoot.isDirectory()) {
-			roots.add(fixedRoot);
+		final File[] scanRoots = MindMapDataRootResolver.getScanRoots();
+		for (int i = 0; i < scanRoots.length; i++) {
+			if (scanRoots[i] != null && scanRoots[i].exists() && scanRoots[i].isDirectory()) {
+				roots.add(scanRoots[i]);
+			}
 		}
 		List normalizedRoots = normalizeRoots(roots);
 		List files = new ArrayList();

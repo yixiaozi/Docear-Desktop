@@ -35,13 +35,14 @@ import javax.swing.SwingUtilities;
 import javax.swing.border.Border;
 
 import org.freeplane.core.util.LogUtils;
-import org.freeplane.core.util.TextUtils;
+import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.WorkspaceSearchFileMenuBridge;
+import org.freeplane.core.util.WorkspaceSideTabScanCache;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
 
 public class MindMapFileSearchPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
-	private static final String SCAN_ROOT = "E:\\yixiaozi";
 	
 	private final JTextField searchField = new JTextField();
 	private final DefaultListModel<FileResult> listModel = new DefaultListModel<FileResult>();
@@ -218,18 +219,16 @@ public class MindMapFileSearchPanel extends JPanel {
 		statusLabel.setText("刷新中...");
 		new Thread(new Runnable() {
 			public void run() {
-				List<File> newFiles = new ArrayList<File>();
-				File root = new File(SCAN_ROOT);
-				if (root.exists()) {
-					collectMindMapFiles(root, newFiles);
+				List<File> newFiles = WorkspaceSideTabScanCache.getMindMapFilesSnapshot();
+				if (newFiles == null) {
+					newFiles = new ArrayList<File>();
+					MindMapDataRootResolver.collectMindmapFiles(newFiles);
+					Collections.sort(newFiles, new Comparator<File>() {
+						public int compare(File a, File b) {
+							return Long.compare(b.lastModified(), a.lastModified());
+						}
+					});
 				}
-				
-				Collections.sort(newFiles, new Comparator<File>() {
-					public int compare(File a, File b) {
-						return Long.compare(b.lastModified(), a.lastModified());
-					}
-				});
-				
 				final List<File> finalFiles = newFiles;
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
@@ -326,29 +325,37 @@ public class MindMapFileSearchPanel extends JPanel {
 	}
 	
 	private void showPopupMenu(java.awt.event.MouseEvent e) {
+		final int index = resultList.locationToIndex(e.getPoint());
+		if (index < 0) {
+			return;
+		}
+		resultList.setSelectedIndex(index);
 		final FileResult result = resultList.getSelectedValue();
 		if (result == null) {
 			return;
 		}
-		
-		JPopupMenu popupMenu = new JPopupMenu();
-		
-		JMenuItem openItem = new JMenuItem("打开导图");
+
+		final JPopupMenu popupMenu = new JPopupMenu();
+
+		final JMenuItem openItem = new JMenuItem("打开导图");
 		openItem.addActionListener(new java.awt.event.ActionListener() {
-			public void actionPerformed(java.awt.event.ActionEvent e) {
+			public void actionPerformed(java.awt.event.ActionEvent ev) {
 				openSelectedResult();
 			}
 		});
 		popupMenu.add(openItem);
-		
-		JMenuItem openFolderItem = new JMenuItem("打开所在目录");
-		openFolderItem.addActionListener(new java.awt.event.ActionListener() {
-			public void actionPerformed(java.awt.event.ActionEvent e) {
-				openContainingFolder(result.file);
-			}
-		});
-		popupMenu.add(openFolderItem);
-		
+
+		popupMenu.addSeparator();
+		if (!WorkspaceSearchFileMenuBridge.appendFavoriteItems(popupMenu, result.file)) {
+			final JMenuItem openFolderItem = new JMenuItem("打开所在文件夹");
+			openFolderItem.addActionListener(new java.awt.event.ActionListener() {
+				public void actionPerformed(java.awt.event.ActionEvent ev) {
+					openContainingFolder(result.file);
+				}
+			});
+			popupMenu.add(openFolderItem);
+		}
+
 		popupMenu.show(resultList, e.getX(), e.getY());
 	}
 	

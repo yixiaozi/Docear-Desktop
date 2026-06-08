@@ -728,6 +728,8 @@ public class ReferencesController extends ALanguageController implements IDocear
 //				builder.addAction(MENU_BAR + REFERENCE_MANAGEMENT_MENU + UPDATE_REFERENCES_MENU, ConvertSplmmReferences,
 //						MenuBuilder.AS_CHILD);
 				
+				// Docear: References submenu hidden from node context menu
+				if (referencesCategory != null) {
 				JMenu refMenu = new JMenu(TextUtils.getText(REFERENCE_MANAGEMENT_MENU_LANG_KEY));
 				builder.addMenuItem(referencesCategory, refMenu , referencesCategory + REFERENCE_MANAGEMENT_MENU, MenuBuilder.AS_CHILD);
 				builder.addSeparator(referencesCategory + REFERENCE_MANAGEMENT_MENU, MenuBuilder.AFTER);
@@ -794,6 +796,7 @@ public class ReferencesController extends ALanguageController implements IDocear
 					@Override
 					public void popupMenuCanceled(PopupMenuEvent e) {}
 				});
+				}
 
 			}
 		});

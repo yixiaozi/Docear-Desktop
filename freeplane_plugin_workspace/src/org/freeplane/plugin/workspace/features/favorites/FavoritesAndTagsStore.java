@@ -144,7 +144,7 @@ public final class FavoritesAndTagsStore {
 					continue;
 				}
 				final String storedUri = FavoriteUriUtils.fromRelativePath(project, path);
-				if (storedUri != null && WorkspaceMindMapUtils.isMindMapUri(storedUri) && !projectFavorites.containsKey(storedUri)) {
+				if (storedUri != null && WorkspaceMindMapUtils.isWorkspaceFileUri(storedUri) && !projectFavorites.containsKey(storedUri)) {
 					projectFavorites.put(storedUri, Boolean.TRUE);
 				}
 			}
@@ -291,7 +291,7 @@ public final class FavoritesAndTagsStore {
 
 	public void addFavorite(final String uri) {
 		final String storedUri = FavoriteUriUtils.normalizeToStoredUri(uri);
-		if (storedUri == null || !WorkspaceMindMapUtils.isMindMapUri(storedUri) || favoriteUris.contains(storedUri)) {
+		if (storedUri == null || !WorkspaceMindMapUtils.isWorkspaceFileUri(storedUri) || favoriteUris.contains(storedUri)) {
 			return;
 		}
 		final AWorkspaceProject project = FavoriteUriUtils.resolveProject(storedUri);

@@ -21,13 +21,13 @@ public class EditFavoriteTagsAction extends AWorkspaceAction {
 
 	@Override
 	public void setEnabledFor(final AWorkspaceTreeNode node, final TreePath[] selectedPaths) {
-		setEnabled(WorkspaceMindMapUtils.isMindMapNode(node));
+		setEnabled(WorkspaceMindMapUtils.isWorkspaceFileNode(node));
 	}
 
 	@Override
 	public void actionPerformed(final ActionEvent e) {
 		final AWorkspaceTreeNode node = getNodeFromActionEvent(e);
-		final String uri = WorkspaceMindMapUtils.getMindMapUri(node);
+		final String uri = WorkspaceMindMapUtils.getWorkspaceFileUri(node);
 		if (uri != null) {
 			EditTagsDialog.showForUri(uri);
 		}

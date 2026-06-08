@@ -39,6 +39,7 @@ import javax.xml.parsers.SAXParserFactory;
 
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
@@ -49,8 +50,6 @@ import org.xml.sax.helpers.DefaultHandler;
 
 public abstract class AbstractAllItemsTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
-	protected static final String HARD_CODED_SCAN_ROOT = "E:\\yixiaozi";
-
 	protected static final class ItemRecord {
 		private final File file;
 		private final String nodeId;
@@ -300,7 +299,11 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		}
 		
 		Object[] pathComponents = path.getPath();
-		StringBuilder folderPath = new StringBuilder(HARD_CODED_SCAN_ROOT);
+		final File scanRoot = MindMapDataRootResolver.getPrimaryScanRoot();
+		if (scanRoot == null) {
+			return null;
+		}
+		StringBuilder folderPath = new StringBuilder(scanRoot.getAbsolutePath());
 		
 		for (int i = 1; i < pathComponents.length; i++) {
 			Object component = pathComponents[i];
@@ -437,43 +440,9 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	}
 
 	private List collectAllMindmapFiles() {
-		Set roots = new HashSet();
-		File fixedRoot = new File(HARD_CODED_SCAN_ROOT);
-		if (fixedRoot.exists() && fixedRoot.isDirectory()) {
-			roots.add(fixedRoot);
-		}
-
-		List files = new ArrayList();
-		for (Object root : roots) {
-			collectMindmapFiles((File) root, files);
-		}
+		final List files = new ArrayList();
+		MindMapDataRootResolver.collectMindmapFiles(files);
 		return files;
-	}
-
-	private void collectMindmapFiles(File directory, List files) {
-		if (!directory.exists() || !directory.isDirectory()) {
-			return;
-		}
-
-		File[] children = directory.listFiles();
-		if (children == null) {
-			return;
-		}
-
-		for (File child : children) {
-			if (child.getName().startsWith(".")) {
-				continue;
-			}
-			if (child.getName().equalsIgnoreCase("bin")) {
-				continue;
-			}
-
-			if (child.isDirectory()) {
-				collectMindmapFiles(child, files);
-			} else if (child.getName().toLowerCase().endsWith(".mm")) {
-				files.add(child);
-			}
-		}
 	}
 
 	private List getItemsForFile(final File file) {
@@ -563,31 +532,24 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 			DefaultMutableTreeNode parentNode = root;
 
 			if (parentPath != null) {
-				String normalizedPath = parentPath.replace("\\", "/");
-				String[] pathParts = normalizedPath.split("/");
-				String currentPath = "";
-				boolean passedYixiaozi = false;
-
-				for (String part : pathParts) {
-					if (part.trim().isEmpty()) {
-						continue;
-					}
-
-					if (!passedYixiaozi) {
-						if ("yixiaozi".equalsIgnoreCase(part)) {
-							passedYixiaozi = true;
+				final String relativePath = MindMapDataRootResolver.getRelativePathWithinScanRoots(record.file.getParentFile());
+				if (relativePath != null && relativePath.length() > 0) {
+					final String[] pathParts = relativePath.split("/");
+					String currentPath = "";
+					for (int p = 0; p < pathParts.length; p++) {
+						final String part = pathParts[p];
+						if (part == null || part.trim().length() == 0) {
+							continue;
 						}
-						continue;
+						currentPath += "/" + part;
+						DefaultMutableTreeNode pathNode = pathNodes.get(currentPath);
+						if (pathNode == null) {
+							pathNode = new DefaultMutableTreeNode(new GroupLabel(part), true);
+							pathNodes.put(currentPath, pathNode);
+							parentNode.add(pathNode);
+						}
+						parentNode = pathNode;
 					}
-
-					currentPath += "/" + part;
-					DefaultMutableTreeNode pathNode = pathNodes.get(currentPath);
-					if (pathNode == null) {
-						pathNode = new DefaultMutableTreeNode(new GroupLabel(part), true);
-						pathNodes.put(currentPath, pathNode);
-						parentNode.add(pathNode);
-					}
-					parentNode = pathNode;
 				}
 			}
 

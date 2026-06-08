@@ -8,6 +8,8 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.swing.JPopupMenu;
+
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.OptionPanelController;
@@ -24,6 +26,7 @@ import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.plugin.workspace.features.AWorkspaceModeExtension;
+import org.freeplane.plugin.workspace.features.favorites.SearchFileContextMenuHelper;
 import org.freeplane.plugin.workspace.features.ModeControlAlreadyRegisteredException;
 import org.freeplane.plugin.workspace.features.WorkspaceMapModelExtension;
 import org.freeplane.plugin.workspace.features.WorkspaceModelExtensionWriterReader;
@@ -351,6 +354,13 @@ public final class WorkspaceController implements IExtension {
 	
 	public static void clear() {
 		getCurrentModeExtension().clear();
+	}
+
+	/**
+	 * Entry point for freeplane core panels (file search tabs) to append favorite/tag menu items.
+	 */
+	public static boolean appendSearchFileContextMenuItems(final JPopupMenu menu, final File file) {
+		return SearchFileContextMenuHelper.appendFavoriteItems(menu, file);
 	}
 	
 }

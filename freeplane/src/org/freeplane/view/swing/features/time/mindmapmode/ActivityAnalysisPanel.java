@@ -34,6 +34,8 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.WorkspaceSideTabScanCache;
 import org.xml.sax.Attributes;
 import org.xml.sax.helpers.DefaultHandler;
 
@@ -42,7 +44,6 @@ import javax.xml.parsers.SAXParserFactory;
 
 public class ActivityAnalysisPanel extends JPanel {
     private static final long serialVersionUID = 1L;
-    private static final String HARD_CODED_SCAN_ROOT = "E:\\yixiaozi";
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
     private static final SimpleDateFormat MONTH_FORMAT = new SimpleDateFormat("yyyy-MM");
     private static final SimpleDateFormat DAY_OF_WEEK_FORMAT = new SimpleDateFormat("EEEE");
@@ -136,15 +137,12 @@ public class ActivityAnalysisPanel extends JPanel {
     }
 
     private List<File> collectAllMindmapFiles() {
-        Set<File> roots = new java.util.HashSet<File>();
-        File fixedRoot = new File(HARD_CODED_SCAN_ROOT);
-        if (fixedRoot.exists() && fixedRoot.isDirectory()) {
-            roots.add(fixedRoot);
+        final List<File> cached = WorkspaceSideTabScanCache.getMindMapFilesSnapshot();
+        if (cached != null) {
+            return cached;
         }
-        List<File> files = new ArrayList<File>();
-        for (File root : roots) {
-            collectMindmapFiles(root, files);
-        }
+        final List<File> files = new ArrayList<File>();
+        MindMapDataRootResolver.collectMindmapFiles(files);
         return files;
     }
 

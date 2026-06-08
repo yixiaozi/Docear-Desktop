@@ -522,6 +522,9 @@ public class FileSystemManager {
 			if (filtering && isHiddenPath(pathname)) {
 				return false;
 			}
+			if (filtering && pathname != null && pathname.getName().startsWith("_")) {
+				return false;
+			}
 			if (filtering && pathname != null && pathname.getName().startsWith("~")) {
 				return false;
 			}

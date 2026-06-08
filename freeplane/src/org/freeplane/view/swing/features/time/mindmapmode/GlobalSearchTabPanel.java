@@ -43,13 +43,14 @@ import javax.swing.border.Border;
 
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.WorkspaceSideTabScanCache;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 
 public class GlobalSearchTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
-	private static final String SCAN_ROOT = "E:\\yixiaozi";
 	private static final int MAX_RESULTS = Integer.MAX_VALUE;
 	private static final int PREVIEW_LENGTH = 100;
 	
@@ -304,9 +305,13 @@ public class GlobalSearchTabPanel extends JPanel {
 					synchronized (this) {
 						searchTotalFileCount = 0;
 					}
-					countTotalFiles(new File(SCAN_ROOT));
-					
-					scanDirectory(new File(SCAN_ROOT), keywords, results, checkedFiles, seenResults);
+					final File[] scanRoots = MindMapDataRootResolver.getScanRoots();
+					for (int r = 0; r < scanRoots.length; r++) {
+						if (scanRoots[r] != null && scanRoots[r].exists()) {
+							countTotalFiles(scanRoots[r]);
+							scanDirectory(scanRoots[r], keywords, results, checkedFiles, seenResults);
+						}
+					}
 					
 					Collections.sort(results, new Comparator<SearchResult>() {
 						public int compare(SearchResult a, SearchResult b) {
@@ -707,10 +712,17 @@ public class GlobalSearchTabPanel extends JPanel {
 	private void loadCacheIfNeeded() {
 		executor.submit(new Runnable() {
 			public void run() {
-				File root = new File(SCAN_ROOT);
-				if (root.exists()) {
-					List<File> mmFiles = new ArrayList<File>();
-					collectMindMapFiles(root, mmFiles);
+				List<File> mmFiles = WorkspaceSideTabScanCache.getMindMapFilesSnapshot();
+				if (mmFiles == null) {
+					mmFiles = new ArrayList<File>();
+					final File[] scanRoots = MindMapDataRootResolver.getScanRoots();
+					for (int r = 0; r < scanRoots.length; r++) {
+						if (scanRoots[r] != null && scanRoots[r].exists()) {
+							collectMindMapFiles(scanRoots[r], mmFiles);
+						}
+					}
+				}
+				if (!mmFiles.isEmpty()) {
 					
 					final int totalFiles = mmFiles.size();
 					final java.util.concurrent.atomic.AtomicInteger completedCount = new java.util.concurrent.atomic.AtomicInteger(0);

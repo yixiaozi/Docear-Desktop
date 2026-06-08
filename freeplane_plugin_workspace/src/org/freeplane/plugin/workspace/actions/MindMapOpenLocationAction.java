@@ -24,13 +24,13 @@ public class MindMapOpenLocationAction extends AWorkspaceAction {
 
 	@Override
 	public void setEnabledFor(final AWorkspaceTreeNode node, final TreePath[] selectedPaths) {
-		setEnabled(WorkspaceMindMapUtils.isMindMapNode(node));
+		setEnabled(WorkspaceMindMapUtils.isWorkspaceFileNode(node));
 	}
 
 	@Override
 	public void actionPerformed(final ActionEvent e) {
 		final AWorkspaceTreeNode node = getNodeFromActionEvent(e);
-		final File file = WorkspaceMindMapUtils.getMindMapFile(node);
+		final File file = WorkspaceMindMapUtils.getWorkspaceFile(node);
 		if (file == null) {
 			return;
 		}

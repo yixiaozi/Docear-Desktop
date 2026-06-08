@@ -25,11 +25,11 @@ import javax.swing.border.Border;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
+import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.features.mode.Controller;
 
 public class FileSearchTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
-	private static final String SCAN_ROOT = "E:\\yixiaozi";
 	private static final int MAX_RESULTS = 100;
 	
 	private final JTextField searchField = new JTextField();
@@ -161,9 +161,11 @@ public class FileSearchTabPanel extends JPanel {
 				}
 				
 				if (!keywords.isEmpty()) {
-					File root = new File(SCAN_ROOT);
-					if (root.exists()) {
-						scanDirectory(root, keywords, results);
+					final File[] scanRoots = MindMapDataRootResolver.getScanRoots();
+					for (int r = 0; r < scanRoots.length; r++) {
+						if (scanRoots[r] != null && scanRoots[r].exists()) {
+							scanDirectory(scanRoots[r], keywords, results);
+						}
 					}
 				}
 				

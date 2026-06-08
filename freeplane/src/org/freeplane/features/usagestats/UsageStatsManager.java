@@ -61,7 +61,10 @@ public class UsageStatsManager {
     
     public static File getStatsDataDir() {
         try {
-            File baseDir = new File("E:\\yixiaozi");
+            File baseDir = org.freeplane.core.util.MindMapDataRootResolver.getPrimaryScanRoot();
+            if (baseDir == null) {
+                baseDir = new File(org.freeplane.core.util.Compat.getApplicationUserDirectory());
+            }
             if (!baseDir.exists()) {
                 baseDir.mkdirs();
             }

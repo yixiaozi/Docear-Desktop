@@ -24,7 +24,7 @@ public final class QuickCaptureService {
 
 	public static void install(final ModeController modeController) {
 		final ResourceController resources = ResourceController.getResourceController();
-		resources.setDefaultProperty(PROP_INBOX_DIRECTORY, "E:\\yixiaozi");
+		resources.setDefaultProperty(PROP_INBOX_DIRECTORY, "");
 		resources.setDefaultProperty(PROP_INBOX_FILENAME, "\u6536\u4ef6\u7bb1.mm");
 
 		modeController.addAction(new QuickCaptureAction());
