@@ -13,6 +13,7 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.plugin.workspace.dnd.DnDController;
 import org.freeplane.plugin.workspace.dnd.IWorspaceClipboardOwner;
+import org.freeplane.plugin.workspace.features.favorites.FavoriteTagsDisplayUtils;
 import org.freeplane.plugin.workspace.io.IFileSystemRepresentation;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
 
@@ -44,7 +45,7 @@ public class WorkspaceNodeRenderer extends DefaultTreeCellRenderer {
 					label.setBorder(BorderFactory.createLineBorder(label.getForeground(), 1));
 				}
 			}
-			label.setText(formatHighlightedText(node.getName()));
+			label.setText(formatNodeDisplayText(node, sel));
 			label.setIcon(null);
 			if(isCut(node)) {
 				//WORKSPACE - ToDo: make the item transparent (including the icon?)
@@ -92,6 +93,22 @@ public class WorkspaceNodeRenderer extends DefaultTreeCellRenderer {
 
 	public void setHighlightQuery(String query) {
 		this.highlightQuery = query == null ? "" : query.trim().toLowerCase();
+	}
+
+	private String formatNodeDisplayText(final AWorkspaceTreeNode node, final boolean selected) {
+		final String name = node.getName() != null ? node.getName() : "";
+		final String tagsSuffix = FavoriteTagsDisplayUtils.formatTagsSuffixHtml(node, selected);
+		if (tagsSuffix.length() == 0) {
+			return formatHighlightedText(name);
+		}
+		final String namePart = formatHighlightedText(name);
+		if (namePart.startsWith("<html>")) {
+			final int end = namePart.lastIndexOf("</html>");
+			if (end > 0) {
+				return namePart.substring(0, end) + tagsSuffix + "</html>";
+			}
+		}
+		return "<html>" + escapeHtml(name) + tagsSuffix + "</html>";
 	}
 
 	private String formatHighlightedText(String original) {

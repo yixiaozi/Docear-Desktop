@@ -1,7 +1,6 @@
 package org.freeplane.plugin.workspace.components.favorites;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
@@ -13,8 +12,10 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 import java.io.File;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -47,12 +48,12 @@ public class FavoritesTabPanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 	private static final DataFlavor REORDER_FLAVOR = DataFlavor.stringFlavor;
+	private static final String FAVORITE_NAME_COLOR = "#0066CC";
 
 	private final FavoritesAndTagsStore store = FavoritesAndTagsStore.getInstance();
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList favoritesList = new JList(listModel);
 	private final JPanel tagFilterPanel = new JPanel(new WrapFlowLayout());
-	private final JLabel statusLabel = new JLabel();
 	private final Runnable refreshListener = new Runnable() {
 		public void run() {
 			refreshView();
@@ -68,10 +69,8 @@ public class FavoritesTabPanel extends JPanel {
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 		buildTagFilterPanel();
 		buildFavoritesList();
-		statusLabel.setBorder(BorderFactory.createEmptyBorder(2, 2, 0, 2));
 		add(tagFilterPanel, BorderLayout.NORTH);
 		add(new JScrollPane(favoritesList), BorderLayout.CENTER);
-		add(statusLabel, BorderLayout.SOUTH);
 		store.addChangeListener(refreshListener);
 		refreshView();
 	}
@@ -79,16 +78,16 @@ public class FavoritesTabPanel extends JPanel {
 	private void buildTagFilterPanel() {
 		tagFilterPanel.setBorder(BorderFactory.createCompoundBorder(
 				BorderFactory.createTitledBorder(TextUtils.getText("workspace.favorites.filter.label")),
-				BorderFactory.createEmptyBorder(4, 4, 4, 4)));
+				BorderFactory.createEmptyBorder(0, 2, 2, 2)));
 		rebuildTagButtons();
 	}
 
 	private void rebuildTagButtons() {
 		tagFilterPanel.removeAll();
-		tagFilterPanel.add(createTagButton(null, TextUtils.getText("workspace.favorites.filter.all")));
-		for (final Iterator it = getAvailableTags().iterator(); it.hasNext();) {
+		tagFilterPanel.add(createTagButton(null, formatTagCountLabel(null, TextUtils.getText("workspace.favorites.filter.all"))));
+		for (final Iterator it = getTagsSortedByCount().iterator(); it.hasNext();) {
 			final String tag = (String) it.next();
-			tagFilterPanel.add(createTagButton(tag, tag));
+			tagFilterPanel.add(createTagButton(tag, formatTagCountLabel(tag, tag)));
 		}
 		tagFilterPanel.revalidate();
 		tagFilterPanel.repaint();
@@ -98,6 +97,27 @@ public class FavoritesTabPanel extends JPanel {
 
 	private Set getAvailableTags() {
 		return store.getQuickSelectTags();
+	}
+
+	private List getTagsSortedByCount() {
+		final List tags = new ArrayList(getAvailableTags());
+		Collections.sort(tags, new Comparator() {
+			public int compare(final Object o1, final Object o2) {
+				final String tag1 = (String) o1;
+				final String tag2 = (String) o2;
+				final int count1 = store.countFavoritesWithTag(tag1);
+				final int count2 = store.countFavoritesWithTag(tag2);
+				if (count1 != count2) {
+					return count2 - count1;
+				}
+				return tag1.compareTo(tag2);
+			}
+		});
+		return tags;
+	}
+
+	private String formatTagCountLabel(final String tag, final String baseLabel) {
+		return baseLabel + " " + store.countFavoritesWithTag(tag);
 	}
 
 	private JToggleButton createTagButton(final String tag, final String label) {
@@ -214,7 +234,6 @@ public class FavoritesTabPanel extends JPanel {
 		}
 		final File file = entry.getFile();
 		if (file == null || !file.exists()) {
-			statusLabel.setText(TextUtils.format("workspace.favorites.missing.text", entry.getDisplayName()));
 			return;
 		}
 		try {
@@ -224,7 +243,6 @@ public class FavoritesTabPanel extends JPanel {
 		}
 		catch (final Exception e) {
 			LogUtils.severe(e);
-			statusLabel.setText(TextUtils.format("workspace.favorites.open.error.text", entry.getDisplayName()));
 		}
 	}
 
@@ -243,7 +261,6 @@ public class FavoritesTabPanel extends JPanel {
 				listModel.addElement(entry);
 			}
 		}
-		statusLabel.setText(TextUtils.format("workspace.favorites.count.text", String.valueOf(listModel.size())));
 	}
 
 	private boolean matchesTagFilter(final FavoriteEntry entry) {
@@ -265,29 +282,57 @@ public class FavoritesTabPanel extends JPanel {
 			final JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 			if (value instanceof FavoriteEntry) {
 				final FavoriteEntry entry = (FavoriteEntry) value;
-				label.setText(formatEntryLabel(entry));
-				if (!entry.exists()) {
-					label.setForeground(Color.GRAY);
-				}
+				label.setText(formatEntryLabelHtml(entry, isSelected));
 			}
 			return label;
 		}
 
-		private String formatEntryLabel(final FavoriteEntry entry) {
-			final StringBuilder builder = new StringBuilder(entry.getDisplayName());
+		private String formatEntryLabelHtml(final FavoriteEntry entry, final boolean isSelected) {
+			final String name = escapeHtml(entry.getListDisplayName());
+			final StringBuilder html = new StringBuilder("<html>");
+			if (!entry.exists() && !isSelected) {
+				html.append("<b><font color='#999999'>").append(name).append("</font></b>");
+			}
+			else if (isSelected) {
+				html.append("<b>").append(name).append("</b>");
+			}
+			else {
+				html.append("<b><font color='").append(FAVORITE_NAME_COLOR).append("'>").append(name).append("</font></b>");
+			}
 			if (!entry.getTags().isEmpty()) {
-				builder.append("  [");
-				boolean first = true;
-				for (final String tag : entry.getTags()) {
-					if (!first) {
-						builder.append(", ");
-					}
-					builder.append(tag);
-					first = false;
+				final String tagsText = formatTagsText(entry);
+				if (isSelected) {
+					html.append("  [").append(escapeHtml(tagsText)).append(']');
 				}
-				builder.append(']');
+				else if (!entry.exists()) {
+					html.append("  <font color='#999999'>[").append(escapeHtml(tagsText)).append("]</font>");
+				}
+				else {
+					html.append("  <font color='#666666'>[").append(escapeHtml(tagsText)).append("]</font>");
+				}
+			}
+			html.append("</html>");
+			return html.toString();
+		}
+
+		private String formatTagsText(final FavoriteEntry entry) {
+			final StringBuilder builder = new StringBuilder();
+			boolean first = true;
+			for (final String tag : entry.getTags()) {
+				if (!first) {
+					builder.append(", ");
+				}
+				builder.append(tag);
+				first = false;
 			}
 			return builder.toString();
+		}
+
+		private String escapeHtml(final String text) {
+			if (text == null) {
+				return "";
+			}
+			return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 		}
 	}
 

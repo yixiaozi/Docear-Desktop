@@ -38,6 +38,7 @@ import org.freeplane.core.ui.components.OneTouchCollapseResizer.ComponentCollaps
 import org.freeplane.core.ui.components.ResizeEvent;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
+import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
 import org.freeplane.plugin.workspace.dnd.DnDController;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferHandler;
 import org.freeplane.plugin.workspace.event.IWorkspaceNodeActionListener;
@@ -109,6 +110,17 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		mTree.putClientProperty("JTree.lineStyle", "Angled");
 		mTree.setCellRenderer(new WorkspaceNodeRenderer());
 		mTree.setCellEditor(new WorkspaceCellEditor(mTree, (DefaultTreeCellRenderer) mTree.getCellRenderer()));
+		FavoritesAndTagsStore.getInstance().addChangeListener(new Runnable() {
+			public void run() {
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						if (mTree != null) {
+							mTree.repaint();
+						}
+					}
+				});
+			}
+		});
 		mTree.addTreeExpansionListener(new DefaultTreeExpansionListener());
 		mTree.addTreeExpansionListener(getExpandedStateHandler());
 		mTree.addTreeSelectionListener(getNodeSelectionHandler().getTreeSelectionListener());

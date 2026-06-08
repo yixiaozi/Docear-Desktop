@@ -398,6 +398,20 @@ public final class FavoritesAndTagsStore {
 		return quickTags;
 	}
 
+	public int countFavoritesWithTag(final String tag) {
+		if (tag == null || tag.length() == 0) {
+			return favoriteUris.size();
+		}
+		int count = 0;
+		for (int i = 0; i < favoriteUris.size(); i++) {
+			final String uri = (String) favoriteUris.get(i);
+			if (getTags(uri).contains(tag)) {
+				count++;
+			}
+		}
+		return count;
+	}
+
 	public void addChangeListener(final Runnable listener) {
 		if (listener != null && !changeListeners.contains(listener)) {
 			changeListeners.add(listener);

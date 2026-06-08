@@ -8,7 +8,7 @@ import javax.swing.JToggleButton;
 
 public final class TagChipFactory {
 
-	private static final Insets CHIP_MARGIN = new Insets(2, 8, 2, 8);
+	private static final Insets CHIP_MARGIN = new Insets(1, 6, 1, 6);
 
 	private TagChipFactory() {
 	}
@@ -22,6 +22,13 @@ public final class TagChipFactory {
 
 	public static JButton createPresetChip(final String tag) {
 		final JButton button = new JButton(tag != null ? tag : "");
+		applyChipStyle(button);
+		return button;
+	}
+
+	public static JToggleButton createEditChip(final String tag, final boolean selected) {
+		final JToggleButton button = new JToggleButton(tag != null ? tag : "");
+		button.setSelected(selected);
 		applyChipStyle(button);
 		return button;
 	}

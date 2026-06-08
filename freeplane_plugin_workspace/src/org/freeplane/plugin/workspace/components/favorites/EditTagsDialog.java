@@ -17,6 +17,9 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.JToggleButton;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
@@ -26,6 +29,7 @@ import org.freeplane.plugin.workspace.features.favorites.TagTextUtils;
 public final class EditTagsDialog {
 
 	private static final Dimension INPUT_SIZE = new Dimension(420, 120);
+	private static final String TAG_PROPERTY = "workspace.tag";
 
 	private EditTagsDialog() {
 	}
@@ -55,16 +59,20 @@ public final class EditTagsDialog {
 		content.add(new JLabel(TextUtils.getText("workspace.favorites.tags.input.label")), BorderLayout.NORTH);
 		content.add(inputScroll, BorderLayout.CENTER);
 		final JPanel presetsPanel = new JPanel(new WrapFlowLayout());
-		for (final Iterator it = store.getQuickSelectTags().iterator(); it.hasNext();) {
-			final String tag = (String) it.next();
-			final JButton presetButton = TagChipFactory.createPresetChip(tag);
-			presetButton.addActionListener(new ActionListener() {
-				public void actionPerformed(final ActionEvent e) {
-					appendTag(tagsField, tag);
-				}
-			});
-			presetsPanel.add(presetButton);
-		}
+		buildPresetButtons(presetsPanel, tagsField, store);
+		tagsField.getDocument().addDocumentListener(new DocumentListener() {
+			public void insertUpdate(final DocumentEvent e) {
+				syncPresetButtonStates(presetsPanel, tagsField);
+			}
+
+			public void removeUpdate(final DocumentEvent e) {
+				syncPresetButtonStates(presetsPanel, tagsField);
+			}
+
+			public void changedUpdate(final DocumentEvent e) {
+				syncPresetButtonStates(presetsPanel, tagsField);
+			}
+		});
 		content.add(presetsPanel, BorderLayout.SOUTH);
 		dialog.add(content, BorderLayout.CENTER);
 		final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -92,9 +100,45 @@ public final class EditTagsDialog {
 		dialog.setVisible(true);
 	}
 
-	private static void appendTag(final JTextArea field, final String tag) {
+	private static void buildPresetButtons(final JPanel presetsPanel, final JTextArea tagsField,
+			final FavoritesAndTagsStore store) {
+		presetsPanel.removeAll();
+		final Set currentTags = parseTags(tagsField.getText());
+		for (final Iterator it = store.getQuickSelectTags().iterator(); it.hasNext();) {
+			final String tag = (String) it.next();
+			final JToggleButton presetButton = TagChipFactory.createEditChip(tag, currentTags.contains(tag));
+			presetButton.putClientProperty(TAG_PROPERTY, tag);
+			presetButton.addActionListener(new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					toggleTag(tagsField, tag);
+					syncPresetButtonStates(presetsPanel, tagsField);
+				}
+			});
+			presetsPanel.add(presetButton);
+		}
+		presetsPanel.revalidate();
+		presetsPanel.repaint();
+	}
+
+	private static void syncPresetButtonStates(final JPanel presetsPanel, final JTextArea tagsField) {
+		final Set currentTags = parseTags(tagsField.getText());
+		for (int i = 0; i < presetsPanel.getComponentCount(); i++) {
+			final JToggleButton button = (JToggleButton) presetsPanel.getComponent(i);
+			final String tag = (String) button.getClientProperty(TAG_PROPERTY);
+			if (tag != null) {
+				button.setSelected(currentTags.contains(tag));
+			}
+		}
+	}
+
+	private static void toggleTag(final JTextArea field, final String tag) {
 		final Set tags = parseTags(field.getText());
-		tags.add(tag);
+		if (tags.contains(tag)) {
+			tags.remove(tag);
+		}
+		else {
+			tags.add(tag);
+		}
 		field.setText(joinTags(tags));
 	}
 
