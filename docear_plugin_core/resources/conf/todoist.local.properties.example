@@ -1,0 +1,5 @@
+# Copy to your Docear user folder as todoist.local.properties
+# Windows example: %APPDATA%\Docear\todoist.local.properties
+#
+# Do NOT commit the real file with your token to git.
+todoist.api_token=YOUR_TODOIST_API_TOKEN_HERE

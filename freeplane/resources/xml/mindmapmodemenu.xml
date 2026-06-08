@@ -368,6 +368,9 @@
 				<menu_action action="TimeManagementAction" accelerator="control T" />
 				<menu_action action="TimeListAction" />
 				<menu_action action="ReminderHookAction" />
+				<menu_separator />
+				<menu_action action="TodoistSyncAction" />
+				<menu_action action="TodoistSettingsAction" />
 			</menu_submenu>			
 			<menu_separator />
 			<menu_submenu name="encryption" name_ref="menu_encryption">

@@ -52,6 +52,7 @@ import org.docear.plugin.core.listeners.PropertyListener;
 import org.docear.plugin.core.listeners.PropertyLoadListener;
 import org.docear.plugin.core.listeners.WorkspaceOpenDocumentListener;
 import org.docear.plugin.core.quickcapture.QuickCaptureService;
+import org.docear.plugin.core.todoist.TodoistIntegrationService;
 import org.docear.plugin.core.logger.DocearLogEvent;
 import org.docear.plugin.core.ui.OverlayViewport;
 import org.docear.plugin.core.ui.ribbons.DocearNodePrivacyContributorFactory;
@@ -544,6 +545,7 @@ public class CoreConfiguration extends ALanguageController {
 		
 	private void addMenus(ModeController modeController) {
 		QuickCaptureService.install(modeController);
+		TodoistIntegrationService.install(modeController);
 		modeController.addAction(new DocearRemoveNodeLinkAction());
 		if("true".equals(System.getProperty("docear.debug", "false"))) {
 			modeController.addAction(new DocearSetNodePrivacyAction());
