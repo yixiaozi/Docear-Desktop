@@ -17,6 +17,11 @@ public interface AiBackend {
     List<String> generateSubNodes(String prompt, int count);
 
     /**
+     * 发送聊天消息并返回 AI 回复。
+     */
+    String chat(String message);
+
+    /**
      * 判断当前后端是否可用（例如 Copilot CLI 是否已安装）。
      */
     boolean isAvailable();
