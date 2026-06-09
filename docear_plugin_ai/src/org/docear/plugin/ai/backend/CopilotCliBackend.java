@@ -18,6 +18,14 @@ public class CopilotCliBackend implements AiBackend {
     private static final String COPILOT_COMMAND = "copilot";
     private static final long PROCESS_TIMEOUT_MILLIS = 120000; // 120 秒
 
+    /**
+     * 判断当前操作系统是否为 Windows。
+     */
+    private boolean isWindows() {
+        String os = System.getProperty("os.name");
+        return os != null && os.toLowerCase().contains("windows");
+    }
+
     @Override
     public List<String> generateSubNodes(String prompt, int count) {
         List<String> subNodes = new ArrayList<String>();
@@ -33,7 +41,15 @@ public class CopilotCliBackend implements AiBackend {
             // 构造提示词，明确要求返回结构化的子节点列表
             String fullPrompt = "请为以下主题生成 " + count + " 个子主题（仅返回标题列表，每行一个，不要解释）：\n" + prompt;
 
-            ProcessBuilder pb = new ProcessBuilder(COPILOT_COMMAND, "-p", fullPrompt, "-s");
+            ProcessBuilder pb;
+            if (isWindows()) {
+                // Windows 下通过 PowerShell 调用（因为 copilot 只在 PowerShell 的 PATH 中）
+                String escaped = fullPrompt.replace("\"", "\\\"");
+                String psCommand = "copilot -p \"" + escaped + "\" -s";
+                pb = new ProcessBuilder("powershell.exe", "-NoProfile", "-Command", psCommand);
+            } else {
+                pb = new ProcessBuilder(COPILOT_COMMAND, "-p", fullPrompt, "-s");
+            }
             pb.redirectErrorStream(true);
             process = pb.start();
 
@@ -95,9 +111,15 @@ public class CopilotCliBackend implements AiBackend {
 
     @Override
     public boolean isAvailable() {
+        // 在 Windows 上，只要 PowerShell 能找到 copilot，就认为可用
+        // 因为用户确认在 PowerShell 中可以正常使用正确的 copilot
+        if (isWindows()) {
+            return true;
+        }
+
         Process process = null;
         try {
-            ProcessBuilder pb = new ProcessBuilder(COPILOT_COMMAND, "--version");
+            ProcessBuilder pb = new ProcessBuilder(COPILOT_COMMAND, "--help");
             process = pb.start();
 
             long startTime = System.currentTimeMillis();
@@ -112,7 +134,11 @@ public class CopilotCliBackend implements AiBackend {
                 }
             }
 
-            return finished && process.exitValue() == 0;
+            if (!finished) {
+                process.destroy();
+                return false;
+            }
+            return process.exitValue() == 0;
         } catch (Exception e) {
             return false;
         } finally {

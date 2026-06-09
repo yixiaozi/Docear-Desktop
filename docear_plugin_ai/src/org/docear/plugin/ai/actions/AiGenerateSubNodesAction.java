@@ -67,6 +67,24 @@ public class AiGenerateSubNodesAction extends AFreeplaneAction {
             return;
         }
 
+        // 防护：如果返回的内容包含命令字符串，说明调用失败
+        boolean hasCommandError = false;
+        for (String title : subNodes) {
+            if (title.contains("copilot") || title.contains("powershell") || title.contains("-p \"")) {
+                hasCommandError = true;
+                break;
+            }
+        }
+        if (hasCommandError) {
+            JOptionPane.showMessageDialog(
+                null,
+                "Copilot CLI 调用失败，返回了命令字符串而非有效内容。\n\n请确保：\n1. 在 PowerShell 中能正常运行 copilot\n2. 提示词不要包含特殊字符\n\n建议在 PowerShell 中测试：\n  copilot -p \"测试\" -s",
+                "调用失败",
+                JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+
         // 将生成的子节点插入到当前节点下
         MMapController mapController = (MMapController) Controller.getCurrentModeController().getMapController();
         MTextController textController = (MTextController) TextController.getController();

@@ -1,13 +1,20 @@
 package org.docear.plugin.ai;
 
+import java.awt.Component;
+import java.awt.Container;
+
+import javax.swing.JTabbedPane;
+
 import org.docear.plugin.ai.actions.AiGenerateSubNodesAction;
 import org.docear.plugin.ai.backend.AiBackend;
 import org.docear.plugin.ai.backend.CopilotCliBackend;
 import org.docear.plugin.ai.ui.AiChatSidebar;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.IMenuContributor;
 import org.freeplane.core.ui.MenuBuilder;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 
 public class DocearAiController {
@@ -62,18 +69,64 @@ public class DocearAiController {
                 builder.addSeparator("/node_popup", MenuBuilder.AS_CHILD);
                 builder.addAction("/node_popup", modeController.getAction(AiGenerateSubNodesAction.KEY), MenuBuilder.AS_CHILD);
 
-                // 2. 主菜单「Extras > AI Chat Sidebar」
-                builder.addAction("/menu_bar/extras", new org.freeplane.core.ui.AFreeplaneAction("AiChatSidebarAction", "AI 聊天侧边栏", null) {
+                // 2. 主菜单「Extras > AI 聊天侧边栏」—— 点击后添加到右侧 Tab
+                builder.addAction("/menu_bar/extras", new AFreeplaneAction("AiChatSidebarAction", "AI 聊天侧边栏", null) {
                     private static final long serialVersionUID = 1L;
                     @Override
                     public void actionPerformed(java.awt.event.ActionEvent e) {
-                        // TODO: 实际打开侧边栏的逻辑（需要 Freeplane 的侧边栏框架支持）
-                        LogUtils.info("AI Chat Sidebar requested (UI integration pending).");
+                        showAiChatSidebar();
                     }
                 }, MenuBuilder.AS_CHILD);
             }
         });
         LogUtils.info("Docear AI menus registered.");
+    }
+
+    /**
+     * 将 AI 聊天侧边栏添加到当前思维导图的右侧 Tab 中。
+     */
+    private void showAiChatSidebar() {
+        try {
+            final Component mapView = Controller.getCurrentController().getMapViewManager().getMapViewComponent();
+            if (mapView == null) {
+                LogUtils.warn("No map view available for AI sidebar.");
+                return;
+            }
+
+            // 向上遍历找到右侧的 JTabbedPane
+            Container parent = mapView.getParent();
+            JTabbedPane rightTabs = null;
+            while (parent != null) {
+                if (parent instanceof JTabbedPane) {
+                    // 简单判断：通常右侧的 Tab 面板会有多个子 Tab
+                    JTabbedPane tab = (JTabbedPane) parent;
+                    if (tab.getTabCount() >= 0) {
+                        rightTabs = tab;
+                        break;
+                    }
+                }
+                parent = parent.getParent();
+            }
+
+            if (rightTabs != null) {
+                // 避免重复添加
+                for (int i = 0; i < rightTabs.getTabCount(); i++) {
+                    if (rightTabs.getComponentAt(i) == chatSidebar) {
+                        rightTabs.setSelectedIndex(i);
+                        chatSidebar.switchToMap(Controller.getCurrentController().getMap());
+                        return;
+                    }
+                }
+                rightTabs.addTab("AI Chat", chatSidebar);
+                rightTabs.setSelectedComponent(chatSidebar);
+                chatSidebar.switchToMap(Controller.getCurrentController().getMap());
+                LogUtils.info("AI Chat Sidebar added to right tab.");
+            } else {
+                LogUtils.warn("Could not find right tab pane for AI sidebar.");
+            }
+        } catch (Exception ex) {
+            LogUtils.severe("Failed to show AI Chat Sidebar: " + ex.getMessage());
+        }
     }
 
     public void generateSubNodesForNode(NodeModel node) {
