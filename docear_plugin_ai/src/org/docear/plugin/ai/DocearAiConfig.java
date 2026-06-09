@@ -14,27 +14,24 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_MODEL = "ai.model";
     private static final String PROPERTY_AI_TEMPERATURE = "ai.temperature";
 
-    private final ResourceController resourceController;
-
     public DocearAiConfig() {
-        this.resourceController = ResourceController.getResourceController();
     }
 
     public boolean isAiEnabled() {
-        return resourceController.getBooleanProperty(PROPERTY_AI_ENABLED, true);
+        return ResourceController.getResourceController().getBooleanProperty(PROPERTY_AI_ENABLED);
     }
 
     public String getBackendType() {
-        return resourceController.getProperty(PROPERTY_AI_BACKEND, "copilot_cli");
+        return ResourceController.getResourceController().getProperty(PROPERTY_AI_BACKEND, "copilot_cli");
     }
 
     public String getModel() {
-        return resourceController.getProperty(PROPERTY_AI_MODEL, "default");
+        return ResourceController.getResourceController().getProperty(PROPERTY_AI_MODEL, "default");
     }
 
     public double getTemperature() {
         try {
-            return Double.parseDouble(resourceController.getProperty(PROPERTY_AI_TEMPERATURE, "0.7"));
+            return Double.parseDouble(ResourceController.getResourceController().getProperty(PROPERTY_AI_TEMPERATURE, "0.7"));
         } catch (NumberFormatException e) {
             return 0.7;
         }

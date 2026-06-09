@@ -3,6 +3,7 @@ package org.docear.plugin.ai;
 import org.docear.plugin.ai.actions.AiGenerateSubNodesAction;
 import org.docear.plugin.ai.backend.AiBackend;
 import org.docear.plugin.ai.backend.CopilotCliBackend;
+import org.docear.plugin.ai.ui.AiChatSidebar;
 import org.freeplane.core.ui.IMenuContributor;
 import org.freeplane.core.ui.MenuBuilder;
 import org.freeplane.core.util.LogUtils;
@@ -14,10 +15,12 @@ public class DocearAiController {
     private static DocearAiController instance;
     private final ModeController modeController;
     private final AiBackend backend;
+    private final AiChatSidebar chatSidebar;
 
     private DocearAiController(ModeController modeController) {
         this.modeController = modeController;
         this.backend = createBackend();
+        this.chatSidebar = new AiChatSidebar();
         registerActions();
         registerMenus();
     }
@@ -55,9 +58,19 @@ public class DocearAiController {
         modeController.addMenuContributor(new IMenuContributor() {
             @Override
             public void updateMenus(ModeController mc, MenuBuilder builder) {
-                // 将 AI 动作直接添加到节点右键菜单（/node_popup）
+                // 1. 节点右键菜单
                 builder.addSeparator("/node_popup", MenuBuilder.AS_CHILD);
                 builder.addAction("/node_popup", modeController.getAction(AiGenerateSubNodesAction.KEY), MenuBuilder.AS_CHILD);
+
+                // 2. 主菜单「Extras > AI Chat Sidebar」
+                builder.addAction("/menu_bar/extras", new org.freeplane.core.ui.AFreeplaneAction("AiChatSidebarAction", "AI 聊天侧边栏", null) {
+                    private static final long serialVersionUID = 1L;
+                    @Override
+                    public void actionPerformed(java.awt.event.ActionEvent e) {
+                        // TODO: 实际打开侧边栏的逻辑（需要 Freeplane 的侧边栏框架支持）
+                        LogUtils.info("AI Chat Sidebar requested (UI integration pending).");
+                    }
+                }, MenuBuilder.AS_CHILD);
             }
         });
         LogUtils.info("Docear AI menus registered.");
