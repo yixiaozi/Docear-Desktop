@@ -31,8 +31,7 @@ public class CopilotCliBackend implements AiBackend {
 
     @Override
     public List<String> generateSubNodes(String prompt, int count) {
-        String fullPrompt = "请为以下主题生成 " + count + " 个子主题（仅返回标题列表，每行一个，不要解释）：\n" + prompt;
-        String output = runCopilot(fullPrompt);
+        String output = runCopilot(prompt);
         return parseSubNodes(output, count);
     }
 

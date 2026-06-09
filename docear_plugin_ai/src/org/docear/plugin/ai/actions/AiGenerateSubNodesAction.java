@@ -9,6 +9,7 @@ import org.docear.plugin.ai.DocearAiController;
 import org.docear.plugin.ai.backend.AiBackend;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.mode.Controller;
@@ -55,7 +56,8 @@ public class AiGenerateSubNodesAction extends AFreeplaneAction {
             return;
         }
 
-        List<String> subNodes = backend.generateSubNodes(nodeText, 5);
+        MapModel currentMap = Controller.getCurrentController().getMap();
+        List<String> subNodes = DocearAiController.getController().invokeGenerateSubNodes(nodeText, currentMap, 5);
 
         if (subNodes.isEmpty()) {
             JOptionPane.showMessageDialog(

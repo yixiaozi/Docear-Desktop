@@ -5,12 +5,18 @@ import javax.swing.JTabbedPane;
 import org.docear.plugin.ai.actions.AiGenerateSubNodesAction;
 import org.docear.plugin.ai.backend.AiBackend;
 import org.docear.plugin.ai.backend.CopilotCliBackend;
+import java.util.List;
+
+import org.docear.plugin.ai.log.AiInteractionLogger;
+import org.docear.plugin.ai.log.AiInteractionRecord;
+import org.docear.plugin.ai.prompt.AiPromptBuilder;
 import org.docear.plugin.ai.ui.AiChatSidebar;
 import org.docear.plugin.ai.ui.AiChatTabInstaller;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.IMenuContributor;
 import org.freeplane.core.ui.MenuBuilder;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
@@ -21,11 +27,17 @@ public class DocearAiController {
     private final ModeController modeController;
     private final AiBackend backend;
     private final AiChatSidebar chatSidebar;
+    private final AiPromptBuilder promptBuilder;
+    private final AiInteractionLogger interactionLogger;
 
     private DocearAiController(ModeController modeController) {
         this.modeController = modeController;
         this.backend = createBackend();
-        this.chatSidebar = new AiChatSidebar();
+        this.promptBuilder = new AiPromptBuilder();
+        this.interactionLogger = new AiInteractionLogger();
+        this.promptBuilder.getTemplateStore().ensureTemplateFileExists();
+        this.interactionLogger.ensureLogDirectoryExists();
+        this.chatSidebar = new AiChatSidebar(this);
         registerActions();
         registerMenus();
         installAiChatTab();
@@ -53,6 +65,50 @@ public class DocearAiController {
 
     public AiBackend getBackend() {
         return backend;
+    }
+
+    public AiPromptBuilder getPromptBuilder() {
+        return promptBuilder;
+    }
+
+    public AiInteractionLogger getInteractionLogger() {
+        return interactionLogger;
+    }
+
+    public String invokeChat(String userInput, MapModel map) {
+        String prompt = promptBuilder.buildChatPrompt(userInput, map);
+        String response = backend.chat(prompt);
+        logInteraction(AiInteractionRecord.TYPE_CHAT, userInput, prompt, response, map);
+        return response;
+    }
+
+    public List<String> invokeGenerateSubNodes(String topic, MapModel map, int count) {
+        String prompt = promptBuilder.buildSubNodesPrompt(topic, map, count);
+        List<String> result = backend.generateSubNodes(prompt, count);
+        String response = joinLines(result);
+        logInteraction(AiInteractionRecord.TYPE_GENERATE_SUBNODES, topic, prompt, response, map);
+        return result;
+    }
+
+    private void logInteraction(String type, String userInput, String prompt, String response, MapModel map) {
+        String mapPath = AiPromptBuilder.resolveMapPath(map);
+        String mapTitle = map != null && map.getTitle() != null ? map.getTitle() : "\u65e0";
+        interactionLogger.log(new AiInteractionRecord(
+                type, userInput, prompt, response, mapPath, mapTitle, System.currentTimeMillis()));
+    }
+
+    private String joinLines(List<String> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) {
+                sb.append('\n');
+            }
+            sb.append(lines.get(i));
+        }
+        return sb.toString();
     }
 
     private void registerActions() {

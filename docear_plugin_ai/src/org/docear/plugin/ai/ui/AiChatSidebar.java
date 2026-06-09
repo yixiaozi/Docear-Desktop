@@ -3,6 +3,7 @@ package org.docear.plugin.ai.ui;
 import java.awt.BorderLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
 
 import javax.swing.JButton;
 import javax.swing.JPanel;
@@ -12,9 +13,10 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 
 import org.docear.plugin.ai.DocearAiController;
-import org.docear.plugin.ai.backend.AiBackend;
+import org.docear.plugin.ai.prompt.AiPromptBuilder;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.mode.Controller;
 
 /**
  * AI 聊天侧边栏。
@@ -27,10 +29,12 @@ public class AiChatSidebar extends JPanel {
     private final JTextArea chatArea;
     private final JTextField inputField;
     private final JButton sendButton;
+    private final DocearAiController aiController;
 
     private MapModel currentMap;
 
-    public AiChatSidebar() {
+    public AiChatSidebar(DocearAiController aiController) {
+        this.aiController = aiController;
         setLayout(new BorderLayout());
 
         chatArea = new JTextArea();
@@ -66,6 +70,7 @@ public class AiChatSidebar extends JPanel {
             return;
         }
 
+        final MapModel map = resolveCurrentMap();
         chatArea.append("你: " + text + "\n");
         inputField.setText("");
         setInputEnabled(false);
@@ -73,7 +78,7 @@ public class AiChatSidebar extends JPanel {
 
         final Thread worker = new Thread(new Runnable() {
             public void run() {
-                final String reply = requestAiReply(text);
+                final String reply = requestAiReply(text, map);
                 SwingUtilities.invokeLater(new Runnable() {
                     public void run() {
                         replaceLastLine("AI: 思考中...", "AI: " + formatReply(reply) + "\n\n");
@@ -87,17 +92,17 @@ public class AiChatSidebar extends JPanel {
         worker.start();
     }
 
-    private String requestAiReply(String text) {
+    private String requestAiReply(String text, MapModel map) {
         try {
-            DocearAiController controller = DocearAiController.getController();
-            if (controller == null) {
+            if (aiController == null) {
                 return "AI 控制器未初始化。";
             }
-            AiBackend backend = controller.getBackend();
-            if (!backend.isAvailable()) {
+            if (!aiController.getBackend().isAvailable()) {
                 return "未检测到 Copilot CLI。请先安装并登录：\n1. npm install -g @github/copilot\n2. 运行 copilot 并执行 /login";
             }
-            String reply = backend.chat(text);
+
+            LogUtils.info("AI chat prompt built for map: " + AiPromptBuilder.resolveMapPath(map));
+            String reply = aiController.invokeChat(text, map);
             if (reply == null || reply.trim().length() == 0) {
                 return "未收到有效回复。请在 PowerShell 中测试：copilot -p \"测试\" -s";
             }
@@ -105,6 +110,17 @@ public class AiChatSidebar extends JPanel {
         } catch (Exception e) {
             LogUtils.severe("AI chat failed: " + e.getMessage());
             return "调用失败: " + e.getMessage();
+        }
+    }
+
+    private MapModel resolveCurrentMap() {
+        if (currentMap != null) {
+            return currentMap;
+        }
+        try {
+            return Controller.getCurrentController().getMap();
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -130,6 +146,14 @@ public class AiChatSidebar extends JPanel {
     public void switchToMap(MapModel map) {
         this.currentMap = map;
         chatArea.setText("");
-        chatArea.append("已切换到思维导图: " + (map != null ? map.getTitle() : "无") + "\n\n");
+        String title = map != null ? map.getTitle() : "无";
+        String path = AiPromptBuilder.resolveMapPath(map);
+        chatArea.append("已切换到思维导图: " + title + "\n");
+        chatArea.append("文件路径: " + path + "\n");
+        if (aiController != null) {
+            File templateFile = aiController.getPromptBuilder().getTemplateStore().getTemplateFile();
+            chatArea.append("提示词模板: " + templateFile.getAbsolutePath() + "\n");
+            chatArea.append("交互记录目录: " + aiController.getInteractionLogger().getLogDirectory().getAbsolutePath() + "\n\n");
+        }
     }
 }
