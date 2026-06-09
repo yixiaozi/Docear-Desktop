@@ -40,12 +40,19 @@ public class AiPromptBuilder {
         String safeTemplate = template != null ? template : "";
         String mapPath = resolveMapPath(map);
         String mapTitle = map != null && map.getTitle() != null ? map.getTitle() : "\u65e0";
+        String mapContent = AiMapContentExtractor.extractMapContent(map);
         String question = userQuestion != null ? userQuestion : "";
 
-        return safeTemplate
+        String prompt = safeTemplate
                 .replace("{{MAP_PATH}}", mapPath)
                 .replace("{{MAP_TITLE}}", mapTitle)
+                .replace("{{MAP_CONTENT}}", mapContent)
                 .replace("{{USER_QUESTION}}", question);
+
+        if (safeTemplate.indexOf("{{MAP_CONTENT}}") < 0) {
+            prompt = prompt + "\n\n--- \u5f53\u524d\u601d\u7ef4\u5bfc\u56fe\u5185\u5bb9 ---\n" + mapContent;
+        }
+        return prompt;
     }
 
     public static String resolveMapPath(MapModel map) {
