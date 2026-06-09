@@ -385,7 +385,6 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 					collectMindmapFilesRecursive(file, out);
 				}
 			}
-<<<<<<< Updated upstream
 			else if (isValidMindmapFile(file)) {
 				out.add(file);
 			}
@@ -417,7 +416,6 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			if (oldKeys != null) {
 				for (int j = 0; j < oldKeys.size(); j++) {
 					remindersByKey.remove(oldKeys.get(j));
->>>>>>> Stashed changes
 				}
 			}
 			cacheByFile.remove(fileKey);
