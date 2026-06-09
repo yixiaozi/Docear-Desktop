@@ -118,6 +118,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 	private final Map reminderKeysByFile = new HashMap();
 	private SwingWorker activeWorker;
 	private boolean rescanRequested;
+	private Set lastActiveFileKeys = Collections.emptySet();
 	private final Timer autoRefreshTimer;
 
 	public EnhancedAllRemindersTabPanel() {
@@ -214,12 +215,26 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		activeWorker = new SwingWorker() {
 			protected Object doInBackground() throws Exception {
 				List files = collectAllMindmapFiles();
-				cleanupCache(files);
+				Set activeFileKeys = new HashSet();
+				for (int i = 0; i < files.size(); i++) {
+					activeFileKeys.add(((File) files.get(i)).getAbsolutePath());
+				}
+				lastActiveFileKeys = activeFileKeys;
+				purgeStaleReminders(activeFileKeys);
+				javax.swing.SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						rebuildTreeFromCache();
+						statusLabel.setText("\u63d0\u9192\u603b\u6570: " + remindersByKey.size());
+					}
+				});
 				for (int i = 0; i < files.size(); i++) {
 					if (isCancelled()) {
 						break;
 					}
 					File file = (File) files.get(i);
+					if (!isValidMindmapFile(file)) {
+						continue;
+					}
 					List reminders = getRemindersForFile(file);
 					publish(new ScanChunk(file.getAbsolutePath(), reminders, i + 1, files.size()));
 				}
@@ -235,6 +250,8 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			}
 
 			protected void done() {
+				purgeStaleReminders(lastActiveFileKeys);
+				rebuildTreeFromCache();
 				statusLabel.setText("\u63d0\u9192\u603b\u6570: " + remindersByKey.size());
 				if (rescanRequested) {
 					rescanRequested = false;
@@ -246,6 +263,9 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 	}
 
 	private void mergeChunk(ScanChunk chunk) {
+		if (chunk.fileKey != null && !lastActiveFileKeys.contains(chunk.fileKey)) {
+			return;
+		}
 		List oldKeys = (List) reminderKeysByFile.get(chunk.fileKey);
 		if (oldKeys != null) {
 			for (int i = 0; i < oldKeys.size(); i++) {
@@ -255,6 +275,9 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		List newKeys = new ArrayList();
 		for (int i = 0; i < chunk.reminders.size(); i++) {
 			ReminderRecord record = (ReminderRecord) chunk.reminders.get(i);
+			if (!isValidMindmapFile(record.file)) {
+				continue;
+			}
 			String key = reminderKey(record);
 			if (!remindersByKey.containsKey(key)) {
 				remindersByKey.put(key, record);
@@ -362,16 +385,55 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 					collectMindmapFilesRecursive(file, out);
 				}
 			}
-			else {
-				String lower = file.getName().toLowerCase();
-				if (lower.endsWith(".mm") && !file.getName().startsWith("~") && !file.getName().contains("冲突副本")) {
-					out.add(file);
+<<<<<<< Updated upstream
+			else if (isValidMindmapFile(file)) {
+				out.add(file);
+			}
+		}
+	}
+
+	private boolean isValidMindmapFile(File file) {
+		if (file == null || !file.isFile() || !file.exists()) {
+			return false;
+		}
+		String name = file.getName();
+		if (name.startsWith("~") || name.contains("冲突副本")) {
+			return false;
+		}
+		return name.toLowerCase().endsWith(".mm");
+	}
+
+	private void purgeStaleReminders(Set activeFileKeys) {
+		List staleFileKeys = new ArrayList();
+		for (Object fileKeyObj : reminderKeysByFile.keySet()) {
+			String fileKey = (String) fileKeyObj;
+			if (!activeFileKeys.contains(fileKey) || !isValidMindmapFile(new File(fileKey))) {
+				staleFileKeys.add(fileKey);
+			}
+		}
+		for (int i = 0; i < staleFileKeys.size(); i++) {
+			String fileKey = (String) staleFileKeys.get(i);
+			List oldKeys = (List) reminderKeysByFile.remove(fileKey);
+			if (oldKeys != null) {
+				for (int j = 0; j < oldKeys.size(); j++) {
+					remindersByKey.remove(oldKeys.get(j));
+>>>>>>> Stashed changes
 				}
+			}
+			cacheByFile.remove(fileKey);
+		}
+		for (Object cacheKeyObj : new ArrayList(cacheByFile.keySet())) {
+			String cacheKey = (String) cacheKeyObj;
+			if (!activeFileKeys.contains(cacheKey) || !isValidMindmapFile(new File(cacheKey))) {
+				cacheByFile.remove(cacheKey);
 			}
 		}
 	}
 
 	private List getRemindersForFile(final File file) {
+		if (!isValidMindmapFile(file)) {
+			return Collections.emptyList();
+		}
 		long modified = file.lastModified();
 		long length = file.length();
 		CachedFileResult cached = (CachedFileResult) cacheByFile.get(file.getAbsolutePath());
@@ -446,6 +508,9 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		Map reminderNodesByKey = new HashMap();
 		for (int i = 0; i < records.size(); i++) {
 			ReminderRecord record = (ReminderRecord) records.get(i);
+			if (!isValidMindmapFile(record.file)) {
+				continue;
+			}
 			Date date = new Date(record.remindAt);
 			Calendar cal = Calendar.getInstance();
 			cal.setFirstDayOfWeek(Calendar.MONDAY);

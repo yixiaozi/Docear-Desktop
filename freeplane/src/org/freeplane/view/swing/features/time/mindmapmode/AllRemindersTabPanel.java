@@ -283,16 +283,27 @@ public class AllRemindersTabPanel extends JPanel {
 					collectMindmapFilesRecursive(file, out);
 				}
 			}
-			else {
-				String lower = file.getName().toLowerCase();
-				if (lower.endsWith(".mm") && !file.getName().startsWith("~")) {
-					out.add(file);
-				}
+			else if (isValidMindmapFile(file)) {
+				out.add(file);
 			}
 		}
 	}
 
+	private boolean isValidMindmapFile(File file) {
+		if (file == null || !file.isFile() || !file.exists()) {
+			return false;
+		}
+		String name = file.getName();
+		if (name.startsWith("~")) {
+			return false;
+		}
+		return name.toLowerCase().endsWith(".mm");
+	}
+
 	private List getRemindersForFile(final File file) {
+		if (!isValidMindmapFile(file)) {
+			return Collections.emptyList();
+		}
 		long modified = file.lastModified();
 		long length = file.length();
 		CachedFileResult cached = (CachedFileResult) cacheByFile.get(file.getAbsolutePath());
