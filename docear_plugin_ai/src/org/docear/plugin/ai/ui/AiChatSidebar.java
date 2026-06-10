@@ -194,6 +194,9 @@ public class AiChatSidebar extends JPanel {
         final MapModel map = resolveCurrentMap();
         final NodeModel focus = resolveFocusNode();
         inputArea.setText("");
+        if (aiController != null) {
+            aiController.recordUserMessage(map, text);
+        }
         addMessagePanel(AiChatMessage.Role.USER, text);
 
         streamingPanel = new AiChatMessagePanel(AiChatMessage.Role.ASSISTANT);
@@ -218,16 +221,21 @@ public class AiChatSidebar extends JPanel {
                     private final StringBuilder full = new StringBuilder();
 
                     public void onChunk(String chunk) {
-                        if (chunk == null || streamingPanel == null) {
+                        if (chunk == null) {
                             return;
                         }
                         full.append(chunk);
-                        String current = full.toString();
-                        if (current.trim().length() == 0) {
+                        if (full.toString().trim().length() == 0) {
                             return;
                         }
                         SwingUtilities.invokeLater(new Runnable() {
                             public void run() {
+                                if (!isSameMap(map, resolveCurrentMap())) {
+                                    return;
+                                }
+                                if (streamingPanel == null) {
+                                    attachStreamingPlaceholder();
+                                }
                                 streamingPanel.setStreamingContent(full.toString());
                                 syncMessagePanelWidths();
                                 scrollToBottom();
@@ -239,14 +247,20 @@ public class AiChatSidebar extends JPanel {
                         final String reply = normalizeReply(fullText != null ? fullText : full.toString());
                         SwingUtilities.invokeLater(new Runnable() {
                             public void run() {
-                                if (streamingPanel != null) {
-                                    streamingPanel.setContent(reply);
+                                if (isSameMap(map, resolveCurrentMap())) {
+                                    if (streamingPanel != null) {
+                                        streamingPanel.setContent(reply);
+                                    } else {
+                                        reloadMessagesForMap(map);
+                                    }
+                                    syncMessagePanelWidths();
+                                    refreshContextStatusAfterSend(text, map);
+                                    scrollToBottom();
+                                    inputArea.requestFocusInWindow();
                                 }
-                                syncMessagePanelWidths();
-                                refreshContextStatusAfterSend(text, map);
-                                setRequestInFlight(false);
-                                scrollToBottom();
-                                inputArea.requestFocusInWindow();
+                                if (isSameMap(map, resolveCurrentMap())) {
+                                    setRequestInFlight(false);
+                                }
                             }
                         });
                     }
@@ -258,6 +272,9 @@ public class AiChatSidebar extends JPanel {
                         final String errorMessage = message;
                         SwingUtilities.invokeLater(new Runnable() {
                             public void run() {
+                                if (!isSameMap(map, resolveCurrentMap())) {
+                                    return;
+                                }
                                 if (streamingPanel != null) {
                                     String current = streamingPanel.getPlainContent();
                                     streamingPanel.setContent(current + "\n\n[" + errorMessage + "]");
@@ -269,7 +286,7 @@ public class AiChatSidebar extends JPanel {
                     }
 
                     public boolean isCancelled() {
-                        return !requestInFlight;
+                        return aiController != null && aiController.isChatCancelled();
                     }
                 });
             }
@@ -291,7 +308,7 @@ public class AiChatSidebar extends JPanel {
     }
 
     private void cancelRequest() {
-        if (!requestInFlight) {
+        if (!requestInFlight && (aiController == null || !aiController.isStreamingForMap(resolveCurrentMap()))) {
             return;
         }
         if (aiController != null) {
@@ -301,7 +318,7 @@ public class AiChatSidebar extends JPanel {
         stopButton.setEnabled(false);
         if (streamingPanel != null) {
             String current = streamingPanel.getPlainContent();
-            if ("\u601d\u8003\u4e2d...".equals(current)) {
+            if ("\u601d\u8003\u4e2d...".equals(current) || "\u751f\u6210\u4e2d...".equals(current)) {
                 streamingPanel.setContent("[\u5df2\u53d6\u6d88\u751f\u6210]");
             } else {
                 streamingPanel.setContent(current + "\n\n[\u5df2\u53d6\u6d88\u751f\u6210]");
@@ -367,20 +384,43 @@ public class AiChatSidebar extends JPanel {
             return;
         }
         if (requestInFlight) {
-            cancelRequest();
+            detachStreamingUi();
         }
         this.currentMap = map;
         this.focusNode = null;
-        this.streamingPanel = null;
         messagesPanel.removeAll();
         reloadKeywordButtons();
         if (map != null) {
             restoreChatHistory(map);
+            if (aiController != null && aiController.isStreamingForMap(map)) {
+                attachStreamingPlaceholder();
+            }
         } else {
             appendHintMessage("\u5f53\u524d\u6ca1\u6709\u6253\u5f00\u7684\u601d\u7ef4\u5bfc\u56fe\u3002");
         }
         refreshContextStatus();
         scrollToBottom();
+    }
+
+    private void detachStreamingUi() {
+        streamingPanel = null;
+        setRequestInFlight(false);
+    }
+
+    private void attachStreamingPlaceholder() {
+        streamingPanel = new AiChatMessagePanel(AiChatMessage.Role.ASSISTANT);
+        streamingPanel.setContent("\u751f\u6210\u4e2d...");
+        streamingPanel.setAssistantActionListener(createMessageActionListener());
+        appendMessageComponent(streamingPanel);
+        setRequestInFlight(true);
+        statusBar.setHint("\u751f\u6210\u4e2d...");
+    }
+
+    private void reloadMessagesForMap(MapModel map) {
+        messagesPanel.removeAll();
+        if (map != null) {
+            restoreChatHistory(map);
+        }
     }
 
     private boolean isSameMap(MapModel left, MapModel right) {

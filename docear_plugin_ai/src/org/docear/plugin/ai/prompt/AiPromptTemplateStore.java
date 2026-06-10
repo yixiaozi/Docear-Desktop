@@ -38,6 +38,7 @@ public class AiPromptTemplateStore {
             + "\u601d\u7ef4\u5bfc\u56fe\u4e0e\u5173\u8054\u4e0a\u4e0b\u6587\uff1a\n{{MAP_CONTENT}}\n\n"
             + "\u5173\u8054\u6587\u4ef6\u6458\u8981\uff1a\n{{REFERENCED_FILES}}\n\n"
             + "\u5173\u952e\u8bcd\u53c2\u8003\uff1a\n{{KEYWORDS}}\n\n"
+            + "\u5f53\u524d\u5339\u914d\u7684\u5173\u952e\u8bcd\u89c4\u5219\uff1a\n{{ACTIVE_KEYWORD_RULES}}\n\n"
             + "\u5386\u53f2\u5bf9\u8bdd\uff1a\n{{CHAT_HISTORY}}\n\n"
             + "\u7528\u6237\u95ee\u9898\uff1a\n{{USER_QUESTION}}";
 
@@ -52,7 +53,8 @@ public class AiPromptTemplateStore {
             "\u7eff\u8272\u80cc\u666f\u8282\u70b9\u4e3a\u7cfb\u7edf\u8282\u70b9\uff0c\u4e0d\u53ef\u5220\u9664\uff1a\n"
             + AiPromptTemplateNodes.getProtectedNodeDescription() + "\n\n"
             + "\u652f\u6301\u5360\u4f4d\u7b26\uff1a{{MAP_PATH}}\u3001{{MAP_TITLE}}\u3001{{SELECTED_NODE}}\u3001{{MAP_CONTENT}}\u3001{{REFERENCED_FILES}}\u3001"
-            + "{{KEYWORDS}}\u3001{{CHAT_HISTORY}}\u3001{{USER_QUESTION}}\u3002\n"
+            + "{{KEYWORDS}}\u3001{{ACTIVE_KEYWORD_RULES}}\u3001{{CHAT_HISTORY}}\u3001{{USER_QUESTION}}\u3002\n"
+            + "\u5173\u952e\u8bcd\u5e93\u4e0b\u7684\u5b50\u8282\u70b9\u4f5c\u4e3a\u89c4\u5219\uff1b\u7528\u6237\u63d0\u95ee\u5339\u914d\u5173\u952e\u8bcd\u540d\u79f0\u65f6\uff0c\u5b50\u8282\u70b9\u5185\u5bb9\u4f1a\u6ce8\u5165 {{ACTIVE_KEYWORD_RULES}}\u3002\n"
             + "Docear \u4f1a\u81ea\u52a8\u8bfb\u53d6\u5bfc\u56fe\u94fe\u63a5\u548c\u8def\u5f84\u4e2d\u7684\u6587\u4ef6\uff0c\u53d1\u9001\u524d\u81ea\u52a8\u8131\u654f\u654f\u611f\u4fe1\u606f\u3002\n"
             + "\u5728\u300c\u5173\u952e\u8bcd\u5e93\u300d\u4e0b\u6dfb\u52a0\u5b50\u8282\u70b9\u5373\u53ef\u81ea\u5b9a\u4e49\u5173\u952e\u8bcd\uff08\u5173\u952e\u8bcd\u5b50\u8282\u70b9\u53ef\u5220\u6539\uff09\u3002\n"
             + "\u4fee\u6539\u540e\u4fdd\u5b58\u6587\u4ef6\u5373\u53ef\u751f\u6548\u3002";
@@ -189,6 +191,32 @@ public class AiPromptTemplateStore {
         return labels;
     }
 
+    /**
+     * 根据用户问题匹配关键词，返回该关键词下子节点定义的规则文本。
+     */
+    public String getActiveKeywordRules(String userQuestion) {
+        reloadIfChanged();
+        KeywordDefinition match = findBestKeywordMatch(userQuestion);
+        if (match == null || match.rules.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("\u5173\u952e\u8bcd\uff1a").append(match.label);
+        for (int i = 0; i < match.rules.size(); i++) {
+            sb.append('\n').append("- ").append(match.rules.get(i));
+        }
+        return sb.toString();
+    }
+
+    private static final class KeywordDefinition {
+        private final String label;
+        private final List<String> rules = new ArrayList<String>();
+
+        private KeywordDefinition(String label) {
+            this.label = label;
+        }
+    }
+
     public void openTemplateFile() {
         ensureTemplateFileExists();
         try {
@@ -217,7 +245,7 @@ public class AiPromptTemplateStore {
                 return "";
             }
             StringBuilder sb = new StringBuilder();
-            collectChildKeywordLines(keywordsRoot, sb);
+            collectChildKeywordLines(keywordsRoot, sb, 0);
             return sb.toString().trim();
         } catch (Exception e) {
             LogUtils.warn("Failed to read keywords from " + templateFile + ": " + e.getMessage());
@@ -247,7 +275,7 @@ public class AiPromptTemplateStore {
         }
     }
 
-    private void collectChildKeywordLines(Element parent, StringBuilder sb) {
+    private void collectChildKeywordLines(Element parent, StringBuilder sb, int depth) {
         NodeList children = parent.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
             Node child = children.item(i);
@@ -267,9 +295,115 @@ public class AiPromptTemplateStore {
                 if (sb.length() > 0) {
                     sb.append('\n');
                 }
-                sb.append("- ").append(text);
+                appendIndentedKeywordLine(sb, depth, text);
+                collectChildKeywordLines(childElement, sb, depth + 1);
             }
         }
+    }
+
+    private void appendIndentedKeywordLine(StringBuilder sb, int depth, String text) {
+        for (int i = 0; i < depth; i++) {
+            sb.append("  ");
+        }
+        sb.append("- ").append(text);
+    }
+
+    private List<KeywordDefinition> loadKeywordDefinitions() {
+        List<KeywordDefinition> definitions = new ArrayList<KeywordDefinition>();
+        if (!templateFile.exists()) {
+            return definitions;
+        }
+        try {
+            Document document = parseDocument();
+            Element keywordsRoot = findNodeById(document.getDocumentElement(), AiPromptTemplateNodes.ID_KEYWORDS);
+            if (keywordsRoot == null) {
+                keywordsRoot = findNodeByText(document.getDocumentElement(), AiPromptTemplateNodes.NODE_KEYWORDS);
+            }
+            if (keywordsRoot == null) {
+                return definitions;
+            }
+            NodeList children = keywordsRoot.getChildNodes();
+            for (int i = 0; i < children.getLength(); i++) {
+                Node child = children.item(i);
+                if (!(child instanceof Element)) {
+                    continue;
+                }
+                Element childElement = (Element) child;
+                if (!"node".equals(childElement.getTagName())) {
+                    continue;
+                }
+                String label = extractNodeContent(childElement);
+                if (label.length() == 0) {
+                    label = childElement.getAttribute("TEXT");
+                }
+                label = normalizeText(label);
+                if (label.length() == 0) {
+                    continue;
+                }
+                KeywordDefinition definition = new KeywordDefinition(label);
+                collectKeywordRuleTexts(childElement, definition.rules);
+                definitions.add(definition);
+            }
+        } catch (Exception e) {
+            LogUtils.warn("Failed to load keyword definitions: " + e.getMessage());
+        }
+        return definitions;
+    }
+
+    private void collectKeywordRuleTexts(Element keywordNode, List<String> rules) {
+        NodeList children = keywordNode.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (!(child instanceof Element)) {
+                continue;
+            }
+            Element childElement = (Element) child;
+            if (!"node".equals(childElement.getTagName())) {
+                continue;
+            }
+            String text = extractNodeContent(childElement);
+            if (text.length() == 0) {
+                text = childElement.getAttribute("TEXT");
+            }
+            text = normalizeText(text);
+            if (text.length() > 0) {
+                rules.add(text);
+            }
+            collectKeywordRuleTexts(childElement, rules);
+        }
+    }
+
+    private KeywordDefinition findBestKeywordMatch(String userQuestion) {
+        if (userQuestion == null || userQuestion.trim().length() == 0) {
+            return null;
+        }
+        String question = normalizeText(userQuestion);
+        List<KeywordDefinition> definitions = loadKeywordDefinitions();
+        KeywordDefinition best = null;
+        int bestLength = 0;
+        for (int i = 0; i < definitions.size(); i++) {
+            KeywordDefinition definition = definitions.get(i);
+            if (matchesKeywordQuestion(question, definition.label)) {
+                if (definition.label.length() > bestLength) {
+                    best = definition;
+                    bestLength = definition.label.length();
+                }
+            }
+        }
+        return best;
+    }
+
+    private boolean matchesKeywordQuestion(String question, String keywordLabel) {
+        if (keywordLabel == null || keywordLabel.length() == 0) {
+            return false;
+        }
+        if (question.equals(keywordLabel)) {
+            return true;
+        }
+        if (question.startsWith(keywordLabel)) {
+            return true;
+        }
+        return question.contains(keywordLabel);
     }
 
     private String readNodeTemplate(String nodeId, String nodeTitle) {

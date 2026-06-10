@@ -146,6 +146,10 @@ public class AiPromptBuilder {
         String chatHistory = AiChatHistoryFormatter.formatForContext(session, true);
 
         String keywords = templateStore.getKeywordsText();
+        String activeKeywordRules = templateStore.getActiveKeywordRules(userQuestion);
+        if (activeKeywordRules == null || activeKeywordRules.trim().length() == 0) {
+            activeKeywordRules = "\uff08\u672a\u5339\u914d\u5173\u952e\u8bcd\uff09";
+        }
 
         String question = userQuestion != null ? userQuestion : "";
         NodeModel resolvedFocus = focusNode != null ? focusNode : resolveCurrentSelectedNode();
@@ -158,6 +162,7 @@ public class AiPromptBuilder {
                 .replace("{{REFERENCED_FILES}}", referencedFiles)
                 .replace("{{SELECTED_NODE}}", selectedNodeContent)
                 .replace("{{KEYWORDS}}", keywords)
+                .replace("{{ACTIVE_KEYWORD_RULES}}", activeKeywordRules)
                 .replace("{{CHAT_HISTORY}}", chatHistory)
                 .replace("{{USER_QUESTION}}", question);
 
@@ -181,6 +186,12 @@ public class AiPromptBuilder {
 
             prompt = prompt + "\n\n--- \u5173\u952e\u8bcd\u53c2\u8003 ---\n" + keywords;
 
+        }
+
+        if (safeTemplate.indexOf("{{ACTIVE_KEYWORD_RULES}}") < 0
+                && activeKeywordRules.length() > 0
+                && !"\uff08\u672a\u5339\u914d\u5173\u952e\u8bcd\uff09".equals(activeKeywordRules)) {
+            prompt = prompt + "\n\n--- \u5f53\u524d\u5339\u914d\u7684\u5173\u952e\u8bcd\u89c4\u5219 ---\n" + activeKeywordRules;
         }
 
         if (safeTemplate.indexOf("{{CHAT_HISTORY}}") < 0 && session != null && !session.getMessages().isEmpty()) {

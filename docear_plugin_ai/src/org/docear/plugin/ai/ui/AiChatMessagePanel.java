@@ -192,10 +192,14 @@ public class AiChatMessagePanel extends JPanel {
         updateThinkingSection(parsed, complete);
 
         displayAnswer = parsed.getFinalAnswer();
-        if (displayAnswer.length() == 0 && parsed.hasThinking() && !complete) {
-            displayAnswer = "\u751f\u6210\u4e2d...";
+        if (displayAnswer.length() == 0 && parsed.hasThinking()) {
+            displayAnswer = complete ? "" : "\u751f\u6210\u4e2d...";
         } else if (displayAnswer.length() == 0 && !parsed.hasThinking()) {
             displayAnswer = plainContent;
+        }
+
+        if (displayAnswer.length() == 0 && complete && parsed.hasThinking()) {
+            displayAnswer = "\uff08\u65e0\u6587\u672c\u56de\u590d\uff09";
         }
 
         aiContentPane.setText(AiMarkdownRenderer.toHtml(displayAnswer));
@@ -392,10 +396,8 @@ public class AiChatMessagePanel extends JPanel {
 
         thinkingToggle.setVisible(true);
         thinkingArea.setText(parsed.getThinkingLog());
-        if (complete) {
-            thinkingExpanded = false;
-            thinkingArea.setVisible(false);
-        }
+        thinkingExpanded = false;
+        thinkingArea.setVisible(false);
         updateThinkingToggleLabel();
     }
 

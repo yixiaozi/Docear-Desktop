@@ -48,6 +48,7 @@ public class DocearAiController {
     private final AiInteractionLogger interactionLogger;
     private final AiChatSessionManager chatSessionManager;
     private volatile boolean chatCancelled;
+    private volatile String activeStreamingMapKey;
 
     private DocearAiController(ModeController modeController) {
         this.modeController = modeController;
@@ -130,8 +131,10 @@ public class DocearAiController {
     public void invokeChatStreaming(final String userInput, final MapModel map, final NodeModel focusNode,
             final AiChatStreamListener uiListener) {
         chatCancelled = false;
+        recordUserMessage(map, userInput);
+        activeStreamingMapKey = AiChatSessionManager.resolveMapKey(map);
+
         final AiChatSession session = chatSessionManager.getOrCreateSession(map);
-        session.addMessage(new AiChatMessage(AiChatMessage.Role.USER, userInput));
 
         final String rawPrompt = promptBuilder.buildRawChatPrompt(userInput, map, session, focusNode);
         final int redactionCount = AiPromptBuilder.countRedactions(rawPrompt);
@@ -150,6 +153,7 @@ public class DocearAiController {
             }
 
             public void onComplete(String fullText) {
+                activeStreamingMapKey = null;
                 String response = fullText != null && fullText.length() > 0 ? fullText : full.toString();
                 if (response == null) {
                     response = "";
@@ -163,6 +167,7 @@ public class DocearAiController {
             }
 
             public void onError(String message) {
+                activeStreamingMapKey = null;
                 if (uiListener != null) {
                     uiListener.onError(message);
                 }
@@ -174,8 +179,40 @@ public class DocearAiController {
         });
     }
 
+    /**
+     * 立即保存用户消息，避免切换导图时丢失尚未完成的对话。
+     */
+    public void recordUserMessage(MapModel map, String userInput) {
+        if (map == null || userInput == null || userInput.trim().length() == 0) {
+            return;
+        }
+        AiChatSession session = chatSessionManager.getOrCreateSession(map);
+        List<AiChatMessage> messages = session.getMessages();
+        if (!messages.isEmpty()) {
+            AiChatMessage last = messages.get(messages.size() - 1);
+            if (last.getRole() == AiChatMessage.Role.USER && userInput.equals(last.getContent())) {
+                chatSessionManager.saveSession(map, session);
+                return;
+            }
+        }
+        session.addMessage(new AiChatMessage(AiChatMessage.Role.USER, userInput));
+        chatSessionManager.saveSession(map, session);
+    }
+
+    public boolean isStreamingForMap(MapModel map) {
+        if (map == null || activeStreamingMapKey == null) {
+            return false;
+        }
+        return activeStreamingMapKey.equals(AiChatSessionManager.resolveMapKey(map));
+    }
+
+    public boolean isChatCancelled() {
+        return chatCancelled;
+    }
+
     public void cancelChatRequest() {
         chatCancelled = true;
+        activeStreamingMapKey = null;
         backend.cancelCurrentRequest();
     }
 
