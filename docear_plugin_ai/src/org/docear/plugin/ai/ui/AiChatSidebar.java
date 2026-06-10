@@ -2,7 +2,10 @@ package org.docear.plugin.ai.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -64,7 +67,15 @@ public class AiChatSidebar extends JPanel {
         messagesPanel.setBackground(Color.WHITE);
         messagesScroll = new JScrollPane(messagesPanel);
         messagesScroll.setBorder(BorderFactory.createEmptyBorder());
+        messagesScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        messagesScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         messagesScroll.getVerticalScrollBar().setUnitIncrement(18);
+        messagesScroll.getViewport().addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                syncMessagePanelWidths();
+            }
+        });
 
         inputArea = new JTextArea(3, 20);
         inputArea.setLineWrap(true);
@@ -206,7 +217,9 @@ public class AiChatSidebar extends JPanel {
                         }
                         SwingUtilities.invokeLater(new Runnable() {
                             public void run() {
-                                streamingPanel.setContent(full.toString());
+                                streamingPanel.setStreamingContent(full.toString());
+                                syncMessagePanelWidths();
+                                scrollToBottom();
                             }
                         });
                     }
@@ -218,6 +231,7 @@ public class AiChatSidebar extends JPanel {
                                 if (streamingPanel != null) {
                                     streamingPanel.setContent(reply);
                                 }
+                                syncMessagePanelWidths();
                                 refreshContextStatusAfterSend(text, map);
                                 setRequestInFlight(false);
                                 scrollToBottom();
@@ -413,6 +427,7 @@ public class AiChatSidebar extends JPanel {
         continueLabel.setAlignmentX(LEFT_ALIGNMENT);
         continueLabel.setBorder(BorderFactory.createEmptyBorder(6, 6, 4, 6));
         messagesPanel.add(continueLabel);
+        syncMessagePanelWidths();
         messagesPanel.revalidate();
         messagesPanel.repaint();
     }
@@ -449,9 +464,57 @@ public class AiChatSidebar extends JPanel {
         wrapper.setOpaque(false);
         wrapper.add(panel, BorderLayout.CENTER);
         messagesPanel.add(wrapper);
+        syncMessagePanelWidths();
         messagesPanel.revalidate();
         messagesPanel.repaint();
         scrollToBottom();
+    }
+
+    private void syncMessagePanelWidths() {
+        final int width = messagesScroll.getViewport().getWidth();
+        if (width <= 0) {
+            return;
+        }
+        fitAllMessagePanels(width);
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                fitAllMessagePanels(width);
+                messagesPanel.revalidate();
+                messagesPanel.repaint();
+            }
+        });
+    }
+
+    private void fitAllMessagePanels(int width) {
+        for (java.awt.Component component : messagesPanel.getComponents()) {
+            AiChatMessagePanel panel = findMessagePanel(component);
+            if (panel != null) {
+                panel.fitToWidth(width);
+            } else {
+                Dimension pref = component.getPreferredSize();
+                int height = pref.height > 0 ? pref.height : component.getHeight();
+                component.setMaximumSize(new Dimension(width, height));
+                component.setPreferredSize(new Dimension(width, height));
+            }
+        }
+        messagesPanel.revalidate();
+    }
+
+    private AiChatMessagePanel findMessagePanel(java.awt.Component component) {
+        if (component instanceof AiChatMessagePanel) {
+            return (AiChatMessagePanel) component;
+        }
+        if (component instanceof JPanel) {
+            JPanel container = (JPanel) component;
+            java.awt.Component[] children = container.getComponents();
+            for (int i = 0; i < children.length; i++) {
+                AiChatMessagePanel panel = findMessagePanel(children[i]);
+                if (panel != null) {
+                    return panel;
+                }
+            }
+        }
+        return null;
     }
 
     private void scrollToBottom() {
@@ -492,6 +555,7 @@ public class AiChatSidebar extends JPanel {
         label.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
         label.setAlignmentX(LEFT_ALIGNMENT);
         messagesPanel.add(label);
+        syncMessagePanelWidths();
         messagesPanel.revalidate();
         messagesPanel.repaint();
         scrollToBottom();

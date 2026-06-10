@@ -19,6 +19,8 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_INTERACTION_LOG_DIR = "ai.interaction_log_dir";
     private static final String AI_HOME_DIR_NAME = ".docear" + File.separator + "ai";
     private static final String PROMPT_FILE_NAME = "AI\u63d0\u793a\u8bcd.mm";
+    private static final String PROPERTY_AI_LOG_PROMPT = "ai.log_prompt";
+    private static final String AI_LOGS_DIR_NAME = "ai_logs";
     private static final String LOG_DIR_NAME = "logs";
     private static final String DEFAULT_FULL_HISTORY_DIR =
             "E:\\yixiaozi\\_data\\17DAB3A24CC7NGK3HWY5ERX3AURZZAJ2PT99";
@@ -80,6 +82,14 @@ public class DocearAiConfig {
     public String getInteractionLogDirectory() {
         return ResourceController.getResourceController().getProperty(
                 PROPERTY_AI_INTERACTION_LOG_DIR, getDefaultInteractionLogDirectory());
+    }
+
+    public String getAiLogsDirectoryName() {
+        return AI_LOGS_DIR_NAME;
+    }
+
+    public boolean isLogPromptEnabled() {
+        return ResourceController.getResourceController().getBooleanProperty(PROPERTY_AI_LOG_PROMPT);
     }
 
     public int getMaxContextTurns() {

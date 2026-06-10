@@ -23,6 +23,7 @@ import org.docear.plugin.ai.prompt.AiSelectedNodeExtractor;
 import org.docear.plugin.ai.ui.AiChatContextInfo;
 import org.docear.plugin.ai.ui.AiChatSidebar;
 import org.docear.plugin.ai.ui.AiChatTabInstaller;
+import org.docear.plugin.ai.ui.AiMarkdownRenderer;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.IMenuContributor;
 import org.freeplane.core.ui.MenuBuilder;
@@ -33,8 +34,6 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
-import org.freeplane.features.note.NoteController;
-import org.freeplane.features.note.mindmapmode.MNoteController;
 import org.freeplane.features.text.TextController;
 import org.freeplane.features.text.mindmapmode.MTextController;
 
@@ -223,47 +222,35 @@ public class DocearAiController {
         if (selected == null) {
             return;
         }
+        String[] lines = AiMarkdownRenderer.splitIntoNodeLines(content);
+        if (lines.length == 0) {
+            return;
+        }
         MMapController mapController = (MMapController) Controller.getCurrentModeController().getMapController();
         MTextController textController = (MTextController) TextController.getController();
         NodeModel parent;
-        int index;
+        int insertIndex;
         if (asChild) {
             parent = selected;
-            index = parent.getChildCount();
+            insertIndex = parent.getChildCount();
         } else {
             parent = selected.getParentNode();
             if (parent == null) {
                 parent = selected;
-                index = parent.getChildCount();
+                insertIndex = parent.getChildCount();
             } else {
-                index = parent.getIndex(selected) + 1;
+                insertIndex = parent.getIndex(selected) + 1;
             }
         }
-        String title = extractTitleFromContent(content);
-        NodeModel newNode = mapController.addNewNode(parent, index, selected.isLeft());
-        textController.setNodeText(newNode, title);
-        if (content.length() > title.length()) {
-            NoteController noteController = NoteController.getController();
-            if (noteController instanceof MNoteController) {
-                ((MNoteController) noteController).setNoteText(newNode, content);
-            }
-        }
-    }
-
-    private String extractTitleFromContent(String content) {
-        String[] lines = content.replace("\r\n", "\n").split("\n");
         for (int i = 0; i < lines.length; i++) {
-            String line = lines[i].trim();
-            if (line.length() == 0) {
-                continue;
+            NodeModel newNode = mapController.addNewNode(parent, insertIndex + i, selected.isLeft());
+            String richText = AiMarkdownRenderer.toNodeRichText(lines[i]);
+            if (richText != null) {
+                textController.setNodeText(newNode, richText);
+            } else {
+                textController.setNodeText(newNode, lines[i]);
             }
-            line = line.replaceAll("^[-*#\\d.]+\\s*", "");
-            if (line.length() > 80) {
-                return line.substring(0, 80) + "...";
-            }
-            return line;
         }
-        return "AI \u56de\u590d";
     }
 
     private NodeModel resolveSelectedNode() {
