@@ -40,6 +40,8 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_MAX_WORKSPACE_FILE_INDEX_ITEMS = "ai.max_workspace_file_index_items";
     private static final String PROPERTY_AI_WORKSPACE_FILE_INDEX_ALL_FILES = "ai.workspace_file_index_all_files";
     private static final String PROPERTY_AI_WORKSPACE_FILE_INDEX_CACHE_SECONDS = "ai.workspace_file_index_cache_seconds";
+    private static final String PROPERTY_AI_MONTHLY_QUOTA = "ai.monthly_quota";
+    private static final String PROPERTY_AI_USAGE_WARNING_COOLDOWN_MINUTES = "ai.usage_warning_cooldown_minutes";
 
     public DocearAiConfig() {
     }
@@ -242,6 +244,36 @@ public class DocearAiConfig {
             return seconds * 1000L;
         } catch (NumberFormatException e) {
             return 300000L;
+        }
+    }
+
+    /**
+     * Copilot CLI 月度调用次数上限。GitHub Pro 约 300 次/月 Premium 请求，
+     * 这里设为保守值 250 以避免静默降级。设置为 0 或负数表示不启用限制。
+     */
+    public int getMonthlyQuota() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MONTHLY_QUOTA, "250"));
+        } catch (NumberFormatException e) {
+            return 250;
+        }
+    }
+
+    /**
+     * 用量警告的冷却时间（毫秒）。达到配额 80% 或更高时，
+     * 在此冷却期内不重复弹出警告，避免打扰。
+     */
+    public long getUsageWarningCooldownMs() {
+        try {
+            int minutes = Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_USAGE_WARNING_COOLDOWN_MINUTES, "360"));
+            if (minutes <= 0) {
+                minutes = 360;
+            }
+            return (long) minutes * 60L * 1000L;
+        } catch (NumberFormatException e) {
+            return 360L * 60L * 1000L;
         }
     }
 

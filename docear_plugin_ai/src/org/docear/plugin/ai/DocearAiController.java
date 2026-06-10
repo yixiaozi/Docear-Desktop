@@ -6,7 +6,6 @@ import java.util.List;
 
 import org.docear.plugin.ai.actions.AiAskAboutNodeAction;
 import org.docear.plugin.ai.actions.AiGenerateSubNodesAction;
-import org.docear.plugin.ai.actions.OpenAiPromptTemplateAction;
 import org.docear.plugin.ai.backend.AiBackend;
 import org.docear.plugin.ai.backend.AiChatStreamListener;
 import org.docear.plugin.ai.backend.CopilotCliBackend;
@@ -25,6 +24,7 @@ import org.docear.plugin.ai.ui.AiChatContextInfo;
 import org.docear.plugin.ai.ui.AiChatSidebar;
 import org.docear.plugin.ai.ui.AiChatTabInstaller;
 import org.docear.plugin.ai.ui.AiMarkdownRenderer;
+import org.docear.plugin.ai.usage.AiUsageCounter;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.IMenuContributor;
 import org.freeplane.core.ui.MenuBuilder;
@@ -48,6 +48,7 @@ public class DocearAiController {
     private final AiPromptBuilder promptBuilder;
     private final AiInteractionLogger interactionLogger;
     private final AiChatSessionManager chatSessionManager;
+    private final AiUsageCounter usageCounter;
     private volatile boolean chatCancelled;
     private volatile String activeStreamingMapKey;
 
@@ -57,6 +58,7 @@ public class DocearAiController {
         this.promptBuilder = new AiPromptBuilder();
         this.interactionLogger = new AiInteractionLogger();
         this.chatSessionManager = new AiChatSessionManager();
+        this.usageCounter = new AiUsageCounter();
         this.promptBuilder.getTemplateStore().ensureTemplateFileExists();
         this.interactionLogger.ensureLogDirectoryExists();
         this.chatSessionManager.getStore().ensureDirectoryExists();
@@ -120,11 +122,16 @@ public class DocearAiController {
         return chatSidebar;
     }
 
+    public AiUsageCounter getUsageCounter() {
+        return usageCounter;
+    }
+
     public String invokeChat(String userInput, MapModel map) {
         AiChatSession session = chatSessionManager.getOrCreateSession(map);
         session.addMessage(new AiChatMessage(AiChatMessage.Role.USER, userInput));
 
         String prompt = promptBuilder.buildChatPrompt(userInput, map, session);
+        usageCounter.recordInvocation(AiUsageCounter.TYPE_CHAT);
         String response = backend.chat(prompt);
         if (response == null) {
             response = "";
@@ -161,6 +168,8 @@ public class DocearAiController {
         final String prompt = AiPromptBuilder.sanitizeForOutbound(boundedPrompt);
         LogUtils.info("AI prompt prepared in " + (System.currentTimeMillis() - promptBuildStarted)
                 + " ms, length=" + prompt.length() + " (raw=" + rawPrompt.length() + ").");
+
+        usageCounter.recordInvocation(AiUsageCounter.TYPE_CHAT);
 
         if (progress != null) {
             progress.onStep(6, 6, "\u8c03\u7528 Copilot CLI\uff08\u53ef\u80fd\u9700\u7b49\u51e0\u5341\u79d2\uff09...");
