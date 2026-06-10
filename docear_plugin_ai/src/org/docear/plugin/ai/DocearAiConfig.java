@@ -30,6 +30,11 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_MAX_LINKED_FILES = "ai.max_linked_files";
     private static final String PROPERTY_AI_MAX_FILE_SIZE_BYTES = "ai.max_file_size_bytes";
     private static final String PROPERTY_AI_MAX_TOTAL_CONTEXT_CHARS = "ai.max_total_context_chars";
+    private static final String PROPERTY_AI_MAX_WORKSPACE_PLAN_CHARS = "ai.max_workspace_plan_chars";
+    private static final String PROPERTY_AI_WORKSPACE_PLANS_ENABLED = "ai.workspace_plans_enabled";
+    private static final String PROPERTY_AI_WORKSPACE_PLANS_CACHE_SECONDS = "ai.workspace_plans_cache_seconds";
+    private static final String PROPERTY_AI_MAX_WORKSPACE_PLAN_ITEMS = "ai.max_workspace_plan_items_per_section";
+    private static final String PROPERTY_AI_MAX_OUTBOUND_PROMPT_CHARS = "ai.max_outbound_prompt_chars";
 
     public DocearAiConfig() {
     }
@@ -143,6 +148,52 @@ public class DocearAiConfig {
                     PROPERTY_AI_MAX_TOTAL_CONTEXT_CHARS, "120000"));
         } catch (NumberFormatException e) {
             return 120000;
+        }
+    }
+
+    public int getMaxWorkspacePlanChars() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_WORKSPACE_PLAN_CHARS, "12000"));
+        } catch (NumberFormatException e) {
+            return 12000;
+        }
+    }
+
+    public boolean isWorkspacePlansEnabled() {
+        String value = ResourceController.getResourceController().getProperty(
+                PROPERTY_AI_WORKSPACE_PLANS_ENABLED, "true");
+        return !"false".equalsIgnoreCase(value) && !"0".equals(value);
+    }
+
+    public long getWorkspacePlansCacheTtlMs() {
+        try {
+            int seconds = Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_WORKSPACE_PLANS_CACHE_SECONDS, "180"));
+            if (seconds <= 0) {
+                return 180000L;
+            }
+            return seconds * 1000L;
+        } catch (NumberFormatException e) {
+            return 180000L;
+        }
+    }
+
+    public int getMaxWorkspacePlanItemsPerSection() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_WORKSPACE_PLAN_ITEMS, "60"));
+        } catch (NumberFormatException e) {
+            return 60;
+        }
+    }
+
+    public int getMaxOutboundPromptChars() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_OUTBOUND_PROMPT_CHARS, "100000"));
+        } catch (NumberFormatException e) {
+            return 100000;
         }
     }
 

@@ -8,6 +8,10 @@ import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.freeplane.core.util.LogUtils;
 
@@ -118,31 +122,78 @@ public class CopilotCliBackend implements AiBackend {
 
             StringBuilder output = new StringBuilder();
             reader = new BufferedReader(new InputStreamReader(process.getInputStream(), "UTF-8"));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (cancelRequested || (listener != null && listener.isCancelled())) {
-                    process.destroy();
-                    if (listener != null) {
-                        listener.onError("\u5df2\u53d6\u6d88\u751f\u6210\u3002");
-                        listener.onComplete(output.toString().trim());
+            final BlockingQueue<String> lineQueue = new LinkedBlockingQueue<String>();
+            final AtomicBoolean readerFinished = new AtomicBoolean(false);
+            final BufferedReader streamReader = reader;
+            Thread readerThread = new Thread(new Runnable() {
+                public void run() {
+                    try {
+                        String nextLine;
+                        while ((nextLine = streamReader.readLine()) != null) {
+                            lineQueue.put(nextLine);
+                        }
                     }
-                    return output.toString().trim();
+                    catch (Exception e) {
+                        LogUtils.warn("Copilot CLI reader stopped: " + e.getMessage());
+                    }
+                    finally {
+                        readerFinished.set(true);
+                    }
                 }
-                String chunk = line + "\n";
-                output.append(chunk);
-                if (listener != null) {
-                    listener.onChunk(chunk);
+            }, "CopilotCliReader");
+            readerThread.setDaemon(true);
+            readerThread.start();
+
+            long deadline = System.currentTimeMillis() + PROCESS_TIMEOUT_MILLIS;
+            try {
+                while (true) {
+                    if (cancelRequested || (listener != null && listener.isCancelled())) {
+                        process.destroy();
+                        readerThread.interrupt();
+                        if (listener != null) {
+                            listener.onError("\u5df2\u53d6\u6d88\u751f\u6210\u3002");
+                            listener.onComplete(output.toString().trim());
+                        }
+                        return output.toString().trim();
+                    }
+                    if (System.currentTimeMillis() >= deadline) {
+                        process.destroy();
+                        readerThread.interrupt();
+                        LogUtils.warn("Copilot CLI process timed out.");
+                        if (listener != null) {
+                            listener.onError("\u8bf7\u6c42\u8d85\u65f6\u3002");
+                            listener.onComplete(output.toString().trim());
+                        }
+                        return output.toString().trim();
+                    }
+                    String line = lineQueue.poll(500, TimeUnit.MILLISECONDS);
+                    if (line == null) {
+                        if (readerFinished.get() && lineQueue.isEmpty()) {
+                            break;
+                        }
+                        continue;
+                    }
+                    String chunk = line + "\n";
+                    output.append(chunk);
+                    if (listener != null) {
+                        listener.onChunk(chunk);
+                    }
                 }
             }
-
-            if (!waitForProcess(process, PROCESS_TIMEOUT_MILLIS)) {
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 process.destroy();
-                LogUtils.warn("Copilot CLI process timed out.");
+                readerThread.interrupt();
                 if (listener != null) {
-                    listener.onError("\u8bf7\u6c42\u8d85\u65f6\u3002");
+                    listener.onError("\u8bf7\u6c42\u88ab\u4e2d\u65ad\u3002");
                     listener.onComplete(output.toString().trim());
                 }
                 return output.toString().trim();
+            }
+
+            if (!waitForProcess(process, 5000)) {
+                process.destroy();
+                LogUtils.warn("Copilot CLI process did not exit cleanly.");
             }
 
             if (process.exitValue() != 0) {

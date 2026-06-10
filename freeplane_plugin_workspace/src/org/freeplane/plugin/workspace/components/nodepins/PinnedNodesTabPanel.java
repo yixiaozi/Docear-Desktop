@@ -26,6 +26,8 @@ import javax.swing.JScrollPane;
 import javax.swing.JToggleButton;
 
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.core.util.WorkspaceSideTabSnapshot;
+import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
 import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.INodeChangeListener;
 import org.freeplane.features.map.MapChangeEvent;
@@ -36,6 +38,7 @@ import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 import org.freeplane.plugin.workspace.components.favorites.TagChipFactory;
 import org.freeplane.plugin.workspace.components.favorites.WrapFlowLayout;
 import org.freeplane.plugin.workspace.features.nodepins.NodeDetailsTagService;
+import org.freeplane.plugin.workspace.features.nodepins.NodeDetailsTagUtils;
 import org.freeplane.plugin.workspace.features.nodepins.NodeMindMapActionUtils;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinEntry;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinNavigator;
@@ -273,6 +276,38 @@ public class PinnedNodesTabPanel extends JPanel {
 		for (int i = 0; i < entries.size(); i++) {
 			listModel.addElement(resolveDisplayEntry((NodePinEntry) entries.get(i)));
 		}
+		publishPinnedSnapshot(index.getDisplayEntries(true, null));
+	}
+
+	private void publishPinnedSnapshot(final List entries) {
+		final List snapshot = new ArrayList();
+		for (int i = 0; i < entries.size(); i++) {
+			final NodePinEntry entry = (NodePinEntry) entries.get(i);
+			if (!entry.isPinned() || entry.getTags().contains(NodeDetailsTagUtils.TAG_ARCHIVED)) {
+				continue;
+			}
+			snapshot.add(new WorkspaceSideTabSnapshot.PinnedEntry(entry.getMapFile(), entry.getNodeId(),
+					entry.getListNodeLabel(), formatTagsForSnapshot(entry.getTags())));
+		}
+		WorkspaceSideTabSnapshotRegistry.updatePinnedEntries(snapshot);
+	}
+
+	private static String formatTagsForSnapshot(final Set tags) {
+		if (tags == null || tags.isEmpty()) {
+			return "";
+		}
+		final StringBuilder sb = new StringBuilder();
+		for (final Iterator it = tags.iterator(); it.hasNext();) {
+			final Object tag = it.next();
+			if (NodeDetailsTagUtils.TAG_ARCHIVED.equals(tag) || NodeDetailsTagUtils.PIN_TAG.equals(tag)) {
+				continue;
+			}
+			if (sb.length() > 0) {
+				sb.append(',');
+			}
+			sb.append(tag);
+		}
+		return sb.toString();
 	}
 
 	private NodePinEntry resolveDisplayEntry(final NodePinEntry entry) {

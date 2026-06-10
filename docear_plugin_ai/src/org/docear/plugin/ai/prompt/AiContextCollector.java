@@ -35,21 +35,41 @@ public final class AiContextCollector {
     }
 
     public static ContextBundle collect(MapModel map, String userQuestion) {
+        return collect(map, userQuestion, null);
+    }
+
+    public static ContextBundle collect(MapModel map, String userQuestion, AiPromptBuildProgress progress) {
+        return collect(map, userQuestion, progress, false);
+    }
+
+    public static ContextBundle collect(MapModel map, String userQuestion, AiPromptBuildProgress progress,
+            boolean skipLinkedFiles) {
         DocearAiConfig config = new DocearAiConfig();
         int maxFiles = config.getMaxLinkedFiles();
         int maxFileBytes = config.getMaxFileSizeBytes();
         int maxTotalChars = config.getMaxTotalContextChars();
 
+        report(progress, 1, 6, "\u8bfb\u53d6\u5f53\u524d\u5bfc\u56fe\u7ed3\u6784...");
         String mapStructure = extractMapStructure(map);
-        Set<File> files = collectReferencedFiles(map, userQuestion);
+        File mapFile = map != null ? map.getFile() : null;
+        File promptTemplate = new File(config.getPromptTemplateFile());
+        if (skipLinkedFiles) {
+            report(progress, 2, 6, "\u7b80\u5355\u95ee\u9898\uff0c\u8df3\u8fc7\u5173\u8054\u6587\u4ef6...");
+            return new ContextBundle(mapStructure, "", 0, 0);
+        }
+        Set<File> files = collectReferencedFiles(map, userQuestion, mapFile, promptTemplate);
         StringBuilder referenced = new StringBuilder();
         int totalChars = mapStructure.length();
         int filesIncluded = 0;
+        int fileIndex = 0;
 
         for (File file : files) {
             if (filesIncluded >= maxFiles || totalChars >= maxTotalChars) {
                 break;
             }
+            fileIndex++;
+            report(progress, 2, 6, "\u8bfb\u53d6\u5173\u8054\u6587\u4ef6 (" + fileIndex + "/" + files.size()
+                    + "): " + file.getName());
             String content = readTextFile(file, maxFileBytes);
             if (content == null || content.trim().length() == 0) {
                 continue;
@@ -77,6 +97,124 @@ public final class AiContextCollector {
         }
 
         return new ContextBundle(mapStructure, referenced.toString(), filesIncluded, files.size());
+    }
+
+    private static void report(AiPromptBuildProgress progress, int step, int total, String label) {
+        if (progress != null) {
+            progress.onStep(step, total, label);
+        }
+    }
+
+    private static Set<File> collectReferencedFiles(MapModel map, String userQuestion, File mapFile,
+            File promptTemplate) {
+        LinkedHashSet<File> files = new LinkedHashSet<File>();
+        File baseDir = mapFile != null ? mapFile.getParentFile() : null;
+
+        if (map != null) {
+            collectFilesFromNode(map.getRootNode(), baseDir, files, mapFile, promptTemplate);
+        }
+        collectPathsFromText(userQuestion, baseDir, files, mapFile, promptTemplate);
+
+        return files;
+    }
+
+    private static void collectFilesFromNode(NodeModel node, File baseDir, Set<File> files, File mapFile,
+            File promptTemplate) {
+        if (node == null) {
+            return;
+        }
+        URI link = NodeLinks.getValidLink(node);
+        addFileFromUri(link, baseDir, files, mapFile, promptTemplate);
+
+        String text = TextController.getController().getPlainTextContent(node);
+        collectPathsFromText(text, baseDir, files, mapFile, promptTemplate);
+
+        List<NodeModel> children = node.getChildren();
+        for (int i = 0; i < children.size(); i++) {
+            collectFilesFromNode(children.get(i), baseDir, files, mapFile, promptTemplate);
+        }
+    }
+
+    private static void collectPathsFromText(String text, File baseDir, Set<File> files, File mapFile,
+            File promptTemplate) {
+        if (text == null || text.trim().length() == 0) {
+            return;
+        }
+        Matcher windowsMatcher = WINDOWS_PATH.matcher(text);
+        while (windowsMatcher.find()) {
+            addCandidateFile(new File(windowsMatcher.group()), baseDir, files, mapFile, promptTemplate);
+        }
+        Matcher unixMatcher = UNIX_PATH.matcher(text);
+        while (unixMatcher.find()) {
+            addCandidateFile(new File(unixMatcher.group()), baseDir, files, mapFile, promptTemplate);
+        }
+    }
+
+    private static void addFileFromUri(URI uri, File baseDir, Set<File> files, File mapFile, File promptTemplate) {
+        if (uri == null) {
+            return;
+        }
+        try {
+            if ("file".equalsIgnoreCase(uri.getScheme())) {
+                addCandidateFile(new File(uri), baseDir, files, mapFile, promptTemplate);
+            } else {
+                String raw = uri.toString();
+                if (raw.length() > 2 && raw.charAt(1) == ':') {
+                    addCandidateFile(new File(raw), baseDir, files, mapFile, promptTemplate);
+                } else if (raw.startsWith("/") || raw.matches("[A-Za-z]:.*")) {
+                    addCandidateFile(new File(raw), baseDir, files, mapFile, promptTemplate);
+                }
+            }
+        } catch (Exception e) {
+            LogUtils.warn("Failed to resolve link: " + uri);
+        }
+    }
+
+    private static void addCandidateFile(File candidate, File baseDir, Set<File> files, File mapFile,
+            File promptTemplate) {
+        if (candidate == null) {
+            return;
+        }
+        File resolved = candidate;
+        if (!resolved.isAbsolute() && baseDir != null) {
+            resolved = new File(baseDir, candidate.getPath());
+        }
+        if (!resolved.exists() || !resolved.isFile() || !isReadableTextFile(resolved)) {
+            return;
+        }
+        resolved = resolved.getAbsoluteFile();
+        if (shouldSkipReferencedFile(resolved, mapFile, promptTemplate)) {
+            return;
+        }
+        files.add(resolved);
+    }
+
+    private static boolean shouldSkipReferencedFile(File file, File mapFile, File promptTemplate) {
+        if (mapFile != null) {
+            try {
+                if (file.equals(mapFile.getAbsoluteFile())) {
+                    return true;
+                }
+            }
+            catch (Exception e) {
+                if (file.getAbsolutePath().equalsIgnoreCase(mapFile.getAbsolutePath())) {
+                    return true;
+                }
+            }
+        }
+        if (promptTemplate != null) {
+            try {
+                if (file.equals(promptTemplate.getAbsoluteFile())) {
+                    return true;
+                }
+            }
+            catch (Exception e) {
+                if (file.getAbsolutePath().equalsIgnoreCase(promptTemplate.getAbsolutePath())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static String extractMapStructure(MapModel map) {
@@ -122,92 +260,6 @@ public final class AiContextCollector {
         for (int i = 0; i < children.size(); i++) {
             appendNode(children.get(i), sb, depth + 1);
         }
-    }
-
-    private static Set<File> collectReferencedFiles(MapModel map, String userQuestion) {
-        LinkedHashSet<File> files = new LinkedHashSet<File>();
-        File mapFile = map != null ? map.getFile() : null;
-        File baseDir = mapFile != null ? mapFile.getParentFile() : null;
-
-        if (mapFile != null && mapFile.exists()) {
-            files.add(mapFile);
-        }
-
-        if (map != null) {
-            collectFilesFromNode(map.getRootNode(), baseDir, files);
-        }
-        collectPathsFromText(userQuestion, baseDir, files);
-
-        File promptTemplate = new File(new DocearAiConfig().getPromptTemplateFile());
-        if (promptTemplate.exists()) {
-            files.add(promptTemplate);
-        }
-
-        return files;
-    }
-
-    private static void collectFilesFromNode(NodeModel node, File baseDir, Set<File> files) {
-        if (node == null) {
-            return;
-        }
-        URI link = NodeLinks.getValidLink(node);
-        addFileFromUri(link, baseDir, files);
-
-        String text = TextController.getController().getPlainTextContent(node);
-        collectPathsFromText(text, baseDir, files);
-
-        List<NodeModel> children = node.getChildren();
-        for (int i = 0; i < children.size(); i++) {
-            collectFilesFromNode(children.get(i), baseDir, files);
-        }
-    }
-
-    private static void collectPathsFromText(String text, File baseDir, Set<File> files) {
-        if (text == null || text.trim().length() == 0) {
-            return;
-        }
-        Matcher windowsMatcher = WINDOWS_PATH.matcher(text);
-        while (windowsMatcher.find()) {
-            addCandidateFile(new File(windowsMatcher.group()), baseDir, files);
-        }
-        Matcher unixMatcher = UNIX_PATH.matcher(text);
-        while (unixMatcher.find()) {
-            addCandidateFile(new File(unixMatcher.group()), baseDir, files);
-        }
-    }
-
-    private static void addFileFromUri(URI uri, File baseDir, Set<File> files) {
-        if (uri == null) {
-            return;
-        }
-        try {
-            if ("file".equalsIgnoreCase(uri.getScheme())) {
-                addCandidateFile(new File(uri), baseDir, files);
-            } else {
-                String raw = uri.toString();
-                if (raw.length() > 2 && raw.charAt(1) == ':') {
-                    addCandidateFile(new File(raw), baseDir, files);
-                } else if (raw.startsWith("/") || raw.matches("[A-Za-z]:.*")) {
-                    addCandidateFile(new File(raw), baseDir, files);
-                }
-            }
-        } catch (Exception e) {
-            LogUtils.warn("Failed to resolve link: " + uri);
-        }
-    }
-
-    private static void addCandidateFile(File candidate, File baseDir, Set<File> files) {
-        if (candidate == null) {
-            return;
-        }
-        File resolved = candidate;
-        if (!resolved.isAbsolute() && baseDir != null) {
-            resolved = new File(baseDir, candidate.getPath());
-        }
-        if (!resolved.exists() || !resolved.isFile() || !isReadableTextFile(resolved)) {
-            return;
-        }
-        files.add(resolved.getAbsoluteFile());
     }
 
     private static boolean isReadableTextFile(File file) {

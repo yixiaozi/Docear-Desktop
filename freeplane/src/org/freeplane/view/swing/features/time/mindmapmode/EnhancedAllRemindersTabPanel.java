@@ -44,6 +44,8 @@ import javax.xml.parsers.SAXParserFactory;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.WorkspaceSideTabSnapshot;
+import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
 import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -565,6 +567,22 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 				tree.scrollPathToVisible(selectedPath);
 			}
 		}
+		publishOneTimeReminderSnapshot(records);
+	}
+
+	private void publishOneTimeReminderSnapshot(List records) {
+		List entries = new ArrayList();
+		for (int i = 0; i < records.size(); i++) {
+			ReminderRecord record = (ReminderRecord) records.get(i);
+			if (!isValidMindmapFile(record.file)) {
+				continue;
+			}
+			String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText)
+					.replaceAll("\\s+", " ").trim();
+			entries.add(new WorkspaceSideTabSnapshot.ReminderEntry(record.file, record.nodeId, text, record.remindAt,
+					false, null));
+		}
+		WorkspaceSideTabSnapshotRegistry.updateOneTimeReminders(entries);
 	}
 
 	private String getSelectedReminderKey() {

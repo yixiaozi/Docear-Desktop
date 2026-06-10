@@ -40,6 +40,8 @@ import javax.xml.parsers.SAXParserFactory;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.WorkspaceSideTabSnapshot;
+import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
@@ -579,6 +581,21 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				tree.scrollPathToVisible(selectedPath);
 			}
 		}
+		onSideTabCacheRefreshed(records);
+	}
+
+	protected void onSideTabCacheRefreshed(List records) {
+		if (!"\u5168\u90e8\u5f85\u529e".equals(getRootLabel())) {
+			return;
+		}
+		List entries = new ArrayList();
+		for (int i = 0; i < records.size(); i++) {
+			ItemRecord record = (ItemRecord) records.get(i);
+			String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText)
+					.replaceAll("\\s+", " ").trim();
+			entries.add(new WorkspaceSideTabSnapshot.TodoEntry(record.file, record.nodeId, text));
+		}
+		WorkspaceSideTabSnapshotRegistry.updateTodos(entries);
 	}
 
 	private String getSelectedItemKey() {

@@ -17,6 +17,7 @@ import org.docear.plugin.ai.chat.AiChatSessionManager;
 import org.docear.plugin.ai.log.AiInteractionLogger;
 import org.docear.plugin.ai.log.AiInteractionRecord;
 import org.docear.plugin.ai.prompt.AiContextCollector;
+import org.docear.plugin.ai.prompt.AiPromptBuildProgress;
 import org.docear.plugin.ai.prompt.AiPromptBuilder;
 import org.docear.plugin.ai.prompt.AiPromptTemplateGuard;
 import org.docear.plugin.ai.prompt.AiSelectedNodeExtractor;
@@ -130,22 +131,43 @@ public class DocearAiController {
 
     public void invokeChatStreaming(final String userInput, final MapModel map, final NodeModel focusNode,
             final AiChatStreamListener uiListener) {
+        invokeChatStreaming(userInput, map, focusNode, null, uiListener);
+    }
+
+    public void invokeChatStreaming(final String userInput, final MapModel map, final NodeModel focusNode,
+            final AiPromptBuildProgress progress, final AiChatStreamListener uiListener) {
         chatCancelled = false;
         recordUserMessage(map, userInput);
         activeStreamingMapKey = AiChatSessionManager.resolveMapKey(map);
 
         final AiChatSession session = chatSessionManager.getOrCreateSession(map);
 
-        final String rawPrompt = promptBuilder.buildRawChatPrompt(userInput, map, session, focusNode);
-        final int redactionCount = AiPromptBuilder.countRedactions(rawPrompt);
-        final String prompt = AiPromptBuilder.sanitizeForOutbound(rawPrompt);
+        final long promptBuildStarted = System.currentTimeMillis();
+        final String rawPrompt = promptBuilder.buildRawChatPrompt(userInput, map, session, focusNode, progress);
+        final int maxPromptChars = new DocearAiConfig().getMaxOutboundPromptChars();
+        final String boundedPrompt = AiPromptBuilder.limitPromptLength(rawPrompt, maxPromptChars);
+        final int redactionCount = AiPromptBuilder.countRedactions(boundedPrompt);
+        final String prompt = AiPromptBuilder.sanitizeForOutbound(boundedPrompt);
+        LogUtils.info("AI prompt prepared in " + (System.currentTimeMillis() - promptBuildStarted)
+                + " ms, length=" + prompt.length() + " (raw=" + rawPrompt.length() + ").");
+
+        if (progress != null) {
+            progress.onStep(6, 6, "\u8c03\u7528 Copilot CLI\uff08\u53ef\u80fd\u9700\u7b49\u51e0\u5341\u79d2\uff09...");
+        }
 
         backend.chatStreaming(prompt, new AiChatStreamListener() {
             private final StringBuilder full = new StringBuilder();
+            private boolean firstChunkReceived;
 
             public void onChunk(String chunk) {
                 if (chunk != null) {
                     full.append(chunk);
+                }
+                if (!firstChunkReceived && chunk != null && chunk.trim().length() > 0) {
+                    firstChunkReceived = true;
+                    if (progress != null) {
+                        progress.onStep(6, 6, "\u63a5\u6536\u56de\u590d\u4e2d...");
+                    }
                 }
                 if (uiListener != null) {
                     uiListener.onChunk(chunk);

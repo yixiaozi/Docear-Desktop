@@ -6,9 +6,10 @@ import java.io.File;
 
 
 
+import org.docear.plugin.ai.DocearAiConfig;
 import org.docear.plugin.ai.chat.AiChatHistoryFormatter;
-
 import org.docear.plugin.ai.chat.AiChatSession;
+import org.freeplane.core.util.LogUtils;
 
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -108,18 +109,67 @@ public class AiPromptBuilder {
         return AiSensitiveDataFilter.filter(prompt).getRedactionCount();
     }
 
+    public static String limitPromptLength(String prompt, int maxChars) {
+        if (prompt == null || maxChars <= 0 || prompt.length() <= maxChars) {
+            return prompt != null ? prompt : "";
+        }
+        LogUtils.warn("AI prompt truncated from " + prompt.length() + " to " + maxChars + " chars.");
+        return prompt.substring(0, maxChars)
+                + "\n\n[\u63d0\u793a\u8bcd\u8fc7\u957f\uff0c\u5df2\u622a\u65ad\u81f3 " + maxChars + " \u5b57\u7b26]";
+    }
+
     public String buildRawChatPrompt(String userQuestion, MapModel map, AiChatSession session) {
         return buildRawChatPrompt(userQuestion, map, session, null);
     }
 
     public String buildRawChatPrompt(String userQuestion, MapModel map, AiChatSession session, NodeModel focusNode) {
+        return buildRawChatPrompt(userQuestion, map, session, focusNode, null);
+    }
+
+    public String buildRawChatPrompt(String userQuestion, MapModel map, AiChatSession session, NodeModel focusNode,
+            AiPromptBuildProgress progress) {
         templateStore.reloadIfChanged();
         String template = templateStore.getChatTemplate();
-        return applyChatPlaceholders(template, map, userQuestion, session, focusNode);
+        return applyChatPlaceholders(template, map, userQuestion, session, focusNode, progress);
+    }
+
+    private static void report(AiPromptBuildProgress progress, int step, int total, String label) {
+        if (progress != null) {
+            progress.onStep(step, total, label);
+        }
+    }
+
+    static boolean isLightweightQuestion(String question) {
+        if (question == null) {
+            return false;
+        }
+        String q = question.trim();
+        if (q.length() == 0 || q.length() > 40) {
+            return false;
+        }
+        if (q.matches("(?i)^[0-9+\\-*/().=\\s?？]+$")) {
+            return true;
+        }
+        return q.length() <= 12 && !containsPlanningIntent(q);
+    }
+
+    private static boolean containsPlanningIntent(String text) {
+        return text.indexOf("\u63d0\u9192") >= 0
+                || text.indexOf("\u5f85\u529e") >= 0
+                || text.indexOf("\u9489\u9009") >= 0
+                || text.indexOf("\u5b89\u6392") >= 0
+                || text.indexOf("\u8ba1\u5212") >= 0
+                || text.indexOf("\u65e5\u7a0b") >= 0
+                || (text.indexOf("\u5468") >= 0 && text.indexOf("\u671f") >= 0);
     }
 
     private String applyChatPlaceholders(String template, MapModel map, String userQuestion, AiChatSession session,
             NodeModel focusNode) {
+        return applyChatPlaceholders(template, map, userQuestion, session, focusNode, null);
+    }
+
+    private String applyChatPlaceholders(String template, MapModel map, String userQuestion, AiChatSession session,
+            NodeModel focusNode, AiPromptBuildProgress progress) {
 
         String safeTemplate = template != null ? template : "";
 
@@ -129,7 +179,8 @@ public class AiPromptBuilder {
 
 
 
-        AiContextCollector.ContextBundle context = AiContextCollector.collect(map, userQuestion);
+        AiContextCollector.ContextBundle context = AiContextCollector.collect(map, userQuestion, progress,
+                isLightweightQuestion(userQuestion));
 
         String mapContent = context.getCombinedMapContent();
 
@@ -145,12 +196,23 @@ public class AiPromptBuilder {
 
         String chatHistory = AiChatHistoryFormatter.formatForContext(session, true);
 
+        report(progress, 3, 6, "\u5339\u914d\u5173\u952e\u8bcd\u89c4\u5219...");
         String keywords = templateStore.getKeywordsText();
         String activeKeywordRules = templateStore.getActiveKeywordRules(userQuestion);
         if (activeKeywordRules == null || activeKeywordRules.trim().length() == 0) {
             activeKeywordRules = "\uff08\u672a\u5339\u914d\u5173\u952e\u8bcd\uff09";
         }
 
+        String workspacePlans;
+        if (isLightweightQuestion(userQuestion)) {
+            report(progress, 4, 6, "\u7b80\u5355\u95ee\u9898\uff0c\u8df3\u8fc7\u5168\u5c40\u5b89\u6392...");
+            workspacePlans = "\uff08\u7b80\u5355\u95ee\u9898\uff0c\u672a\u52a0\u8f7d\u5168\u5c40\u5b89\u6392\uff09";
+        }
+        else {
+            workspacePlans = AiWorkspacePlanCollector.collectWorkspacePlans(progress, userQuestion);
+        }
+
+        report(progress, 5, 6, "\u7ec4\u88c5\u63d0\u793a\u8bcd...");
         String question = userQuestion != null ? userQuestion : "";
         NodeModel resolvedFocus = focusNode != null ? focusNode : resolveCurrentSelectedNode();
         String selectedNodeContent = AiSelectedNodeExtractor.extract(resolvedFocus);
@@ -163,6 +225,7 @@ public class AiPromptBuilder {
                 .replace("{{SELECTED_NODE}}", selectedNodeContent)
                 .replace("{{KEYWORDS}}", keywords)
                 .replace("{{ACTIVE_KEYWORD_RULES}}", activeKeywordRules)
+                .replace("{{WORKSPACE_PLANS}}", workspacePlans)
                 .replace("{{CHAT_HISTORY}}", chatHistory)
                 .replace("{{USER_QUESTION}}", question);
 
@@ -192,6 +255,12 @@ public class AiPromptBuilder {
                 && activeKeywordRules.length() > 0
                 && !"\uff08\u672a\u5339\u914d\u5173\u952e\u8bcd\uff09".equals(activeKeywordRules)) {
             prompt = prompt + "\n\n--- \u5f53\u524d\u5339\u914d\u7684\u5173\u952e\u8bcd\u89c4\u5219 ---\n" + activeKeywordRules;
+        }
+
+        if (safeTemplate.indexOf("{{WORKSPACE_PLANS}}") < 0
+                && workspacePlans != null
+                && workspacePlans.trim().length() > 0) {
+            prompt = prompt + "\n\n--- \u5168\u5c40\u5b89\u6392\u4e0e\u5173\u6ce8 ---\n" + workspacePlans;
         }
 
         if (safeTemplate.indexOf("{{CHAT_HISTORY}}") < 0 && session != null && !session.getMessages().isEmpty()) {

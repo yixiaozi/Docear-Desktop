@@ -28,6 +28,7 @@ import org.docear.plugin.ai.chat.AiChatMessage;
 import org.docear.plugin.ai.chat.AiChatSession;
 import org.docear.plugin.ai.chat.AiChatSessionManager;
 import org.docear.plugin.ai.prompt.AiPromptBuilder;
+import org.docear.plugin.ai.prompt.AiPromptBuildProgress;
 import org.docear.plugin.ai.prompt.AiSelectedNodeExtractor;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.map.MapModel;
@@ -200,24 +201,41 @@ public class AiChatSidebar extends JPanel {
         addMessagePanel(AiChatMessage.Role.USER, text);
 
         streamingPanel = new AiChatMessagePanel(AiChatMessage.Role.ASSISTANT);
-        streamingPanel.setContent("\u601d\u8003\u4e2d...");
+        streamingPanel.setContent("[1/6] \u51c6\u5907\u4e0a\u4e0b\u6587...");
         streamingPanel.setAssistantActionListener(createMessageActionListener());
         appendMessageComponent(streamingPanel);
 
         setRequestInFlight(true);
-        statusBar.setHint("\u751f\u6210\u4e2d...");
+        statusBar.setHint("[1/6] \u51c6\u5907\u4e0a\u4e0b\u6587...");
 
         final Thread worker = new Thread(new Runnable() {
             public void run() {
-                if (aiController == null) {
-                    finishWithError("\u672a\u521d\u59cb\u5316 AI \u63a7\u5236\u5668\u3002");
-                    return;
-                }
-                if (!aiController.getBackend().isAvailable()) {
-                    finishWithError("\u672a\u68c0\u6d4b\u5230 Copilot CLI\u3002\u8bf7\u5148\u5b89\u88c5\u5e76\u767b\u5f55\u3002");
-                    return;
-                }
-                aiController.invokeChatStreaming(text, map, focus, new AiChatStreamListener() {
+                try {
+                    if (aiController == null) {
+                        finishWithError("\u672a\u521d\u59cb\u5316 AI \u63a7\u5236\u5668\u3002");
+                        return;
+                    }
+                    if (!aiController.getBackend().isAvailable()) {
+                        finishWithError("\u672a\u68c0\u6d4b\u5230 Copilot CLI\u3002\u8bf7\u5148\u5b89\u88c5\u5e76\u767b\u5f55\u3002");
+                        return;
+                    }
+                    final AiPromptBuildProgress progress = new AiPromptBuildProgress() {
+                        public void onStep(final int stepIndex, final int stepCount, final String label) {
+                            SwingUtilities.invokeLater(new Runnable() {
+                                public void run() {
+                                    if (!isSameMap(map, resolveCurrentMap())) {
+                                        return;
+                                    }
+                                    String hint = "[" + stepIndex + "/" + stepCount + "] " + label;
+                                    statusBar.setHint(hint);
+                                    if (streamingPanel != null) {
+                                        streamingPanel.setContent(hint);
+                                    }
+                                }
+                            });
+                        }
+                    };
+                    aiController.invokeChatStreaming(text, map, focus, progress, new AiChatStreamListener() {
                     private final StringBuilder full = new StringBuilder();
 
                     public void onChunk(String chunk) {
@@ -258,29 +276,25 @@ public class AiChatSidebar extends JPanel {
                                     scrollToBottom();
                                     inputArea.requestFocusInWindow();
                                 }
-                                if (isSameMap(map, resolveCurrentMap())) {
-                                    setRequestInFlight(false);
-                                }
+                                releaseRequestInFlight(map);
                             }
                         });
                     }
 
                     public void onError(String message) {
-                        if (message == null || message.length() == 0) {
-                            return;
-                        }
-                        final String errorMessage = message;
+                        final String errorMessage = message != null ? message : "";
                         SwingUtilities.invokeLater(new Runnable() {
                             public void run() {
-                                if (!isSameMap(map, resolveCurrentMap())) {
-                                    return;
+                                if (isSameMap(map, resolveCurrentMap())) {
+                                    if (errorMessage.length() > 0) {
+                                        if (streamingPanel != null) {
+                                            String current = streamingPanel.getPlainContent();
+                                            streamingPanel.setContent(current + "\n\n[" + errorMessage + "]");
+                                        }
+                                        statusBar.setHint(errorMessage);
+                                    }
                                 }
-                                if (streamingPanel != null) {
-                                    String current = streamingPanel.getPlainContent();
-                                    streamingPanel.setContent(current + "\n\n[" + errorMessage + "]");
-                                }
-                                statusBar.setHint(errorMessage);
-                                setRequestInFlight(false);
+                                releaseRequestInFlight(map);
                             }
                         });
                     }
@@ -289,6 +303,9 @@ public class AiChatSidebar extends JPanel {
                         return aiController != null && aiController.isChatCancelled();
                     }
                 });
+                } finally {
+                    releaseRequestInFlight(map);
+                }
             }
         }, "AiChatWorker");
         worker.setDaemon(true);
@@ -314,8 +331,6 @@ public class AiChatSidebar extends JPanel {
         if (aiController != null) {
             aiController.cancelChatRequest();
         }
-        requestInFlight = false;
-        stopButton.setEnabled(false);
         if (streamingPanel != null) {
             String current = streamingPanel.getPlainContent();
             if ("\u601d\u8003\u4e2d...".equals(current) || "\u751f\u6210\u4e2d...".equals(current)) {
@@ -325,6 +340,7 @@ public class AiChatSidebar extends JPanel {
             }
         }
         statusBar.setHint("\u5df2\u53d6\u6d88");
+        setRequestInFlight(false);
         inputArea.requestFocusInWindow();
     }
 
@@ -609,6 +625,16 @@ public class AiChatSidebar extends JPanel {
         clearButton.setEnabled(!inFlight);
         promptButton.setEnabled(true);
         inputArea.setEnabled(!inFlight);
+    }
+
+    private void releaseRequestInFlight(final MapModel map) {
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                if (isSameMap(map, resolveCurrentMap())) {
+                    setRequestInFlight(false);
+                }
+            }
+        });
     }
 
     private NodeModel resolveFocusNode() {
