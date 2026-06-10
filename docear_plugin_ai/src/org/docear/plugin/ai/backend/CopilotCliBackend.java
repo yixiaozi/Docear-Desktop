@@ -23,6 +23,8 @@ public class CopilotCliBackend implements AiBackend {
     private static final long PROCESS_TIMEOUT_MILLIS = 120000; // 120 秒
 
     private String resolvedCopilotPath;
+    private volatile Process activeProcess;
+    private volatile boolean cancelRequested;
 
     private boolean isWindows() {
         String os = System.getProperty("os.name");
@@ -31,7 +33,7 @@ public class CopilotCliBackend implements AiBackend {
 
     @Override
     public List<String> generateSubNodes(String prompt, int count) {
-        String output = runCopilot(prompt);
+        String output = runCopilot(prompt, null);
         return parseSubNodes(output, count);
     }
 
@@ -40,7 +42,47 @@ public class CopilotCliBackend implements AiBackend {
         if (message == null || message.trim().length() == 0) {
             return "";
         }
-        return runCopilot(message.trim());
+        final StringBuilder full = new StringBuilder();
+        chatStreaming(message.trim(), new AiChatStreamListener() {
+            public void onChunk(String chunk) {
+                full.append(chunk);
+            }
+
+            public void onComplete(String fullText) {
+            }
+
+            public void onError(String message) {
+            }
+
+            public boolean isCancelled() {
+                return false;
+            }
+        });
+        return full.toString().trim();
+    }
+
+    @Override
+    public void chatStreaming(String message, AiChatStreamListener listener) {
+        if (message == null || message.trim().length() == 0) {
+            if (listener != null) {
+                listener.onComplete("");
+            }
+            return;
+        }
+        if (listener == null) {
+            runCopilot(message.trim(), null);
+            return;
+        }
+        runCopilot(message.trim(), listener);
+    }
+
+    @Override
+    public void cancelCurrentRequest() {
+        cancelRequested = true;
+        Process process = activeProcess;
+        if (process != null) {
+            process.destroy();
+        }
     }
 
     @Override
@@ -51,10 +93,15 @@ public class CopilotCliBackend implements AiBackend {
         return testCopilotDirect(COPILOT_COMMAND);
     }
 
-    private String runCopilot(String prompt) {
+    private String runCopilot(String prompt, AiChatStreamListener listener) {
+        cancelRequested = false;
         String copilotPath = resolveCopilotExecutable();
         if (copilotPath == null) {
             LogUtils.warn("Copilot CLI is not available. Please install it via 'npm install -g @github/copilot'.");
+            if (listener != null) {
+                listener.onError("\u672a\u68c0\u6d4b\u5230 Copilot CLI\u3002");
+                listener.onComplete("");
+            }
             return "";
         }
 
@@ -67,18 +114,35 @@ public class CopilotCliBackend implements AiBackend {
             pb.redirectErrorStream(true);
             enrichPath(pb.environment());
             process = pb.start();
+            activeProcess = process;
 
             StringBuilder output = new StringBuilder();
             reader = new BufferedReader(new InputStreamReader(process.getInputStream(), "UTF-8"));
             String line;
             while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
+                if (cancelRequested || (listener != null && listener.isCancelled())) {
+                    process.destroy();
+                    if (listener != null) {
+                        listener.onError("\u5df2\u53d6\u6d88\u751f\u6210\u3002");
+                        listener.onComplete(output.toString().trim());
+                    }
+                    return output.toString().trim();
+                }
+                String chunk = line + "\n";
+                output.append(chunk);
+                if (listener != null) {
+                    listener.onChunk(chunk);
+                }
             }
 
             if (!waitForProcess(process, PROCESS_TIMEOUT_MILLIS)) {
                 process.destroy();
                 LogUtils.warn("Copilot CLI process timed out.");
-                return "";
+                if (listener != null) {
+                    listener.onError("\u8bf7\u6c42\u8d85\u65f6\u3002");
+                    listener.onComplete(output.toString().trim());
+                }
+                return output.toString().trim();
             }
 
             if (process.exitValue() != 0) {
@@ -88,13 +152,25 @@ public class CopilotCliBackend implements AiBackend {
             String result = output.toString().trim();
             if (looksLikeCommandEcho(result)) {
                 LogUtils.warn("Copilot CLI returned command echo instead of content: " + result);
+                if (listener != null) {
+                    listener.onError("\u672a\u6536\u5230\u6709\u6548\u56de\u590d\u3002");
+                    listener.onComplete("");
+                }
                 return "";
+            }
+            if (listener != null) {
+                listener.onComplete(result);
             }
             return result;
         } catch (Exception e) {
             LogUtils.severe("Error calling Copilot CLI: " + e.getMessage());
+            if (listener != null) {
+                listener.onError("\u8c03\u7528\u5931\u8d25: " + e.getMessage());
+                listener.onComplete("");
+            }
             return "";
         } finally {
+            activeProcess = null;
             if (reader != null) {
                 try {
                     reader.close();
@@ -130,11 +206,11 @@ public class CopilotCliBackend implements AiBackend {
     private List<String> buildPowerShellCommand(File promptFile, String copilotPath) {
         String promptPath = escapePowerShellSingleQuoted(promptFile.getAbsolutePath());
         String copilotLiteral = escapePowerShellSingleQuoted(copilotPath);
+        // 使用 -p @文件路径 让 Copilot 自行读取提示词，避免 Windows 命令行长度上限。
         String script = "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
                 + "$OutputEncoding = [Console]::OutputEncoding; "
                 + "chcp 65001 | Out-Null; "
-                + "$prompt = Get-Content -LiteralPath '" + promptPath + "' -Raw -Encoding UTF8; "
-                + "& '" + copilotLiteral + "' -p $prompt -s";
+                + "& '" + copilotLiteral + "' -p '@" + promptPath + "' -s";
 
         List<String> command = new ArrayList<String>();
         command.add("powershell.exe");

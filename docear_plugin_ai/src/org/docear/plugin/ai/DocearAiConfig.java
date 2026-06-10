@@ -1,5 +1,7 @@
 package org.docear.plugin.ai;
 
+import java.io.File;
+
 import org.freeplane.core.resources.ResourceController;
 
 /**
@@ -14,10 +16,18 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_MODEL = "ai.model";
     private static final String PROPERTY_AI_TEMPERATURE = "ai.temperature";
     private static final String PROPERTY_AI_PROMPT_TEMPLATE_FILE = "ai.prompt_template_file";
-    private static final String DEFAULT_PROMPT_TEMPLATE_FILE = "E:\\yixiaozi\\00\u7edf\u9886\u5168\u5c40\\AI\u63d0\u793a\u8bcd.mm";
     private static final String PROPERTY_AI_INTERACTION_LOG_DIR = "ai.interaction_log_dir";
-    private static final String DEFAULT_INTERACTION_LOG_DIR =
+    private static final String AI_HOME_DIR_NAME = ".docear" + File.separator + "ai";
+    private static final String PROMPT_FILE_NAME = "AI\u63d0\u793a\u8bcd.mm";
+    private static final String LOG_DIR_NAME = "logs";
+    private static final String DEFAULT_FULL_HISTORY_DIR =
             "E:\\yixiaozi\\_data\\17DAB3A24CC7NGK3HWY5ERX3AURZZAJ2PT99";
+    private static final String PROPERTY_AI_MAX_CONTEXT_TURNS = "ai.max_context_turns";
+    private static final String PROPERTY_AI_MAX_CONTEXT_CHARS = "ai.max_context_chars";
+    private static final String PROPERTY_AI_MAX_MM_CHAT_ROUNDS = "ai.max_mm_chat_rounds";
+    private static final String PROPERTY_AI_MAX_LINKED_FILES = "ai.max_linked_files";
+    private static final String PROPERTY_AI_MAX_FILE_SIZE_BYTES = "ai.max_file_size_bytes";
+    private static final String PROPERTY_AI_MAX_TOTAL_CONTEXT_CHARS = "ai.max_total_context_chars";
 
     public DocearAiConfig() {
     }
@@ -42,14 +52,88 @@ public class DocearAiConfig {
         }
     }
 
+    public String getAiHomeDirectory() {
+        String home = System.getProperty("user.home");
+        if (home == null || home.trim().length() == 0) {
+            home = ".";
+        }
+        return home + File.separator + AI_HOME_DIR_NAME;
+    }
+
+    public String getDefaultPromptTemplateFile() {
+        return "E:\\yixiaozi\\00\u7edf\u9886\u5168\u5c40\\AI\u63d0\u793a\u8bcd.mm";
+    }
+
+    public String getDefaultInteractionLogDirectory() {
+        return DEFAULT_FULL_HISTORY_DIR;
+    }
+
+    public String getDefaultLocalLogDirectory() {
+        return getAiHomeDirectory() + File.separator + LOG_DIR_NAME;
+    }
+
     public String getPromptTemplateFile() {
         return ResourceController.getResourceController().getProperty(
-                PROPERTY_AI_PROMPT_TEMPLATE_FILE, DEFAULT_PROMPT_TEMPLATE_FILE);
+                PROPERTY_AI_PROMPT_TEMPLATE_FILE, getDefaultPromptTemplateFile());
     }
 
     public String getInteractionLogDirectory() {
         return ResourceController.getResourceController().getProperty(
-                PROPERTY_AI_INTERACTION_LOG_DIR, DEFAULT_INTERACTION_LOG_DIR);
+                PROPERTY_AI_INTERACTION_LOG_DIR, getDefaultInteractionLogDirectory());
+    }
+
+    public int getMaxContextTurns() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_CONTEXT_TURNS, "8"));
+        } catch (NumberFormatException e) {
+            return 8;
+        }
+    }
+
+    public int getMaxContextChars() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_CONTEXT_CHARS, "12000"));
+        } catch (NumberFormatException e) {
+            return 12000;
+        }
+    }
+
+    public int getMaxMmChatRounds() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_MM_CHAT_ROUNDS, "30"));
+        } catch (NumberFormatException e) {
+            return 30;
+        }
+    }
+
+    public int getMaxLinkedFiles() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_LINKED_FILES, "30"));
+        } catch (NumberFormatException e) {
+            return 30;
+        }
+    }
+
+    public int getMaxFileSizeBytes() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_FILE_SIZE_BYTES, "500000"));
+        } catch (NumberFormatException e) {
+            return 500000;
+        }
+    }
+
+    public int getMaxTotalContextChars() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_TOTAL_CONTEXT_CHARS, "120000"));
+        } catch (NumberFormatException e) {
+            return 120000;
+        }
     }
 
     // TODO: 未来在这里添加 OpenAI API Key、Base URL 等配置读取方法

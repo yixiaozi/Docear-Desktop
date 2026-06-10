@@ -2,24 +2,41 @@ package org.docear.plugin.ai;
 
 import javax.swing.JTabbedPane;
 
-import org.docear.plugin.ai.actions.AiGenerateSubNodesAction;
-import org.docear.plugin.ai.backend.AiBackend;
-import org.docear.plugin.ai.backend.CopilotCliBackend;
 import java.util.List;
 
+import org.docear.plugin.ai.actions.AiAskAboutNodeAction;
+import org.docear.plugin.ai.actions.AiGenerateSubNodesAction;
+import org.docear.plugin.ai.actions.OpenAiPromptTemplateAction;
+import org.docear.plugin.ai.backend.AiBackend;
+import org.docear.plugin.ai.backend.AiChatStreamListener;
+import org.docear.plugin.ai.backend.CopilotCliBackend;
+import org.docear.plugin.ai.chat.AiChatHistoryExtensionIO;
+import org.docear.plugin.ai.chat.AiChatMessage;
+import org.docear.plugin.ai.chat.AiChatSession;
+import org.docear.plugin.ai.chat.AiChatSessionManager;
 import org.docear.plugin.ai.log.AiInteractionLogger;
 import org.docear.plugin.ai.log.AiInteractionRecord;
+import org.docear.plugin.ai.prompt.AiContextCollector;
 import org.docear.plugin.ai.prompt.AiPromptBuilder;
+import org.docear.plugin.ai.prompt.AiPromptTemplateGuard;
+import org.docear.plugin.ai.prompt.AiSelectedNodeExtractor;
+import org.docear.plugin.ai.ui.AiChatContextInfo;
 import org.docear.plugin.ai.ui.AiChatSidebar;
 import org.docear.plugin.ai.ui.AiChatTabInstaller;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.IMenuContributor;
 import org.freeplane.core.ui.MenuBuilder;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.map.INodeSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
+import org.freeplane.features.note.NoteController;
+import org.freeplane.features.note.mindmapmode.MNoteController;
+import org.freeplane.features.text.TextController;
+import org.freeplane.features.text.mindmapmode.MTextController;
 
 public class DocearAiController {
 
@@ -29,15 +46,22 @@ public class DocearAiController {
     private final AiChatSidebar chatSidebar;
     private final AiPromptBuilder promptBuilder;
     private final AiInteractionLogger interactionLogger;
+    private final AiChatSessionManager chatSessionManager;
+    private volatile boolean chatCancelled;
 
     private DocearAiController(ModeController modeController) {
         this.modeController = modeController;
         this.backend = createBackend();
         this.promptBuilder = new AiPromptBuilder();
         this.interactionLogger = new AiInteractionLogger();
+        this.chatSessionManager = new AiChatSessionManager();
         this.promptBuilder.getTemplateStore().ensureTemplateFileExists();
         this.interactionLogger.ensureLogDirectoryExists();
+        this.chatSessionManager.getStore().ensureDirectoryExists();
         this.chatSidebar = new AiChatSidebar(this);
+        AiChatHistoryExtensionIO.install(modeController);
+        AiPromptTemplateGuard.install(modeController);
+        registerSelectionListener();
         registerActions();
         registerMenus();
         installAiChatTab();
@@ -49,7 +73,6 @@ public class DocearAiController {
         if ("copilot_cli".equalsIgnoreCase(backendType)) {
             return new CopilotCliBackend();
         }
-        // TODO: 未来在这里添加 OpenAI、Ollama 等后端的创建逻辑
         return new CopilotCliBackend();
     }
 
@@ -75,11 +98,180 @@ public class DocearAiController {
         return interactionLogger;
     }
 
+    public AiChatSessionManager getChatSessionManager() {
+        return chatSessionManager;
+    }
+
+    public AiChatSidebar getChatSidebar() {
+        return chatSidebar;
+    }
+
     public String invokeChat(String userInput, MapModel map) {
-        String prompt = promptBuilder.buildChatPrompt(userInput, map);
+        AiChatSession session = chatSessionManager.getOrCreateSession(map);
+        session.addMessage(new AiChatMessage(AiChatMessage.Role.USER, userInput));
+
+        String prompt = promptBuilder.buildChatPrompt(userInput, map, session);
         String response = backend.chat(prompt);
+        if (response == null) {
+            response = "";
+        }
+
+        session.addMessage(new AiChatMessage(AiChatMessage.Role.ASSISTANT, response));
+        chatSessionManager.saveSession(map, session);
         logInteraction(AiInteractionRecord.TYPE_CHAT, userInput, prompt, response, map);
         return response;
+    }
+
+    public void invokeChatStreaming(final String userInput, final MapModel map, final AiChatStreamListener uiListener) {
+        invokeChatStreaming(userInput, map, null, uiListener);
+    }
+
+    public void invokeChatStreaming(final String userInput, final MapModel map, final NodeModel focusNode,
+            final AiChatStreamListener uiListener) {
+        chatCancelled = false;
+        final AiChatSession session = chatSessionManager.getOrCreateSession(map);
+        session.addMessage(new AiChatMessage(AiChatMessage.Role.USER, userInput));
+
+        final String rawPrompt = promptBuilder.buildRawChatPrompt(userInput, map, session, focusNode);
+        final int redactionCount = AiPromptBuilder.countRedactions(rawPrompt);
+        final String prompt = AiPromptBuilder.sanitizeForOutbound(rawPrompt);
+
+        backend.chatStreaming(prompt, new AiChatStreamListener() {
+            private final StringBuilder full = new StringBuilder();
+
+            public void onChunk(String chunk) {
+                if (chunk != null) {
+                    full.append(chunk);
+                }
+                if (uiListener != null) {
+                    uiListener.onChunk(chunk);
+                }
+            }
+
+            public void onComplete(String fullText) {
+                String response = fullText != null && fullText.length() > 0 ? fullText : full.toString();
+                if (response == null) {
+                    response = "";
+                }
+                session.addMessage(new AiChatMessage(AiChatMessage.Role.ASSISTANT, response));
+                chatSessionManager.saveSession(map, session);
+                logInteraction(AiInteractionRecord.TYPE_CHAT, userInput, prompt, response, map);
+                if (uiListener != null) {
+                    uiListener.onComplete(response);
+                }
+            }
+
+            public void onError(String message) {
+                if (uiListener != null) {
+                    uiListener.onError(message);
+                }
+            }
+
+            public boolean isCancelled() {
+                return chatCancelled || (uiListener != null && uiListener.isCancelled());
+            }
+        });
+    }
+
+    public void cancelChatRequest() {
+        chatCancelled = true;
+        backend.cancelCurrentRequest();
+    }
+
+    public AiChatContextInfo buildContextInfo(MapModel map, String userQuestion, int redactionCount, String statusHint) {
+        NodeModel selected = chatSidebar != null ? chatSidebar.getFocusNode() : null;
+        if (selected == null) {
+            selected = resolveSelectedNode();
+        }
+        String selectedText = AiSelectedNodeExtractor.extractTitle(selected);
+        AiContextCollector.ContextBundle bundle = AiContextCollector.collect(map, userQuestion);
+        String mapTitle = map != null && map.getTitle() != null ? map.getTitle() : "\u65e0";
+        return new AiChatContextInfo(
+                mapTitle,
+                AiPromptBuilder.resolveMapPath(map),
+                selectedText,
+                bundle.getFilesIncluded(),
+                bundle.getFilesDiscovered(),
+                backend.isAvailable(),
+                redactionCount,
+                statusHint);
+    }
+
+    public void clearChatSession(MapModel map) {
+        chatSessionManager.clearSession(map);
+    }
+
+    public void insertContentAsChild(String content) {
+        insertContent(content, true);
+    }
+
+    public void insertContentAsSibling(String content) {
+        insertContent(content, false);
+    }
+
+    private void insertContent(String content, boolean asChild) {
+        if (content == null || content.trim().length() == 0) {
+            return;
+        }
+        NodeModel selected = resolveSelectedNode();
+        if (selected == null) {
+            MapModel map = Controller.getCurrentController().getMap();
+            if (map != null) {
+                selected = map.getRootNode();
+            }
+        }
+        if (selected == null) {
+            return;
+        }
+        MMapController mapController = (MMapController) Controller.getCurrentModeController().getMapController();
+        MTextController textController = (MTextController) TextController.getController();
+        NodeModel parent;
+        int index;
+        if (asChild) {
+            parent = selected;
+            index = parent.getChildCount();
+        } else {
+            parent = selected.getParentNode();
+            if (parent == null) {
+                parent = selected;
+                index = parent.getChildCount();
+            } else {
+                index = parent.getIndex(selected) + 1;
+            }
+        }
+        String title = extractTitleFromContent(content);
+        NodeModel newNode = mapController.addNewNode(parent, index, selected.isLeft());
+        textController.setNodeText(newNode, title);
+        if (content.length() > title.length()) {
+            NoteController noteController = NoteController.getController();
+            if (noteController instanceof MNoteController) {
+                ((MNoteController) noteController).setNoteText(newNode, content);
+            }
+        }
+    }
+
+    private String extractTitleFromContent(String content) {
+        String[] lines = content.replace("\r\n", "\n").split("\n");
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (line.length() == 0) {
+                continue;
+            }
+            line = line.replaceAll("^[-*#\\d.]+\\s*", "");
+            if (line.length() > 80) {
+                return line.substring(0, 80) + "...";
+            }
+            return line;
+        }
+        return "AI \u56de\u590d";
+    }
+
+    private NodeModel resolveSelectedNode() {
+        try {
+            return Controller.getCurrentController().getSelection().getSelected();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public List<String> invokeGenerateSubNodes(String topic, MapModel map, int count) {
@@ -88,6 +280,18 @@ public class DocearAiController {
         String response = joinLines(result);
         logInteraction(AiInteractionRecord.TYPE_GENERATE_SUBNODES, topic, prompt, response, map);
         return result;
+    }
+
+    private void registerSelectionListener() {
+        modeController.getMapController().addNodeSelectionListener(new INodeSelectionListener() {
+            public void onSelect(NodeModel node) {
+                chatSidebar.refreshContextStatus();
+            }
+
+            public void onDeselect(NodeModel node) {
+                chatSidebar.refreshContextStatus();
+            }
+        });
     }
 
     private void logInteraction(String type, String userInput, String prompt, String response, MapModel map) {
@@ -111,8 +315,18 @@ public class DocearAiController {
         return sb.toString();
     }
 
+    public void askAboutNode(NodeModel node) {
+        if (node == null) {
+            return;
+        }
+        showAiChatSidebar();
+        chatSidebar.prepareAskAboutNode(node);
+    }
+
     private void registerActions() {
         modeController.addAction(new AiGenerateSubNodesAction());
+        modeController.addAction(new AiAskAboutNodeAction());
+        modeController.addAction(new OpenAiPromptTemplateAction());
         LogUtils.info("Docear AI actions registered.");
     }
 
@@ -120,12 +334,12 @@ public class DocearAiController {
         modeController.addMenuContributor(new IMenuContributor() {
             @Override
             public void updateMenus(ModeController mc, MenuBuilder builder) {
-                // 1. 节点右键菜单
                 builder.addSeparator("/node_popup", MenuBuilder.AS_CHILD);
+                builder.addAction("/node_popup", modeController.getAction(AiAskAboutNodeAction.KEY), MenuBuilder.AS_CHILD);
                 builder.addAction("/node_popup", modeController.getAction(AiGenerateSubNodesAction.KEY), MenuBuilder.AS_CHILD);
 
-                // 2. 主菜单「Extras > AI 聊天侧边栏」—— 点击后添加到右侧 Tab
-                builder.addAction("/menu_bar/extras", new AFreeplaneAction("AiChatSidebarAction", "AI 聊天侧边栏", null) {
+                builder.addAction("/menu_bar/extras", modeController.getAction(OpenAiPromptTemplateAction.KEY), MenuBuilder.AS_CHILD);
+                builder.addAction("/menu_bar/extras", new AFreeplaneAction("AiChatSidebarAction", "AI \u804a\u5929\u4fa7\u8fb9\u680f", null) {
                     private static final long serialVersionUID = 1L;
                     @Override
                     public void actionPerformed(java.awt.event.ActionEvent e) {
@@ -141,9 +355,6 @@ public class DocearAiController {
         AiChatTabInstaller.install(modeController, chatSidebar);
     }
 
-    /**
-     * 切换到 AI 聊天 Tab（若尚未安装则尝试安装）。
-     */
     private void showAiChatSidebar() {
         try {
             JTabbedPane rightTabs = AiChatTabInstaller.findFormatTabbedPane(modeController);
@@ -180,6 +391,5 @@ public class DocearAiController {
     }
 
     public void generateSubNodesForNode(NodeModel node) {
-        // TODO: 调用 backend 生成子节点
     }
 }

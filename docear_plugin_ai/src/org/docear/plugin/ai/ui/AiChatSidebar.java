@@ -1,89 +1,250 @@
 package org.docear.plugin.ai.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.File;
+import java.awt.event.KeyEvent;
+import java.util.List;
 
+import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
-import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 
 import org.docear.plugin.ai.DocearAiController;
+import org.docear.plugin.ai.backend.AiChatStreamListener;
+import org.docear.plugin.ai.chat.AiChatMessage;
+import org.docear.plugin.ai.chat.AiChatSession;
 import org.docear.plugin.ai.prompt.AiPromptBuilder;
+import org.docear.plugin.ai.prompt.AiSelectedNodeExtractor;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 
 /**
- * AI 聊天侧边栏。
- * 每个思维导图独立维护一个聊天会话。
+ * AI 聊天侧边栏（三波 UI 优化）。
  */
 public class AiChatSidebar extends JPanel {
 
     private static final long serialVersionUID = 1L;
 
-    private final JTextArea chatArea;
-    private final JTextField inputField;
+    private final JPanel messagesPanel;
+    private final JScrollPane messagesScroll;
+    private final JTextArea inputArea;
     private final JButton sendButton;
+    private final JButton stopButton;
+    private final JButton clearButton;
+    private final JButton promptButton;
+    private final AiChatStatusBar statusBar;
+    private final AiKeywordButtonBar keywordBar;
     private final DocearAiController aiController;
 
     private MapModel currentMap;
+    private NodeModel focusNode;
+    private AiChatMessagePanel streamingPanel;
+    private volatile boolean requestInFlight;
 
     public AiChatSidebar(DocearAiController aiController) {
         this.aiController = aiController;
-        setLayout(new BorderLayout());
+        setLayout(new BorderLayout(0, 4));
 
-        chatArea = new JTextArea();
-        chatArea.setEditable(false);
-        chatArea.setLineWrap(true);
-        chatArea.setWrapStyleWord(true);
-        JScrollPane scrollPane = new JScrollPane(chatArea);
+        statusBar = new AiChatStatusBar();
+        keywordBar = new AiKeywordButtonBar();
+        messagesPanel = new JPanel();
+        messagesPanel.setLayout(new javax.swing.BoxLayout(messagesPanel, javax.swing.BoxLayout.Y_AXIS));
+        messagesPanel.setBackground(Color.WHITE);
+        messagesScroll = new JScrollPane(messagesPanel);
+        messagesScroll.setBorder(BorderFactory.createEmptyBorder());
+        messagesScroll.getVerticalScrollBar().setUnitIncrement(18);
 
-        inputField = new JTextField();
-        sendButton = new JButton("发送");
+        inputArea = new JTextArea(3, 20);
+        inputArea.setLineWrap(true);
+        inputArea.setWrapStyleWord(true);
+        inputArea.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(200, 200, 200)),
+                BorderFactory.createEmptyBorder(4, 4, 4, 4)));
+        JScrollPane inputScroll = new JScrollPane(inputArea);
+        inputScroll.setBorder(BorderFactory.createEmptyBorder());
 
-        JPanel inputPanel = new JPanel(new BorderLayout());
-        inputPanel.add(inputField, BorderLayout.CENTER);
-        inputPanel.add(sendButton, BorderLayout.EAST);
+        sendButton = new JButton("\u53d1\u9001");
+        stopButton = new JButton("\u505c\u6b62");
+        stopButton.setEnabled(false);
+        clearButton = new JButton("\u6e05\u7a7a\u5bf9\u8bdd");
+        promptButton = new JButton("\u7f16\u8f91\u63d0\u793a\u8bcd");
 
-        add(scrollPane, BorderLayout.CENTER);
-        add(inputPanel, BorderLayout.SOUTH);
+        JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 2));
+        buttonRow.add(clearButton);
+        buttonRow.add(promptButton);
+        buttonRow.add(stopButton);
+        buttonRow.add(sendButton);
 
-        ActionListener sendListener = new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                sendMessage();
-            }
-        };
-        sendButton.addActionListener(sendListener);
-        inputField.addActionListener(sendListener);
+        JPanel southPanel = new JPanel(new BorderLayout(4, 4));
+        southPanel.setBorder(BorderFactory.createEmptyBorder(0, 4, 4, 4));
+        southPanel.add(keywordBar, BorderLayout.NORTH);
+        southPanel.add(inputScroll, BorderLayout.CENTER);
+        southPanel.add(buttonRow, BorderLayout.SOUTH);
 
+        add(statusBar, BorderLayout.NORTH);
+        add(messagesScroll, BorderLayout.CENTER);
+        add(southPanel, BorderLayout.SOUTH);
+
+        bindActions();
+        reloadKeywordButtons();
+        refreshContextStatus();
         LogUtils.info("AiChatSidebar initialized.");
     }
 
+    private void bindActions() {
+        sendButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                sendMessage();
+            }
+        });
+        stopButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                cancelRequest();
+            }
+        });
+        clearButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                confirmClearChat();
+            }
+        });
+        promptButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                if (aiController != null) {
+                    aiController.getPromptBuilder().getTemplateStore().openTemplateFile();
+                    reloadKeywordButtons();
+                }
+            }
+        });
+        keywordBar.setKeywordActionListener(new AiKeywordButtonBar.KeywordActionListener() {
+            public void onKeywordClicked(String keyword, boolean sendImmediately) {
+                appendKeyword(keyword, sendImmediately);
+            }
+        });
+
+        inputArea.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "send");
+        inputArea.getActionMap().put("send", new javax.swing.AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                sendMessage();
+            }
+        });
+        inputArea.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, KeyEvent.SHIFT_DOWN_MASK), "newline");
+        inputArea.getActionMap().put("newline", new javax.swing.AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                inputArea.append("\n");
+            }
+        });
+    }
+
+    private void appendKeyword(String keyword, boolean sendImmediately) {
+        String current = inputArea.getText();
+        if (current.length() > 0 && !current.endsWith("\n") && !current.endsWith(" ")) {
+            inputArea.append(" ");
+        }
+        inputArea.append(keyword);
+        inputArea.requestFocusInWindow();
+        if (sendImmediately) {
+            sendMessage();
+        }
+    }
+
     private void sendMessage() {
-        final String text = inputField.getText().trim();
+        if (requestInFlight) {
+            return;
+        }
+        final String text = inputArea.getText().trim();
         if (text.isEmpty()) {
             return;
         }
-
         final MapModel map = resolveCurrentMap();
-        chatArea.append("你: " + text + "\n");
-        inputField.setText("");
-        setInputEnabled(false);
-        chatArea.append("AI: 思考中...\n");
+        final NodeModel focus = resolveFocusNode();
+        inputArea.setText("");
+        addMessagePanel(AiChatMessage.Role.USER, text);
+
+        streamingPanel = new AiChatMessagePanel(AiChatMessage.Role.ASSISTANT);
+        streamingPanel.setContent("\u601d\u8003\u4e2d...");
+        streamingPanel.setAssistantActionListener(createMessageActionListener());
+        appendMessageComponent(streamingPanel);
+
+        setRequestInFlight(true);
+        statusBar.setHint("\u751f\u6210\u4e2d...");
 
         final Thread worker = new Thread(new Runnable() {
             public void run() {
-                final String reply = requestAiReply(text, map);
-                SwingUtilities.invokeLater(new Runnable() {
-                    public void run() {
-                        replaceLastLine("AI: 思考中...", "AI: " + formatReply(reply) + "\n\n");
-                        setInputEnabled(true);
-                        inputField.requestFocusInWindow();
+                if (aiController == null) {
+                    finishWithError("\u672a\u521d\u59cb\u5316 AI \u63a7\u5236\u5668\u3002");
+                    return;
+                }
+                if (!aiController.getBackend().isAvailable()) {
+                    finishWithError("\u672a\u68c0\u6d4b\u5230 Copilot CLI\u3002\u8bf7\u5148\u5b89\u88c5\u5e76\u767b\u5f55\u3002");
+                    return;
+                }
+                aiController.invokeChatStreaming(text, map, focus, new AiChatStreamListener() {
+                    private final StringBuilder full = new StringBuilder();
+
+                    public void onChunk(String chunk) {
+                        if (chunk == null || streamingPanel == null) {
+                            return;
+                        }
+                        full.append(chunk);
+                        String current = full.toString();
+                        if (current.trim().length() == 0) {
+                            return;
+                        }
+                        SwingUtilities.invokeLater(new Runnable() {
+                            public void run() {
+                                streamingPanel.setContent(full.toString());
+                            }
+                        });
+                    }
+
+                    public void onComplete(String fullText) {
+                        final String reply = normalizeReply(fullText != null ? fullText : full.toString());
+                        SwingUtilities.invokeLater(new Runnable() {
+                            public void run() {
+                                if (streamingPanel != null) {
+                                    streamingPanel.setContent(reply);
+                                }
+                                refreshContextStatusAfterSend(text, map);
+                                setRequestInFlight(false);
+                                scrollToBottom();
+                                inputArea.requestFocusInWindow();
+                            }
+                        });
+                    }
+
+                    public void onError(String message) {
+                        if (message == null || message.length() == 0) {
+                            return;
+                        }
+                        final String errorMessage = message;
+                        SwingUtilities.invokeLater(new Runnable() {
+                            public void run() {
+                                if (streamingPanel != null) {
+                                    String current = streamingPanel.getPlainContent();
+                                    streamingPanel.setContent(current + "\n\n[" + errorMessage + "]");
+                                }
+                                statusBar.setHint(errorMessage);
+                                setRequestInFlight(false);
+                            }
+                        });
+                    }
+
+                    public boolean isCancelled() {
+                        return !requestInFlight;
                     }
                 });
             }
@@ -92,25 +253,248 @@ public class AiChatSidebar extends JPanel {
         worker.start();
     }
 
-    private String requestAiReply(String text, MapModel map) {
-        try {
-            if (aiController == null) {
-                return "AI 控制器未初始化。";
+    private void finishWithError(final String message) {
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                if (streamingPanel != null) {
+                    streamingPanel.setContent(message);
+                }
+                statusBar.setHint(message);
+                setRequestInFlight(false);
             }
-            if (!aiController.getBackend().isAvailable()) {
-                return "未检测到 Copilot CLI。请先安装并登录：\n1. npm install -g @github/copilot\n2. 运行 copilot 并执行 /login";
+        });
+    }
+
+    private void cancelRequest() {
+        if (!requestInFlight) {
+            return;
+        }
+        if (aiController != null) {
+            aiController.cancelChatRequest();
+        }
+        requestInFlight = false;
+        stopButton.setEnabled(false);
+        if (streamingPanel != null) {
+            String current = streamingPanel.getPlainContent();
+            if ("\u601d\u8003\u4e2d...".equals(current)) {
+                streamingPanel.setContent("[\u5df2\u53d6\u6d88\u751f\u6210]");
+            } else {
+                streamingPanel.setContent(current + "\n\n[\u5df2\u53d6\u6d88\u751f\u6210]");
+            }
+        }
+        statusBar.setHint("\u5df2\u53d6\u6d88");
+        inputArea.requestFocusInWindow();
+    }
+
+    private void confirmClearChat() {
+        String[] options = new String[] {
+                "\u4ec5\u6e05\u754c\u9762",
+                "\u5220\u9664\u8bb0\u5f55",
+                "\u53d6\u6d88"
+        };
+        int choice = JOptionPane.showOptionDialog(
+                this,
+                "\u8981\u5982\u4f55\u6e05\u7a7a\u5f53\u524d\u5bfc\u56fe\u7684\u5bf9\u8bdd\uff1f",
+                "\u6e05\u7a7a\u5bf9\u8bdd",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[2]);
+        if (choice == 2 || choice == JOptionPane.CLOSED_OPTION) {
+            return;
+        }
+        if (choice == 1 && aiController != null) {
+            aiController.clearChatSession(resolveCurrentMap());
+        }
+        messagesPanel.removeAll();
+        messagesPanel.revalidate();
+        messagesPanel.repaint();
+        refreshContextStatus();
+    }
+
+    public NodeModel getFocusNode() {
+        return focusNode;
+    }
+
+    public void prepareAskAboutNode(NodeModel node) {
+        if (node == null) {
+            return;
+        }
+        this.focusNode = node;
+        if (node.getMap() != null) {
+            this.currentMap = node.getMap();
+        }
+        String title = AiSelectedNodeExtractor.extractTitle(node);
+        if (title.length() == 0) {
+            title = "\u672a\u547d\u540d\u8282\u70b9";
+        }
+        appendHintMessage("\u5df2\u5b9a\u4f4d\u8282\u70b9\u300c" + title + "\u300d\uff0c\u8bf7\u8f93\u5165\u95ee\u9898\u540e Enter \u53d1\u9001\u3002");
+        inputArea.setText("\u8bf7\u5206\u6790\u8fd9\u4e2a\u8282\u70b9\u53ca\u5176\u5b50\u5185\u5bb9");
+        inputArea.selectAll();
+        refreshContextStatus();
+        inputArea.requestFocusInWindow();
+    }
+
+    public void switchToMap(MapModel map) {
+        this.currentMap = map;
+        this.focusNode = null;
+        messagesPanel.removeAll();
+        reloadKeywordButtons();
+        restoreChatHistory(map);
+        refreshContextStatus();
+        scrollToBottom();
+    }
+
+    public void refreshContextStatus() {
+        refreshContextStatusAfterSend("", resolveCurrentMap());
+    }
+
+    private void refreshContextStatusAfterSend(String lastQuestion, MapModel map) {
+        if (aiController == null) {
+            statusBar.updateContext(null);
+            return;
+        }
+        int redactionCount = 0;
+        if (lastQuestion != null && lastQuestion.length() > 0) {
+            String raw = aiController.getPromptBuilder().buildRawChatPrompt(
+                    lastQuestion, map, aiController.getChatSessionManager().getOrCreateSession(map),
+                    resolveFocusNode());
+            redactionCount = AiPromptBuilder.countRedactions(raw);
+        }
+        statusBar.updateContext(aiController.buildContextInfo(map, lastQuestion, redactionCount, ""));
+        updateInputPlaceholder(map);
+    }
+
+    private void updateInputPlaceholder(MapModel map) {
+        if (aiController == null) {
+            return;
+        }
+        NodeModel focus = resolveFocusNode();
+        String selected = focus != null ? AiSelectedNodeExtractor.extractTitle(focus) : "";
+        if (selected.length() == 0) {
+            AiChatContextInfo info = aiController.buildContextInfo(map, "", 0, "");
+            selected = info.getSelectedNodeText();
+        }
+        if (selected.length() > 0) {
+            inputArea.setToolTipText("\u9488\u5bf9\u300c" + truncate(selected, 40) + "\u300d\u63d0\u95ee\uff08Enter \u53d1\u9001\uff0cShift+Enter \u6362\u884c\uff09");
+        } else {
+            inputArea.setToolTipText("Enter \u53d1\u9001\uff0cShift+Enter \u6362\u884c");
+        }
+    }
+
+    private void reloadKeywordButtons() {
+        if (aiController == null) {
+            keywordBar.setKeywords(new java.util.ArrayList<String>());
+            return;
+        }
+        List<String> keywords = aiController.getPromptBuilder().getTemplateStore().getKeywordLabels();
+        keywordBar.setKeywords(keywords);
+    }
+
+    private void restoreChatHistory(MapModel map) {
+        if (aiController == null || map == null) {
+            return;
+        }
+        AiChatSession session = aiController.getChatSessionManager().getOrCreateSession(map);
+        List<AiChatMessage> messages = session.getMessages();
+        if (messages.isEmpty()) {
+            return;
+        }
+        JLabel divider = new JLabel("--- \u5386\u53f2\u5bf9\u8bdd ---");
+        divider.setAlignmentX(LEFT_ALIGNMENT);
+        divider.setBorder(BorderFactory.createEmptyBorder(6, 6, 4, 6));
+        messagesPanel.add(divider);
+        for (int i = 0; i < messages.size(); i++) {
+            AiChatMessage message = messages.get(i);
+            addMessagePanel(message.getRole(), message.getContent());
+        }
+        JLabel continueLabel = new JLabel("--- \u7ee7\u7eed\u5bf9\u8bdd ---");
+        continueLabel.setAlignmentX(LEFT_ALIGNMENT);
+        continueLabel.setBorder(BorderFactory.createEmptyBorder(6, 6, 4, 6));
+        messagesPanel.add(continueLabel);
+        messagesPanel.revalidate();
+        messagesPanel.repaint();
+    }
+
+    private void addMessagePanel(AiChatMessage.Role role, String content) {
+        AiChatMessagePanel panel = new AiChatMessagePanel(role);
+        panel.setContent(content);
+        if (role == AiChatMessage.Role.ASSISTANT) {
+            panel.setAssistantActionListener(createMessageActionListener());
+        }
+        appendMessageComponent(panel);
+    }
+
+    private AiChatMessagePanel.MessageActionListener createMessageActionListener() {
+        return new AiChatMessagePanel.MessageActionListener() {
+            public void onInsertAsChild(String content) {
+                if (aiController != null) {
+                    aiController.insertContentAsChild(content);
+                }
             }
 
-            LogUtils.info("AI chat prompt built for map: " + AiPromptBuilder.resolveMapPath(map));
-            String reply = aiController.invokeChat(text, map);
-            if (reply == null || reply.trim().length() == 0) {
-                return "未收到有效回复。请在 PowerShell 中测试：copilot -p \"测试\" -s";
+            public void onInsertAsSibling(String content) {
+                if (aiController != null) {
+                    aiController.insertContentAsSibling(content);
+                }
             }
-            return reply;
-        } catch (Exception e) {
-            LogUtils.severe("AI chat failed: " + e.getMessage());
-            return "调用失败: " + e.getMessage();
+        };
+    }
+
+    private void appendMessageComponent(AiChatMessagePanel panel) {
+        panel.setAlignmentX(LEFT_ALIGNMENT);
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setAlignmentX(LEFT_ALIGNMENT);
+        wrapper.setOpaque(false);
+        wrapper.add(panel, BorderLayout.CENTER);
+        messagesPanel.add(wrapper);
+        messagesPanel.revalidate();
+        messagesPanel.repaint();
+        scrollToBottom();
+    }
+
+    private void scrollToBottom() {
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                JScrollPane scroll = messagesScroll;
+                if (scroll != null) {
+                    javax.swing.JScrollBar bar = scroll.getVerticalScrollBar();
+                    bar.setValue(bar.getMaximum());
+                }
+            }
+        });
+    }
+
+    private void setRequestInFlight(boolean inFlight) {
+        requestInFlight = inFlight;
+        sendButton.setEnabled(!inFlight);
+        stopButton.setEnabled(inFlight);
+        clearButton.setEnabled(!inFlight);
+        promptButton.setEnabled(true);
+        inputArea.setEnabled(!inFlight);
+    }
+
+    private NodeModel resolveFocusNode() {
+        if (focusNode != null) {
+            return focusNode;
         }
+        try {
+            return Controller.getCurrentController().getSelection().getSelected();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void appendHintMessage(String text) {
+        JLabel label = new JLabel(text);
+        label.setForeground(new Color(70, 70, 150));
+        label.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        label.setAlignmentX(LEFT_ALIGNMENT);
+        messagesPanel.add(label);
+        messagesPanel.revalidate();
+        messagesPanel.repaint();
+        scrollToBottom();
     }
 
     private MapModel resolveCurrentMap() {
@@ -124,36 +508,17 @@ public class AiChatSidebar extends JPanel {
         }
     }
 
-    private void replaceLastLine(String oldLine, String newLine) {
-        String content = chatArea.getText();
-        int index = content.lastIndexOf(oldLine);
-        if (index >= 0) {
-            chatArea.setText(content.substring(0, index) + newLine + content.substring(index + oldLine.length()));
-        } else {
-            chatArea.append(newLine);
+    private String normalizeReply(String reply) {
+        if (reply == null || reply.trim().length() == 0) {
+            return "\u672a\u6536\u5230\u6709\u6548\u56de\u590d\u3002\u8bf7\u5728 PowerShell \u4e2d\u6d4b\u8bd5\uff1acopilot -p \"\u6d4b\u8bd5\" -s";
         }
+        return reply.replace("\r\n", "\n").replace('\r', '\n');
     }
 
-    private String formatReply(String reply) {
-        return reply.replace("\r\n", "\n").replace("\r", "\n");
-    }
-
-    private void setInputEnabled(boolean enabled) {
-        inputField.setEnabled(enabled);
-        sendButton.setEnabled(enabled);
-    }
-
-    public void switchToMap(MapModel map) {
-        this.currentMap = map;
-        chatArea.setText("");
-        String title = map != null ? map.getTitle() : "无";
-        String path = AiPromptBuilder.resolveMapPath(map);
-        chatArea.append("已切换到思维导图: " + title + "\n");
-        chatArea.append("文件路径: " + path + "\n");
-        if (aiController != null) {
-            File templateFile = aiController.getPromptBuilder().getTemplateStore().getTemplateFile();
-            chatArea.append("提示词模板: " + templateFile.getAbsolutePath() + "\n");
-            chatArea.append("交互记录目录: " + aiController.getInteractionLogger().getLogDirectory().getAbsolutePath() + "\n\n");
+    private static String truncate(String text, int max) {
+        if (text == null || text.length() <= max) {
+            return text != null ? text : "";
         }
+        return text.substring(0, max) + "...";
     }
 }

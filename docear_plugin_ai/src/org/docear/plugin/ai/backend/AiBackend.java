@@ -22,6 +22,16 @@ public interface AiBackend {
     String chat(String message);
 
     /**
+     * 流式发送聊天消息。
+     */
+    void chatStreaming(String message, AiChatStreamListener listener);
+
+    /**
+     * 取消当前进行中的请求。
+     */
+    void cancelCurrentRequest();
+
+    /**
      * 判断当前后端是否可用（例如 Copilot CLI 是否已安装）。
      */
     boolean isAvailable();
