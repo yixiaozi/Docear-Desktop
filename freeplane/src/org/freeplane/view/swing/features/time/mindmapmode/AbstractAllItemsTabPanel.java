@@ -113,6 +113,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	protected final Map itemKeysByFile = new HashMap();
 	protected SwingWorker activeWorker;
 	protected boolean rescanRequested;
+	protected Set lastActiveFileKeys = new HashSet();
 	protected final Timer autoRefreshTimer;
 
 	public AbstractAllItemsTabPanel() {
@@ -195,11 +196,20 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		activeWorker = new SwingWorker() {
 			protected Object doInBackground() throws Exception {
 				List files = collectAllMindmapFiles();
+				Set activeFileKeys = new HashSet();
+				for (int i = 0; i < files.size(); i++) {
+					activeFileKeys.add(((File) files.get(i)).getAbsolutePath());
+				}
+				lastActiveFileKeys = activeFileKeys;
+				purgeStaleItems(activeFileKeys);
 				for (int i = 0; i < files.size(); i++) {
 					if (rescanRequested) {
 						return null;
 					}
 					File file = (File) files.get(i);
+					if (!isValidMindmapFile(file)) {
+						continue;
+					}
 					List items = getItemsForFile(file);
 					publish(new ScanChunk(file.getAbsolutePath(), items, i + 1, files.size()));
 				}
@@ -216,6 +226,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 			protected void done() {
 				activeWorker = null;
+				purgeStaleItems(lastActiveFileKeys);
 				rebuildTreeFromCache();
 				statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size());
 				if (rescanRequested) {
@@ -422,6 +433,10 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	}
 
 	private void mergeChunk(ScanChunk chunk) {
+		if (chunk.fileKey != null && lastActiveFileKeys != null && !lastActiveFileKeys.isEmpty()
+				&& !lastActiveFileKeys.contains(chunk.fileKey)) {
+			return;
+		}
 		List oldKeys = (List) itemKeysByFile.get(chunk.fileKey);
 		if (oldKeys != null) {
 			for (int i = 0; i < oldKeys.size(); i++) {
@@ -432,6 +447,9 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		List newKeys = new ArrayList();
 		for (int i = 0; i < chunk.items.size(); i++) {
 			ItemRecord record = (ItemRecord) chunk.items.get(i);
+			if (!isValidMindmapFile(record.file)) {
+				continue;
+			}
 			String key = itemKey(record);
 			if (!itemsByKey.containsKey(key)) {
 				itemsByKey.put(key, record);
@@ -441,6 +459,46 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		itemKeysByFile.put(chunk.fileKey, newKeys);
 	}
 
+	private boolean isValidMindmapFile(File file) {
+		if (file == null || !file.exists() || !file.isFile()) {
+			return false;
+		}
+		String name = file.getName();
+		if (name.startsWith("~") || name.contains("\u51b2\u7a81\u526f\u672c")) {
+			return false;
+		}
+		return name.toLowerCase().endsWith(".mm");
+	}
+
+	private void purgeStaleItems(Set activeFileKeys) {
+		if (activeFileKeys == null) {
+			activeFileKeys = Collections.emptySet();
+		}
+		List staleFileKeys = new ArrayList();
+		for (Object fileKeyObj : itemKeysByFile.keySet()) {
+			String fileKey = (String) fileKeyObj;
+			if (!activeFileKeys.contains(fileKey) || !isValidMindmapFile(new File(fileKey))) {
+				staleFileKeys.add(fileKey);
+			}
+		}
+		for (int i = 0; i < staleFileKeys.size(); i++) {
+			String fileKey = (String) staleFileKeys.get(i);
+			List oldKeys = (List) itemKeysByFile.remove(fileKey);
+			if (oldKeys != null) {
+				for (int j = 0; j < oldKeys.size(); j++) {
+					itemsByKey.remove(oldKeys.get(j));
+				}
+			}
+			cacheByFile.remove(fileKey);
+		}
+		for (Object cacheKeyObj : new ArrayList(cacheByFile.keySet())) {
+			String cacheKey = (String) cacheKeyObj;
+			if (!activeFileKeys.contains(cacheKey) || !isValidMindmapFile(new File(cacheKey))) {
+				cacheByFile.remove(cacheKey);
+			}
+		}
+	}
+
 	private List collectAllMindmapFiles() {
 		final List files = new ArrayList();
 		MindMapDataRootResolver.collectMindmapFiles(files);
@@ -448,6 +506,9 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	}
 
 	private List getItemsForFile(final File file) {
+		if (!isValidMindmapFile(file)) {
+			return Collections.emptyList();
+		}
 		long modified = file.lastModified();
 		long length = file.length();
 		CachedFileResult cached = (CachedFileResult) cacheByFile.get(file.getAbsolutePath());
@@ -523,6 +584,9 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 		for (int i = 0; i < records.size(); i++) {
 			ItemRecord record = (ItemRecord) records.get(i);
+			if (!isValidMindmapFile(record.file)) {
+				continue;
+			}
 			String recordKey = record.nodeText + "|" + record.mapName;
 
 			if (addedKeys.contains(recordKey)) {
@@ -591,6 +655,9 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		List entries = new ArrayList();
 		for (int i = 0; i < records.size(); i++) {
 			ItemRecord record = (ItemRecord) records.get(i);
+			if (!isValidMindmapFile(record.file)) {
+				continue;
+			}
 			String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText)
 					.replaceAll("\\s+", " ").trim();
 			entries.add(new WorkspaceSideTabSnapshot.TodoEntry(record.file, record.nodeId, text));

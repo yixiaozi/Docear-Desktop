@@ -61,6 +61,7 @@ public class DocearAiController {
         this.interactionLogger.ensureLogDirectoryExists();
         this.chatSessionManager.getStore().ensureDirectoryExists();
         this.chatSidebar = new AiChatSidebar(this);
+        scheduleWorkspaceScanPreload();
         AiChatHistoryExtensionIO.install(modeController);
         AiPromptTemplateGuard.install(modeController);
         registerSelectionListener();
@@ -68,6 +69,16 @@ public class DocearAiController {
         registerActions();
         registerMenus();
         installAiChatTab();
+    }
+
+    private void scheduleWorkspaceScanPreload() {
+        try {
+            Class cacheClass = Class.forName("org.freeplane.core.util.WorkspaceSideTabScanCache");
+            cacheClass.getMethod("schedulePreload", new Class[0]).invoke(null, new Object[0]);
+        }
+        catch (Exception e) {
+            LogUtils.info("Workspace scan preload not available: " + e.getMessage());
+        }
     }
 
     private AiBackend createBackend() {

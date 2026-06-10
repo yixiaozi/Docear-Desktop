@@ -35,6 +35,11 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_WORKSPACE_PLANS_CACHE_SECONDS = "ai.workspace_plans_cache_seconds";
     private static final String PROPERTY_AI_MAX_WORKSPACE_PLAN_ITEMS = "ai.max_workspace_plan_items_per_section";
     private static final String PROPERTY_AI_MAX_OUTBOUND_PROMPT_CHARS = "ai.max_outbound_prompt_chars";
+    private static final String PROPERTY_AI_WORKSPACE_FILE_INDEX_ENABLED = "ai.workspace_file_index_enabled";
+    private static final String PROPERTY_AI_MAX_WORKSPACE_FILE_INDEX_CHARS = "ai.max_workspace_file_index_chars";
+    private static final String PROPERTY_AI_MAX_WORKSPACE_FILE_INDEX_ITEMS = "ai.max_workspace_file_index_items";
+    private static final String PROPERTY_AI_WORKSPACE_FILE_INDEX_ALL_FILES = "ai.workspace_file_index_all_files";
+    private static final String PROPERTY_AI_WORKSPACE_FILE_INDEX_CACHE_SECONDS = "ai.workspace_file_index_cache_seconds";
 
     public DocearAiConfig() {
     }
@@ -194,6 +199,49 @@ public class DocearAiConfig {
                     PROPERTY_AI_MAX_OUTBOUND_PROMPT_CHARS, "100000"));
         } catch (NumberFormatException e) {
             return 100000;
+        }
+    }
+
+    public boolean isWorkspaceFileIndexEnabled() {
+        String value = ResourceController.getResourceController().getProperty(
+                PROPERTY_AI_WORKSPACE_FILE_INDEX_ENABLED, "true");
+        return !"false".equalsIgnoreCase(value) && !"0".equals(value);
+    }
+
+    public int getMaxWorkspaceFileIndexChars() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_WORKSPACE_FILE_INDEX_CHARS, "12000"));
+        } catch (NumberFormatException e) {
+            return 12000;
+        }
+    }
+
+    public int getMaxWorkspaceFileIndexItemsPerSection() {
+        try {
+            return Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_MAX_WORKSPACE_FILE_INDEX_ITEMS, "2000"));
+        } catch (NumberFormatException e) {
+            return 2000;
+        }
+    }
+
+    public boolean isWorkspaceFileIndexAllFiles() {
+        String value = ResourceController.getResourceController().getProperty(
+                PROPERTY_AI_WORKSPACE_FILE_INDEX_ALL_FILES, "true");
+        return !"false".equalsIgnoreCase(value) && !"0".equals(value);
+    }
+
+    public long getWorkspaceFileIndexCacheTtlMs() {
+        try {
+            int seconds = Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_WORKSPACE_FILE_INDEX_CACHE_SECONDS, "300"));
+            if (seconds <= 0) {
+                return 300000L;
+            }
+            return seconds * 1000L;
+        } catch (NumberFormatException e) {
+            return 300000L;
         }
     }
 

@@ -212,6 +212,14 @@ public class AiPromptBuilder {
             workspacePlans = AiWorkspacePlanCollector.collectWorkspacePlans(progress, userQuestion);
         }
 
+        String workspaceFileIndex;
+        if (isLightweightQuestion(userQuestion)) {
+            workspaceFileIndex = "\uff08\u7b80\u5355\u95ee\u9898\uff0c\u672a\u52a0\u8f7d\u5bfc\u56fe\u5e93\u6587\u4ef6\u7d22\u5f15\uff09";
+        }
+        else {
+            workspaceFileIndex = AiWorkspaceFileIndexCollector.collectWorkspaceFileIndex(progress, userQuestion);
+        }
+
         report(progress, 5, 6, "\u7ec4\u88c5\u63d0\u793a\u8bcd...");
         String question = userQuestion != null ? userQuestion : "";
         NodeModel resolvedFocus = focusNode != null ? focusNode : resolveCurrentSelectedNode();
@@ -226,6 +234,7 @@ public class AiPromptBuilder {
                 .replace("{{KEYWORDS}}", keywords)
                 .replace("{{ACTIVE_KEYWORD_RULES}}", activeKeywordRules)
                 .replace("{{WORKSPACE_PLANS}}", workspacePlans)
+                .replace("{{WORKSPACE_FILE_INDEX}}", workspaceFileIndex)
                 .replace("{{CHAT_HISTORY}}", chatHistory)
                 .replace("{{USER_QUESTION}}", question);
 
@@ -261,6 +270,14 @@ public class AiPromptBuilder {
                 && workspacePlans != null
                 && workspacePlans.trim().length() > 0) {
             prompt = prompt + "\n\n--- \u5168\u5c40\u5b89\u6392\u4e0e\u5173\u6ce8 ---\n" + workspacePlans;
+        }
+
+        if (safeTemplate.indexOf("{{WORKSPACE_FILE_INDEX}}") < 0
+                && workspaceFileIndex != null
+                && workspaceFileIndex.trim().length() > 0
+                && !workspaceFileIndex.startsWith("\uff08\u7b80\u5355\u95ee\u9898")
+                && !workspaceFileIndex.startsWith("\uff08\u5df2\u5173\u95ed")) {
+            prompt = prompt + "\n\n--- \u5bfc\u56fe\u5e93\u6587\u4ef6\u7d22\u5f15\uff08\u538b\u7f29\u8def\u5f84\uff09 ---\n" + workspaceFileIndex;
         }
 
         if (safeTemplate.indexOf("{{CHAT_HISTORY}}") < 0 && session != null && !session.getMessages().isEmpty()) {
