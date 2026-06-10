@@ -28,6 +28,7 @@ import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.IMenuContributor;
 import org.freeplane.core.ui.MenuBuilder;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.INodeSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -61,6 +62,7 @@ public class DocearAiController {
         AiChatHistoryExtensionIO.install(modeController);
         AiPromptTemplateGuard.install(modeController);
         registerSelectionListener();
+        registerMapSelectionListener();
         registerActions();
         registerMenus();
         installAiChatTab();
@@ -277,6 +279,17 @@ public class DocearAiController {
 
             public void onDeselect(NodeModel node) {
                 chatSidebar.refreshContextStatus();
+            }
+        });
+    }
+
+    private void registerMapSelectionListener() {
+        Controller.getCurrentController().getMapViewManager().addMapSelectionListener(new IMapSelectionListener() {
+            public void beforeMapChange(MapModel oldMap, MapModel newMap) {
+            }
+
+            public void afterMapChange(MapModel oldMap, MapModel newMap) {
+                chatSidebar.switchToMap(newMap);
             }
         });
     }

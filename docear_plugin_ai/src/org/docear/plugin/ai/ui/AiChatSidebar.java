@@ -26,6 +26,7 @@ import org.docear.plugin.ai.DocearAiController;
 import org.docear.plugin.ai.backend.AiChatStreamListener;
 import org.docear.plugin.ai.chat.AiChatMessage;
 import org.docear.plugin.ai.chat.AiChatSession;
+import org.docear.plugin.ai.chat.AiChatSessionManager;
 import org.docear.plugin.ai.prompt.AiPromptBuilder;
 import org.docear.plugin.ai.prompt.AiSelectedNodeExtractor;
 import org.freeplane.core.util.LogUtils;
@@ -110,8 +111,18 @@ public class AiChatSidebar extends JPanel {
 
         bindActions();
         reloadKeywordButtons();
-        refreshContextStatus();
+        initializeForCurrentMap();
         LogUtils.info("AiChatSidebar initialized.");
+    }
+
+    private void initializeForCurrentMap() {
+        MapModel map = null;
+        try {
+            map = Controller.getCurrentController().getMap();
+        } catch (Exception e) {
+            LogUtils.warn("Could not resolve current map for AI chat: " + e.getMessage());
+        }
+        switchToMap(map);
     }
 
     private void bindActions() {
@@ -351,13 +362,35 @@ public class AiChatSidebar extends JPanel {
     }
 
     public void switchToMap(MapModel map) {
+        if (isSameMap(this.currentMap, map)) {
+            refreshContextStatus();
+            return;
+        }
+        if (requestInFlight) {
+            cancelRequest();
+        }
         this.currentMap = map;
         this.focusNode = null;
+        this.streamingPanel = null;
         messagesPanel.removeAll();
         reloadKeywordButtons();
-        restoreChatHistory(map);
+        if (map != null) {
+            restoreChatHistory(map);
+        } else {
+            appendHintMessage("\u5f53\u524d\u6ca1\u6709\u6253\u5f00\u7684\u601d\u7ef4\u5bfc\u56fe\u3002");
+        }
         refreshContextStatus();
         scrollToBottom();
+    }
+
+    private boolean isSameMap(MapModel left, MapModel right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        return AiChatSessionManager.resolveMapKey(left).equals(AiChatSessionManager.resolveMapKey(right));
     }
 
     public void refreshContextStatus() {
