@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.text.SimpleDateFormat;
@@ -16,7 +17,7 @@ import org.freeplane.core.util.LogUtils;
 
 /**
  * Copilot CLI 调用次数计数器。按日/月统计本地调用次数，
- * 持久化到 ~/.docear/ai/usage/counter.tsv，接近配额上限时给出警告。
+ * 优先从对话历史日志中读取统计数据（更准确），同时维护独立的计数器文件作为备份。
  */
 public class AiUsageCounter {
 
@@ -26,9 +27,11 @@ public class AiUsageCounter {
     private static final String COUNTER_DIR_NAME = "usage";
     private static final String COUNTER_FILE_NAME = "counter.tsv";
     private static final String WARNING_MARK_FILE = "warning_shown";
+    private static final String ENTRY_SEPARATOR = "\n---\n\n";
 
     private final File counterFile;
     private final File warningMarkFile;
+    private final File logsDirectory;
     private final DocearAiConfig config;
 
     private final Map<String, Integer> dailyCounts = new LinkedHashMap<String, Integer>();
@@ -47,6 +50,7 @@ public class AiUsageCounter {
         }
         this.counterFile = new File(counterDir, COUNTER_FILE_NAME);
         this.warningMarkFile = new File(counterDir, WARNING_MARK_FILE);
+        this.logsDirectory = new File(new File(config.getAiHomeDirectory()), config.getAiLogsDirectoryName());
         loadIfChanged();
     }
 
@@ -63,21 +67,106 @@ public class AiUsageCounter {
     }
 
     /**
-     * 获得当天调用次数。
+     * 获得当天调用次数（从对话历史日志中统计）。
      */
     public synchronized int getTodayCount() {
+        int count = countFromLogs(dayKey(new Date()));
+        if (count > 0) {
+            return count;
+        }
         loadIfChanged();
-        Integer count = dailyCounts.get(dayKey(new Date()));
-        return count != null ? count.intValue() : 0;
+        Integer stored = dailyCounts.get(dayKey(new Date()));
+        return stored != null ? stored.intValue() : 0;
     }
 
     /**
-     * 获得当月调用次数。
+     * 获得当月调用次数（从对话历史日志中统计，更准确）。
      */
     public synchronized int getThisMonthCount() {
+        int count = countFromLogs(monthKey(new Date()));
+        if (count > 0) {
+            return count;
+        }
         loadIfChanged();
-        Integer count = monthlyCounts.get(monthKey(new Date()));
-        return count != null ? count.intValue() : 0;
+        Integer stored = monthlyCounts.get(monthKey(new Date()));
+        return stored != null ? stored.intValue() : 0;
+    }
+
+    /**
+     * 从对话历史日志中统计调用次数。
+     * @param periodKey "YYYY-MM-DD" 格式表示当天，"YYYY-MM" 格式表示当月
+     */
+    private int countFromLogs(String periodKey) {
+        if (!logsDirectory.exists() || !logsDirectory.isDirectory()) {
+            return 0;
+        }
+        int count = 0;
+        String monthKey = periodKey.length() == 10 ? periodKey.substring(0, 7) : periodKey;
+        String dayKey = periodKey.length() == 10 ? periodKey : null;
+        File[] allFiles = logsDirectory.listFiles();
+        if (allFiles == null) {
+            return 0;
+        }
+        for (File mapDir : allFiles) {
+            if (!mapDir.isDirectory()) {
+                continue;
+            }
+            File logFile = new File(mapDir, monthKey + ".log");
+            if (!logFile.exists()) {
+                continue;
+            }
+            count += countEntriesInLog(logFile, dayKey);
+        }
+        return count;
+    }
+
+    /**
+     * 统计单个日志文件中的条目数。
+     * @param logFile 日志文件
+     * @param dayFilter 日期过滤器（null 表示统计整月）
+     */
+    private int countEntriesInLog(File logFile, String dayFilter) {
+        if (!logFile.exists()) {
+            return 0;
+        }
+        int count = 0;
+        BufferedReader reader = null;
+        try {
+            reader = new BufferedReader(new FileReader(logFile));
+            String line;
+            boolean inEntry = false;
+            String currentDate = null;
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("===")) {
+                    int dateEnd = line.indexOf(" | ");
+                    if (dateEnd > 0) {
+                        currentDate = line.substring(4, dateEnd).trim();
+                        if (currentDate.length() >= 10) {
+                            currentDate = currentDate.substring(0, 10);
+                        }
+                    }
+                    inEntry = true;
+                } else if (line.startsWith("---") && inEntry) {
+                    if (dayFilter == null || dayFilter.equals(currentDate)) {
+                        count++;
+                    }
+                    inEntry = false;
+                }
+            }
+            if (inEntry && (dayFilter == null || dayFilter.equals(currentDate))) {
+                count++;
+            }
+        } catch (Exception e) {
+            LogUtils.warn("Failed to read log file for usage counting: " + e.getMessage());
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return count;
     }
 
     /**

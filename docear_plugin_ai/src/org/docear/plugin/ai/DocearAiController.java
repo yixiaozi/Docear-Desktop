@@ -6,6 +6,7 @@ import java.util.List;
 
 import org.docear.plugin.ai.actions.AiAskAboutNodeAction;
 import org.docear.plugin.ai.actions.AiGenerateSubNodesAction;
+import org.docear.plugin.ai.actions.OpenAiPromptTemplateAction;
 import org.docear.plugin.ai.backend.AiBackend;
 import org.docear.plugin.ai.backend.AiChatStreamListener;
 import org.docear.plugin.ai.backend.CopilotCliBackend;
