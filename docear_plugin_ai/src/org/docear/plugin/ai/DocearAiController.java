@@ -274,7 +274,10 @@ public class DocearAiController {
                 bundle.getFilesDiscovered(),
                 backend.isAvailable(),
                 redactionCount,
-                statusHint);
+                statusHint,
+                usageCounter.getThisMonthCount(),
+                usageCounter.getMonthlyQuota(),
+                usageCounter.getTodayCount());
     }
 
     public void clearChatSession(MapModel map) {
@@ -344,6 +347,7 @@ public class DocearAiController {
 
     public List<String> invokeGenerateSubNodes(String topic, MapModel map, int count) {
         String prompt = promptBuilder.buildSubNodesPrompt(topic, map, count);
+        usageCounter.recordInvocation(AiUsageCounter.TYPE_SUBNODES);
         List<String> result = backend.generateSubNodes(prompt, count);
         String response = joinLines(result);
         logInteraction(AiInteractionRecord.TYPE_GENERATE_SUBNODES, topic, prompt, response, map);

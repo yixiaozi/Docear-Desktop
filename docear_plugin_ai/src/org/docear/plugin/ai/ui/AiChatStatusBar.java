@@ -45,7 +45,13 @@ public class AiChatStatusBar extends JPanel {
             return;
         }
         statusLabel.setText(info.formatStatusLine());
-        statusLabel.setForeground(info.isBackendReady() ? new Color(30, 100, 30) : new Color(160, 60, 0));
+        if (info.isQuotaExceeded()) {
+            statusLabel.setForeground(new Color(180, 30, 30));
+        } else if (info.isQuotaNear()) {
+            statusLabel.setForeground(new Color(180, 120, 0));
+        } else {
+            statusLabel.setForeground(info.isBackendReady() ? new Color(30, 100, 30) : new Color(160, 60, 0));
+        }
     }
 
     public void setHint(String hint) {
@@ -61,7 +67,10 @@ public class AiChatStatusBar extends JPanel {
                 contextInfo.getFilesDiscovered(),
                 contextInfo.isBackendReady(),
                 contextInfo.getRedactionCount(),
-                hint));
+                hint,
+                contextInfo.getMonthlyUsageCount(),
+                contextInfo.getMonthlyQuota(),
+                contextInfo.getTodayUsageCount()));
     }
 
     private void showDetails() {

@@ -209,6 +209,22 @@ public class CopilotCliBackend implements AiBackend {
                 }
                 return "";
             }
+            if (looksLikeQuotaExceeded(result)) {
+                LogUtils.warn("Copilot CLI reports quota or rate limit: " + result);
+                if (listener != null) {
+                    listener.onError("\u914d\u989d\u4e0d\u8db3\uff1a\u5df2\u89e6\u53d1 Copilot \u9650\u5236\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002");
+                    listener.onComplete("");
+                }
+                return "";
+            }
+            if (looksLikeAuthenticationFailure(result)) {
+                LogUtils.warn("Copilot CLI reports authentication issue: " + result);
+                if (listener != null) {
+                    listener.onError("Copilot \u672a\u767b\u5f55\u6216\u5df2\u8fc7\u671f\uff0c\u8bf7\u5148\u6267\u884c copilot login\u3002");
+                    listener.onComplete("");
+                }
+                return "";
+            }
             if (listener != null) {
                 listener.onComplete(result);
             }
@@ -505,6 +521,36 @@ public class CopilotCliBackend implements AiBackend {
                 || lower.contains("get-content -literalpath")
                 || lower.contains("objectnotfound")
                 || lower.contains("commandnotfoundexception");
+    }
+
+    private boolean looksLikeQuotaExceeded(String text) {
+        if (text == null) {
+            return false;
+        }
+        String lower = text.toLowerCase();
+        return lower.contains("rate limit")
+                || lower.contains("quota")
+                || lower.contains("too many requests")
+                || lower.contains("429")
+                || lower.contains("usage limit")
+                || lower.contains("premium request")
+                || lower.contains("usage has been capped")
+                || lower.contains("you have reached")
+                || lower.contains("monthly limit");
+    }
+
+    private boolean looksLikeAuthenticationFailure(String text) {
+        if (text == null) {
+            return false;
+        }
+        String lower = text.toLowerCase();
+        return lower.contains("not signed in")
+                || lower.contains("not authenticated")
+                || lower.contains("auth required")
+                || lower.contains("unauthorized")
+                || lower.contains("please sign in")
+                || lower.contains("401")
+                || lower.contains("403");
     }
 
     private boolean testCopilotDirect(String command) {
