@@ -24,7 +24,7 @@ public final class QuickCaptureService {
 
 	public static void install(final ModeController modeController) {
 		final ResourceController resources = ResourceController.getResourceController();
-		resources.setDefaultProperty(PROP_INBOX_DIRECTORY, "");
+		resources.setDefaultProperty(PROP_INBOX_DIRECTORY, "E:\\yixiaozi\\00统领全局");
 		resources.setDefaultProperty(PROP_INBOX_FILENAME, "\u6536\u4ef6\u7bb1.mm");
 
 		modeController.addAction(new QuickCaptureAction());
@@ -47,17 +47,6 @@ public final class QuickCaptureService {
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
 				try {
-					final Controller controller = Controller.getCurrentController();
-					if (controller != null && controller.getViewController() != null) {
-						final java.awt.Frame frame = controller.getViewController().getFrame();
-						if (frame != null) {
-							if (frame.getState() == java.awt.Frame.ICONIFIED) {
-								frame.setState(java.awt.Frame.NORMAL);
-							}
-							frame.toFront();
-							frame.requestFocus();
-						}
-					}
 					QuickCaptureDialog.openDialog();
 				}
 				catch (Exception e) {

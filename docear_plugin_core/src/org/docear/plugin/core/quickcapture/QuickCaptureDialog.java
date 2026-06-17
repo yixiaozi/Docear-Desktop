@@ -30,14 +30,14 @@ class QuickCaptureDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
 	private static QuickCaptureDialog current;
 
-	private final JTextArea textArea = new JTextArea(4, 40);
+	private final JTextArea textArea = new JTextArea(8, 50);
 
 	QuickCaptureDialog(final Frame owner) {
-		super(owner, TextUtils.getText("QuickCaptureAction.text"), true);
+		super(owner, "\u7075\u611f\u7b14\u8bb0", true);
 		buildUi();
 		setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-		pack();
-		setMinimumSize(new Dimension(420, 180));
+		setSize(new Dimension(600, 320));
+		setMinimumSize(new Dimension(500, 240));
 		addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowOpened(final WindowEvent e) {
@@ -52,7 +52,6 @@ class QuickCaptureDialog extends JDialog {
 		content.setBorder(new javax.swing.border.EmptyBorder(10, 10, 10, 10));
 
 		final JPanel top = new JPanel(new BorderLayout(4, 4));
-		top.add(new JLabel("\u5185\u5bb9"), BorderLayout.NORTH);
 		textArea.setLineWrap(true);
 		textArea.setWrapStyleWord(true);
 		top.add(new JScrollPane(textArea), BorderLayout.CENTER);
@@ -100,8 +99,21 @@ class QuickCaptureDialog extends JDialog {
 
 	private void centerOnScreen() {
 		final Rectangle bounds = getBounds();
-		final Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-		setLocation(screen.x + (screen.width - bounds.width) / 2, screen.y + (screen.height - bounds.height) / 2);
+		final java.awt.Point mouseLocation = java.awt.MouseInfo.getPointerInfo().getLocation();
+		final GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+		final java.awt.GraphicsDevice[] screens = ge.getScreenDevices();
+		
+		Rectangle screenBounds = ge.getMaximumWindowBounds();
+		for (java.awt.GraphicsDevice screen : screens) {
+			Rectangle screenRect = screen.getDefaultConfiguration().getBounds();
+			if (screenRect.contains(mouseLocation)) {
+				screenBounds = screenRect;
+				break;
+			}
+		}
+		
+		setLocation(screenBounds.x + (screenBounds.width - bounds.width) / 2, 
+		            screenBounds.y + (screenBounds.height - bounds.height) / 2);
 	}
 
 	private void focusInput() {
@@ -119,18 +131,13 @@ class QuickCaptureDialog extends JDialog {
 			return;
 		}
 		final boolean ok = QuickCaptureController.capture(text);
-		final Controller controller = Controller.getCurrentController();
 		if (ok) {
-			controller.getViewController().out("\u5df2\u5199\u5165\u6536\u4ef6\u7bb1");
+			setVisible(false);
 			dispose();
-		}
-		else {
-			controller.getViewController().out("\u5feb\u901f\u6355\u83b7\u5931\u8d25");
 		}
 	}
 
 	static void openDialog() {
-		final Frame owner = Controller.getCurrentController().getViewController().getFrame();
 		if (current != null && current.isDisplayable()) {
 			current.textArea.setText("");
 			current.setVisible(true);
@@ -139,7 +146,7 @@ class QuickCaptureDialog extends JDialog {
 			current.focusInput();
 			return;
 		}
-		current = new QuickCaptureDialog(owner);
+		current = new QuickCaptureDialog(null);
 		current.setVisible(true);
 	}
 }

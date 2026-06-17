@@ -137,7 +137,6 @@ final class QuickCaptureController {
 			unfoldAncestors(mapController, node);
 			mapController.select(node);
 			mapViewManager.scrollNodeToVisible(node);
-			mapViewManager.obtainFocusForSelected();
 		}
 		catch (Exception e) {
 			LogUtils.warn("QuickCapture: could not reveal captured node.", e);
