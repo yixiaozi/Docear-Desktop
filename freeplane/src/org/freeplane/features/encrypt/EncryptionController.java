@@ -152,7 +152,7 @@ public class EncryptionController implements IExtension {
 				JOptionPane.showMessageDialog(controller.getViewController().getContentPane(), TextUtils
 				    .getText("accessories/plugins/EncryptNode.properties_wrong_password"), "Freeplane",
 				    JOptionPane.ERROR_MESSAGE);
-				return false;
+				continue;
 			}
 			else {
 				return true;

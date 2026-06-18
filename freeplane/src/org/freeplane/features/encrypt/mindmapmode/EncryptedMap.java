@@ -21,6 +21,7 @@ import java.awt.event.ActionEvent;
 
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.components.EnterPasswordDialog;
+import org.freeplane.features.encrypt.EncryptionConfig;
 import org.freeplane.features.encrypt.SingleDesEncrypter;
 import org.freeplane.features.map.EncryptionModel;
 import org.freeplane.features.map.NodeModel;
@@ -62,9 +63,14 @@ class EncryptedMap extends AFreeplaneAction {
 	 *
 	 */
 	private void newEncryptedMap() {
-		final StringBuilder password = getUsersPassword();
-		if (password == null) {
-			return;
+		final StringBuilder password;
+		if (EncryptionConfig.hasPassword()) {
+			password = new StringBuilder(EncryptionConfig.getPassword());
+		} else {
+			password = getUsersPassword();
+			if (password == null) {
+				return;
+			}
 		}
 		final ModeController modeController = Controller.getCurrentModeController();
 		MFileManager.getController(modeController).newMapFromDefaultTemplate();

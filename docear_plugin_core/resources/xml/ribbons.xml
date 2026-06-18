@@ -12,6 +12,7 @@
 				<ribbon_action action="TodoistSyncAction" priority="top" />
 				<ribbon_action action="TodoistImportAction" priority="top" />
 				<ribbon_action action="TodoistSettingsAction" />
+				<ribbon_action action="EncryptionSettingsAction" />
 			</ribbon_band>
 		</ribbon_task>
 		<ribbon_task name="view">

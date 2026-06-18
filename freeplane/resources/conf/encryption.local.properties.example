@@ -1,0 +1,5 @@
+# Copy to your Docear/Freeplane user folder as encryption.local.properties
+# Windows example: %APPDATA%\Docear\encryption.local.properties
+#
+# Do NOT commit the real file with your password to git.
+encryption.password=YOUR_ENCRYPTION_PASSWORD_HERE

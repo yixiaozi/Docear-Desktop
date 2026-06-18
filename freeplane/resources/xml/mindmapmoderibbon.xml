@@ -349,6 +349,7 @@
 				</ribbon_action>
 				<ribbon_action name="menu_encryption" priority="medium">
 					<ribbon_action action="EnterPassword" />
+					<ribbon_action action="EncryptionSettingsAction" />
 					<ribbon_action action="RemoveEncryption" />
 				</ribbon_action>
 				<ribbon_action action="SetAcceleratorOnNextClickAction" priority="Top" />								
@@ -449,6 +450,7 @@
 			    <ribbon_action action="GettingStartedAction" accelerator="F1" mandatory="true"/>
 			    <ribbon_action action="HotKeyInfoAction" mandatory="true"/>
 			    <ribbon_action action="ToggleUsageStatsReportAction" priority="medium"/>
+			    <ribbon_action action="EncryptionSettingsAction" priority="medium"/>
 			</ribbon_band>			
 		</ribbon_task>	
 		
