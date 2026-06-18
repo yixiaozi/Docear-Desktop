@@ -263,42 +263,53 @@ public class MindMapFileSearchPanel extends JPanel {
 	private void performSearch() {
 		final String query = searchField.getText().trim().toLowerCase();
 		
-		listModel.clear();
-		
-		List<FileResult> results = new ArrayList<FileResult>();
-		
-		if (query.isEmpty()) {
-			// 显示所有文件，按修改时间排序
-			for (File file : allMindMapFiles) {
-				results.add(new FileResult(file, file.lastModified()));
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				listModel.clear();
+				statusLabel.setText("搜索中...");
 			}
-		} else {
-			// 搜索匹配文件名的文件
-			for (File file : allMindMapFiles) {
-				String fileName = file.getName().toLowerCase();
-				if (fileName.contains(query)) {
-					results.add(new FileResult(file, file.lastModified()));
+		});
+		
+		new Thread(new Runnable() {
+			public void run() {
+				List<FileResult> results = new ArrayList<FileResult>();
+				
+				if (query.isEmpty()) {
+					for (File file : allMindMapFiles) {
+						results.add(new FileResult(file, file.lastModified()));
+					}
+				} else {
+					for (File file : allMindMapFiles) {
+						String fileName = file.getName().toLowerCase();
+						if (fileName.contains(query)) {
+							results.add(new FileResult(file, file.lastModified()));
+						}
+					}
+					
+					Collections.sort(results, new Comparator<FileResult>() {
+						public int compare(FileResult a, FileResult b) {
+							return Long.compare(b.lastModified, a.lastModified);
+						}
+					});
 				}
+				
+				final List<FileResult> finalResults = results;
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						listModel.clear();
+						for (FileResult result : finalResults) {
+							listModel.addElement(result);
+						}
+						
+						if (query.isEmpty()) {
+							statusLabel.setText("就绪 (共 " + allMindMapFiles.size() + " 个文件)");
+						} else {
+							statusLabel.setText("找到 " + finalResults.size() + " 个文件");
+						}
+					}
+				});
 			}
-			
-			// 搜索结果按修改时间排序
-			Collections.sort(results, new Comparator<FileResult>() {
-				public int compare(FileResult a, FileResult b) {
-					return Long.compare(b.lastModified, a.lastModified);
-				}
-			});
-		}
-		
-		for (FileResult result : results) {
-			listModel.addElement(result);
-		}
-		
-		// 更新状态标签
-		if (query.isEmpty()) {
-			statusLabel.setText("就绪 (共 " + allMindMapFiles.size() + " 个文件)");
-		} else {
-			statusLabel.setText("找到 " + results.size() + " 个文件");
-		}
+		}).start();
 	}
 	
 	private void openSelectedResult() {

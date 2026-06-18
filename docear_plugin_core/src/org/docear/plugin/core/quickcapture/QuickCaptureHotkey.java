@@ -132,7 +132,8 @@ final class QuickCaptureHotkey {
 					if (frame == null) {
 						return;
 					}
-					if (frame.isVisible()) {
+					final boolean isActive = frame.isActive() || (frame.getExtendedState() & java.awt.Frame.ICONIFIED) != 0;
+					if (frame.isVisible() && isActive) {
 						frame.setVisible(false);
 					}
 					else {

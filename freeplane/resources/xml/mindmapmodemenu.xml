@@ -52,7 +52,7 @@
 				<menu_action action="AlwaysUnfoldedNodeAction"/>
 				<menu_action action="CloudAction" accelerator="control shift B" />
 			</menu_submenu>	
-			<menu_action action="AddConnectorAction" accelerator="control L" />						
+			<menu_action action="AddConnectorAction" accelerator="control shift C" />						
 			<menu_submenu name="links" name_ref="menu_links">
 				<menu_action action="SetLinkByFileChooserAction" accelerator="control shift K" />
 				<menu_action action="SetLinkByTextFieldAction" accelerator="control K" />
@@ -374,7 +374,8 @@
 			</menu_submenu>			
 			<menu_separator />
 			<menu_submenu name="encryption" name_ref="menu_encryption">
-				<menu_action action="EnterPassword" />
+				<menu_action action="EnterPassword" accelerator="control L" />
+				<menu_action action="EncryptionSettingsAction" />
 				<menu_action action="RemoveEncryption" />
 			</menu_submenu>
 			<menu_separator />
@@ -434,6 +435,7 @@
 			<menu_action action="ToggleUsageStatsReportAction"/>
 			<menu_action action="QuickCaptureAction" accelerator="control shift SPACE" />
 			<menu_separator />
+			<menu_action action="EncryptionSettingsAction" />
 		</menu_submenu>
 	</menu_category>
 	<menu_category name="map_popup">		

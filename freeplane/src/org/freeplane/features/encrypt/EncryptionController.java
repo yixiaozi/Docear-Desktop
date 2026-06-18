@@ -50,6 +50,8 @@ public class EncryptionController implements IExtension {
 		modeController.addExtension(EncryptionController.class, encryptionController);
 		final EnterPassword pwdAction = new EnterPassword(encryptionController);
 		modeController.addAction(pwdAction);
+		final EncryptionSettingsAction settingsAction = new EncryptionSettingsAction();
+		modeController.addAction(settingsAction);
 	}
 	
 	
@@ -128,6 +130,14 @@ public class EncryptionController implements IExtension {
 	 * @param e 
 	 */
 	private boolean doPasswordCheckAndDecryptNode(final EncryptionModel encNode) {
+		if (EncryptionConfig.hasPassword()) {
+			final String savedPassword = EncryptionConfig.getPassword();
+			if (encNode.decrypt(Controller.getCurrentModeController().getMapController(), 
+					new SingleDesEncrypter(new StringBuilder(savedPassword)))) {
+				return true;
+			}
+		}
+		
 		while (true) {
 			final EnterPasswordDialog pwdDialog = new EnterPasswordDialog(Controller.getCurrentController().getViewController()
 			    .getFrame(), false);
@@ -153,9 +163,14 @@ public class EncryptionController implements IExtension {
 	/**
 	 */
 	private void encrypt(final NodeModel node) {
-		final StringBuilder password = getUsersPassword();
-		if (password == null) {
-			return;
+		final StringBuilder password;
+		if (EncryptionConfig.hasPassword()) {
+			password = new StringBuilder(EncryptionConfig.getPassword());
+		} else {
+			password = getUsersPassword();
+			if (password == null) {
+				return;
+			}
 		}
 		final EncryptionModel encryptedMindMapNode = new EncryptionModel(node);
 		encryptedMindMapNode.setEncrypter(new SingleDesEncrypter(password));
