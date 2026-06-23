@@ -158,10 +158,22 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 		tree.addMouseListener(new MouseAdapter() {
 			@Override
-			public void mouseClicked(MouseEvent e) {
+			public void mousePressed(MouseEvent e) {
 				if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
 					showPopupMenu(e);
-				} else if (e.getClickCount() >= 1) {
+				}
+			}
+			
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
+					showPopupMenu(e);
+				}
+			}
+			
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				if (e.getClickCount() >= 1 && e.getButton() == MouseEvent.BUTTON1) {
 					openSelectedItem();
 				}
 			}
@@ -249,20 +261,6 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		if (userObject instanceof ItemRecord) {
 			final ItemRecord record = (ItemRecord) userObject;
 
-			JMenuItem openFolderItem = new JMenuItem("\u6253\u5F00\u6587\u4EF6\u5939");
-			openFolderItem.addActionListener(new java.awt.event.ActionListener() {
-				public void actionPerformed(java.awt.event.ActionEvent e1) {
-					try {
-						String filePath = record.file.getAbsolutePath();
-						String cmd = "explorer.exe /select,\"" + filePath + "\"";
-						Runtime.getRuntime().exec(cmd);
-					} catch (Exception ex) {
-						LogUtils.warn(ex);
-					}
-				}
-			});
-			menu.add(openFolderItem);
-
 			JMenuItem copyItem = new JMenuItem("\u590D\u5236");
 			copyItem.addActionListener(new java.awt.event.ActionListener() {
 				public void actionPerformed(java.awt.event.ActionEvent e1) {
@@ -275,12 +273,13 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 			menu.add(copyItem);
 		} else if (userObject instanceof GroupLabel) {
 			final GroupLabel label = (GroupLabel) userObject;
+			final TreePath treePath = path;
 			
 			JMenuItem openFolderItem = new JMenuItem("\u6253\u5F00\u6587\u4EF6\u5939");
 			openFolderItem.addActionListener(new java.awt.event.ActionListener() {
 				public void actionPerformed(java.awt.event.ActionEvent e1) {
 					try {
-						String folderPath = findFolderPathForLabel(label.text, path);
+						String folderPath = findFolderPathForLabel(label.text, treePath);
 						if (folderPath != null) {
 							Runtime.getRuntime().exec("explorer.exe \"" + folderPath + "\"");
 						}

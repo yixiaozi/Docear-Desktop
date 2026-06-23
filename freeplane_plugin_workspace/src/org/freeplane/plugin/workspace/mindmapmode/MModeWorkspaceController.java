@@ -131,13 +131,14 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private static final String TAB_FILE_SEARCH = "file_search";
 	private static final String TAB_ALL_FILE_SEARCH = "all_file_search";
 	private static final String TAB_ACTIVITY = "activity";
+	private static final String TAB_GIT = "git";
 	private static final int SIDE_TAB_PRELOAD_DELAY_MS = 5000;
 	private static final int SIDE_TAB_PRELOAD_STAGGER_MS = 800;
 	private static final String[] BACKGROUND_PRELOAD_TAB_IDS = {
 			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY
 	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
-			TAB_WORKSPACE, TAB_FAVORITES, TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY
+			TAB_WORKSPACE, TAB_FAVORITES, TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GIT
 	};
 
 	abstract class ResizerEventAdapter implements ResizerListener, ComponentCollapseListener {
@@ -612,6 +613,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (TAB_ACTIVITY.equals(tabId)) {
 			return "\u6d3b\u52a8\u5206\u6790";
 		}
+		if (TAB_GIT.equals(tabId)) {
+			return "Git";
+		}
 		return tabId;
 	}
 
@@ -675,6 +679,14 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			final ActivityAnalysisPanel activityPanel = new ActivityAnalysisPanel();
 			activityPanel.refreshAnalysis();
 			panel = activityPanel;
+		}
+		else if (TAB_GIT.equals(tabId)) {
+			try {
+				final Class<?> gitPanelClass = Class.forName("org.freeplane.view.swing.features.git.GitTabPanel");
+				panel = (JComponent) gitPanelClass.newInstance();
+			} catch (Exception e) {
+				LogUtils.warn("Failed to load GitTabPanel: " + e.getMessage());
+			}
 		}
 		if (panel != null) {
 			sideTabComponents.put(tabId, panel);
