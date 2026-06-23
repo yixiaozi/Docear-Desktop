@@ -116,6 +116,7 @@ import org.freeplane.plugin.workspace.nodes.DefaultFileNode;
 import org.freeplane.plugin.workspace.nodes.FolderTypeMyFilesNode;
 import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
+import org.freeplane.view.swing.features.git.GitTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.ActivityAnalysisPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.AllFileSearchPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.GlobalSearchTabPanel;
@@ -681,12 +682,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			panel = activityPanel;
 		}
 		else if (TAB_GIT.equals(tabId)) {
-			try {
-				final Class<?> gitPanelClass = Class.forName("org.freeplane.view.swing.features.git.GitTabPanel");
-				panel = (JComponent) gitPanelClass.newInstance();
-			} catch (Exception e) {
-				LogUtils.warn("Failed to load GitTabPanel: " + e.getMessage());
-			}
+			panel = new GitTabPanel();
 		}
 		if (panel != null) {
 			sideTabComponents.put(tabId, panel);

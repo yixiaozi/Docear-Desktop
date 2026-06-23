@@ -7,102 +7,513 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.BufferedReader;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.swing.BorderFactory;
-import javax.swing.DefaultListCellRenderer;
-import javax.swing.DefaultListModel;
-import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
-import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JList;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.border.Border;
+import javax.swing.Timer;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+import javax.swing.DefaultCellEditor;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 
 import org.freeplane.core.util.LogUtils;
 
 public class GitTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 
-	private final DefaultListModel<GitFileChange> fileListModel = new DefaultListModel<GitFileChange>();
-	private final JList<GitFileChange> fileList = new JList<GitFileChange>(fileListModel);
-	private final JTextField summaryField = new JTextField();
-	private final JTextArea descriptionArea = new JTextArea();
-	private final JButton refreshButton = new JButton("刷新");
-	private final JButton commitButton = new JButton("提交");
 	private final JLabel statusLabel = new JLabel("就绪");
+	private final JButton refreshButton = new JButton("刷新");
+	private final JButton pullButton = new JButton("拉取");
+	private final JButton pushButton = new JButton("推送");
+	private final JButton commitButton = new JButton("提交");
+	private final JCheckBox selectAllCheckBox = new JCheckBox("全选", true);
+	private final JTextField summaryField = new JTextField();
+	private final JTextArea descriptionArea = new JTextArea(2, 20);
+	private final JTable changesTable = new JTable(new ChangesTableModel());
+	private final GitHistoryPanel historyPanel = new GitHistoryPanel();
+	private final List<GitFileChange> changes = new ArrayList<GitFileChange>();
+	private File repoDir;
+	private GitSyncStatus lastSyncStatus;
+	private Timer syncTimer;
+	private volatile boolean syncCheckRunning;
+	private volatile boolean remoteActionRunning;
+	private volatile boolean autoSyncRunning;
 
-	private static final String ADD_ICON = "+";
-	private static final String MODIFY_ICON = "~";
-	private static final String DELETE_ICON = "-";
+	private static final String LABEL_PULL = "拉取";
+	private static final String LABEL_PUSH = "推送";
 
 	public GitTabPanel() {
 		super(new BorderLayout(4, 4));
+		buildUi();
+		wireEvents();
+		startSyncTimer();
+		refreshChanges();
+	}
 
-		JPanel topPanel = new JPanel(new BorderLayout(4, 0));
-		topPanel.add(statusLabel, BorderLayout.CENTER);
-		topPanel.add(refreshButton, BorderLayout.EAST);
-		add(topPanel, BorderLayout.NORTH);
+	private void buildUi() {
+		final JPanel toolbar = new JPanel(new BorderLayout(4, 0));
+		statusLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+		toolbar.add(statusLabel, BorderLayout.CENTER);
 
-		JSplitPane mainSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-		mainSplit.setDividerLocation(300);
+		final JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+		actionPanel.add(pullButton);
+		actionPanel.add(pushButton);
+		actionPanel.add(refreshButton);
+		toolbar.add(actionPanel, BorderLayout.EAST);
+		add(toolbar, BorderLayout.NORTH);
 
-		JScrollPane fileScroll = new JScrollPane(fileList);
-		fileScroll.setBorder(BorderFactory.createTitledBorder("修改的文件"));
-		fileList.setCellRenderer(new GitFileCellRenderer());
-		fileList.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-		mainSplit.setTopComponent(fileScroll);
+		final JTabbedPane tabs = new JTabbedPane();
+		tabs.addTab("更改", buildChangesTab());
+		tabs.addTab("历史", historyPanel);
+		tabs.addChangeListener(new ChangeListener() {
+			@Override
+			public void stateChanged(final ChangeEvent e) {
+				if (tabs.getSelectedIndex() == 1) {
+					historyPanel.refresh(repoDir);
+				}
+			}
+		});
+		add(tabs, BorderLayout.CENTER);
+	}
 
-		JPanel commitPanel = new JPanel(new BorderLayout(4, 4));
+	private void startSyncTimer() {
+		final int intervalMs = GitConfig.getSyncIntervalSeconds() * 1000;
+		syncTimer = new Timer(intervalMs, new ActionListener() {
+			@Override
+			public void actionPerformed(final ActionEvent e) {
+				checkRemoteSync(false);
+			}
+		});
+		syncTimer.setInitialDelay(intervalMs);
+		syncTimer.start();
+	}
 
-		JPanel summaryPanel = new JPanel(new BorderLayout(4, 0));
-		summaryPanel.add(new JLabel("Summary (required)"), BorderLayout.WEST);
-		summaryField.setPreferredSize(new Dimension(200, 25));
+	private void checkRemoteSync(final boolean triggeredByRefresh) {
+		if (syncCheckRunning || remoteActionRunning || autoSyncRunning) {
+			return;
+		}
+		final File repository = repoDir != null ? repoDir : GitConfig.locateRepository();
+		if (repository == null) {
+			return;
+		}
+		syncCheckRunning = true;
+		if (triggeredByRefresh) {
+			SwingUtilities.invokeLater(new Runnable() {
+				@Override
+				public void run() {
+					statusLabel.setText("正在检查远端同步...");
+				}
+			});
+		}
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				final GitSyncStatus status = GitSyncChecker.check(repository);
+				SwingUtilities.invokeLater(new Runnable() {
+					@Override
+					public void run() {
+						syncCheckRunning = false;
+						lastSyncStatus = status;
+						updateSyncButtons(status);
+						updateStatusWithSync(status);
+						maybeAutoSync(status);
+					}
+				});
+			}
+		}).start();
+	}
+
+	private void updateSyncButtons(final GitSyncStatus status) {
+		if (status == null) {
+			pullButton.setText(LABEL_PULL);
+			pushButton.setText(LABEL_PUSH);
+			pullButton.setToolTipText(null);
+			pushButton.setToolTipText(null);
+			pullButton.setForeground(null);
+			pushButton.setForeground(null);
+			return;
+		}
+		pullButton.setText(status.needsPull() ? LABEL_PULL + " \u2193" + status.behind : LABEL_PULL);
+		pushButton.setText(status.needsPush() ? LABEL_PUSH + " \u2191" + status.ahead : LABEL_PUSH);
+		pullButton.setToolTipText(status.needsPull() ? "远端有 " + status.behind + " 个新提交待拉取" : LABEL_PULL);
+		pushButton.setToolTipText(status.needsPush() ? "本地有 " + status.ahead + " 个提交待推送" : LABEL_PUSH);
+		pullButton.setForeground(status.needsPull() ? new Color(0, 102, 204) : null);
+		pushButton.setForeground(status.needsPush() ? new Color(0, 128, 0) : null);
+	}
+
+	private void updateStatusWithSync(final GitSyncStatus status) {
+		if (status == null || repoDir == null) {
+			return;
+		}
+		final String summary = status.syncSummary();
+		final StringBuilder text = new StringBuilder("仓库: ");
+		text.append(repoDir.getAbsolutePath());
+		if (changes.size() > 0) {
+			text.append(" - ").append(changes.size()).append(" 个修改");
+		}
+		if (summary.length() > 0) {
+			if (changes.size() > 0) {
+				text.append(", ");
+			}
+			else {
+				text.append(" - ");
+			}
+			text.append(summary);
+		}
+		if (summary.length() > 0 || changes.size() > 0) {
+			statusLabel.setText(text.toString());
+		}
+	}
+
+	private void maybeAutoSync(final GitSyncStatus status) {
+		if (!GitConfig.isAutoSyncEnabled() || status == null || repoDir == null) {
+			return;
+		}
+		if (!status.fetchOk || !status.hasUpstream || status.inSync() || status.diverged()) {
+			return;
+		}
+		if (GitSyncChecker.hasUncommittedChanges(repoDir)) {
+			return;
+		}
+		if (status.needsPull()) {
+			runRemoteAction("拉取", GitCommand.buildPullArgs(repoDir, true), true);
+		}
+		else if (status.needsPush()) {
+			runRemoteAction("推送", new String[] { "push" }, true);
+		}
+	}
+
+	private JPanel buildChangesTab() {
+		final JPanel panel = new JPanel(new BorderLayout(4, 4));
+
+		changesTable.setRowHeight(22);
+		changesTable.setShowGrid(true);
+		changesTable.getTableHeader().setReorderingAllowed(false);
+		changesTable.getColumnModel().getColumn(0).setMaxWidth(36);
+		changesTable.getColumnModel().getColumn(0).setMinWidth(36);
+		changesTable.getColumnModel().getColumn(1).setMaxWidth(48);
+		changesTable.getColumnModel().getColumn(1).setMinWidth(40);
+		changesTable.getColumnModel().getColumn(2).setPreferredWidth(160);
+		changesTable.getColumnModel().getColumn(3).setMaxWidth(72);
+		changesTable.getColumnModel().getColumn(3).setMinWidth(56);
+		changesTable.setDefaultRenderer(Object.class, new ChangesCellRenderer());
+		setupCheckboxColumn();
+		setupChangesContextMenu();
+
+		final JPanel tableHeader = new JPanel(new BorderLayout());
+		tableHeader.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
+		tableHeader.add(new JLabel("修改的文件"), BorderLayout.WEST);
+		tableHeader.add(selectAllCheckBox, BorderLayout.EAST);
+
+		final JPanel tablePanel = new JPanel(new BorderLayout(0, 2));
+		tablePanel.add(tableHeader, BorderLayout.NORTH);
+		tablePanel.add(new JScrollPane(changesTable), BorderLayout.CENTER);
+
+		final JPanel commitPanel = new JPanel(new BorderLayout(4, 4));
+		commitPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+
+		final JPanel summaryPanel = new JPanel(new BorderLayout(4, 0));
+		summaryPanel.add(new JLabel("Summary"), BorderLayout.WEST);
+		summaryField.setPreferredSize(new Dimension(200, 24));
 		summaryPanel.add(summaryField, BorderLayout.CENTER);
 		commitPanel.add(summaryPanel, BorderLayout.NORTH);
 
-		JPanel descriptionPanel = new JPanel(new BorderLayout(4, 0));
+		final JPanel descriptionPanel = new JPanel(new BorderLayout(4, 0));
 		descriptionPanel.add(new JLabel("Description"), BorderLayout.NORTH);
-		descriptionArea.setRows(4);
+		descriptionArea.setLineWrap(true);
+		descriptionArea.setWrapStyleWord(true);
 		descriptionArea.setBorder(BorderFactory.createEtchedBorder());
-		JScrollPane descScroll = new JScrollPane(descriptionArea);
+		final JScrollPane descScroll = new JScrollPane(descriptionArea);
+		descScroll.setPreferredSize(new Dimension(100, 52));
+		descScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
 		descriptionPanel.add(descScroll, BorderLayout.CENTER);
 		commitPanel.add(descriptionPanel, BorderLayout.CENTER);
 
-		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-		buttonPanel.add(commitButton);
-		commitPanel.add(buttonPanel, BorderLayout.SOUTH);
+		final JPanel commitButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+		commitButtons.add(commitButton);
+		commitPanel.add(commitButtons, BorderLayout.SOUTH);
 
-		mainSplit.setBottomComponent(commitPanel);
+		panel.add(tablePanel, BorderLayout.CENTER);
+		panel.add(commitPanel, BorderLayout.SOUTH);
+		return panel;
+	}
 
-		add(mainSplit, BorderLayout.CENTER);
-
+	private void wireEvents() {
 		refreshButton.addActionListener(new ActionListener() {
 			@Override
-			public void actionPerformed(ActionEvent e) {
+			public void actionPerformed(final ActionEvent e) {
 				refreshChanges();
 			}
 		});
-
+		pullButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(final ActionEvent e) {
+				runRemoteAction("拉取", GitCommand.buildPullArgs(repoDir, false), false);
+			}
+		});
+		pushButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(final ActionEvent e) {
+				runRemoteAction("推送", new String[] { "push" }, false);
+			}
+		});
 		commitButton.addActionListener(new ActionListener() {
 			@Override
-			public void actionPerformed(ActionEvent e) {
+			public void actionPerformed(final ActionEvent e) {
 				commitChanges();
 			}
 		});
+		selectAllCheckBox.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(final ActionEvent e) {
+				final boolean selected = selectAllCheckBox.isSelected();
+				for (int i = 0; i < changes.size(); i++) {
+					changes.get(i).setSelected(selected);
+				}
+				((ChangesTableModel) changesTable.getModel()).fireTableDataChanged();
+				updateCommitButtonState();
+			}
+		});
+	}
 
-		refreshChanges();
+	private void setupCheckboxColumn() {
+		final JCheckBox checkBox = new JCheckBox();
+		checkBox.setHorizontalAlignment(SwingConstants.CENTER);
+		changesTable.getColumnModel().getColumn(0).setCellEditor(new DefaultCellEditor(checkBox));
+		changesTable.getColumnModel().getColumn(0).setCellRenderer(changesTable.getDefaultRenderer(Boolean.class));
+		changesTable.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(final MouseEvent e) {
+				final int row = changesTable.rowAtPoint(e.getPoint());
+				final int col = changesTable.columnAtPoint(e.getPoint());
+				if (row >= 0 && col == 0 && !e.isPopupTrigger()) {
+					final GitFileChange change = changes.get(row);
+					change.setSelected(!change.isSelected());
+					((ChangesTableModel) changesTable.getModel()).fireTableCellUpdated(row, 0);
+					updateSelectAllState();
+					updateCommitButtonState();
+				}
+			}
+		});
+	}
+
+	private void setupChangesContextMenu() {
+		final JPopupMenu popupMenu = new JPopupMenu();
+		final JMenuItem undoItem = new JMenuItem("撤销修改");
+		final JMenuItem openFileItem = new JMenuItem("打开文件");
+		final JMenuItem openFolderItem = new JMenuItem("打开所在文件夹");
+		popupMenu.add(undoItem);
+		popupMenu.add(openFileItem);
+		popupMenu.add(openFolderItem);
+
+		undoItem.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(final ActionEvent e) {
+				undoSelectedChange();
+			}
+		});
+		openFileItem.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(final ActionEvent e) {
+				openSelectedFile(false);
+			}
+		});
+		openFolderItem.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(final ActionEvent e) {
+				openSelectedFile(true);
+			}
+		});
+
+		changesTable.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(final MouseEvent e) {
+				showChangesPopup(e, popupMenu, undoItem, openFileItem, openFolderItem);
+			}
+
+			@Override
+			public void mouseReleased(final MouseEvent e) {
+				showChangesPopup(e, popupMenu, undoItem, openFileItem, openFolderItem);
+			}
+		});
+	}
+
+	private void showChangesPopup(final MouseEvent e, final JPopupMenu popupMenu, final JMenuItem undoItem,
+	    final JMenuItem openFileItem, final JMenuItem openFolderItem) {
+		if (!e.isPopupTrigger()) {
+			return;
+		}
+		final int row = changesTable.rowAtPoint(e.getPoint());
+		if (row < 0 || row >= changes.size()) {
+			return;
+		}
+		changesTable.setRowSelectionInterval(row, row);
+		final GitFileChange change = changes.get(row);
+		final File file = resolveChangeFile(change);
+		undoItem.setEnabled(change.getStatus() != GitFileChange.Status.DELETED || file != null);
+		openFileItem.setEnabled(file != null && file.isFile());
+		openFolderItem.setEnabled(resolveChangeFolder(change) != null);
+		popupMenu.show(e.getComponent(), e.getX(), e.getY());
+	}
+
+	private File resolveChangeFile(final GitFileChange change) {
+		if (repoDir == null || change == null) {
+			return null;
+		}
+		return new File(repoDir, change.getRelativePath().replace('/', File.separatorChar));
+	}
+
+	private File resolveChangeFolder(final GitFileChange change) {
+		final File file = resolveChangeFile(change);
+		if (file == null) {
+			return null;
+		}
+		if (file.isDirectory()) {
+			return file;
+		}
+		if (file.isFile()) {
+			return file.getParentFile();
+		}
+		final File parent = file.getParentFile();
+		return parent != null && parent.isDirectory() ? parent : null;
+	}
+
+	private GitFileChange getSelectedChange() {
+		final int row = changesTable.getSelectedRow();
+		if (row < 0 || row >= changes.size()) {
+			return null;
+		}
+		return changes.get(row);
+	}
+
+	private void undoSelectedChange() {
+		final GitFileChange change = getSelectedChange();
+		if (change == null || repoDir == null) {
+			return;
+		}
+		final String path = change.getRelativePath();
+		final int confirm = JOptionPane.showConfirmDialog(this,
+		    "确定撤销对「" + change.getDisplayName() + "」的修改吗？", "撤销修改", JOptionPane.YES_NO_OPTION);
+		if (confirm != JOptionPane.YES_OPTION) {
+			return;
+		}
+		statusLabel.setText("正在撤销...");
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				GitCommand.Result result;
+				if (change.getStatus() == GitFileChange.Status.ADDED) {
+					result = GitCommand.run(repoDir, "clean", "-fd", "--", path);
+				} else if (change.getStatus() == GitFileChange.Status.DELETED) {
+					result = GitCommand.run(repoDir, "restore", "--source=HEAD", "--", path);
+				} else {
+					result = GitCommand.run(repoDir, "restore", "--", path);
+				}
+				final GitCommand.Result finalResult = result;
+				SwingUtilities.invokeLater(new Runnable() {
+					@Override
+					public void run() {
+						if (finalResult.exitCode == 0) {
+							statusLabel.setText("已撤销: " + change.getDisplayName());
+							refreshChanges();
+						} else {
+							statusLabel.setText("撤销失败: " + finalResult.errorText());
+						}
+					}
+				});
+			}
+		}).start();
+	}
+
+	private void openSelectedFile(final boolean openFolderOnly) {
+		final GitFileChange change = getSelectedChange();
+		if (change == null) {
+			return;
+		}
+		final File file = resolveChangeFile(change);
+		if (openFolderOnly) {
+			openContainingFolder(file);
+		} else {
+			openFileWithSystemApp(file);
+		}
+	}
+
+	private void openFileWithSystemApp(final File file) {
+		if (file == null || !file.isFile()) {
+			statusLabel.setText("文件不存在");
+			return;
+		}
+		try {
+			if (java.awt.Desktop.isDesktopSupported()) {
+				java.awt.Desktop.getDesktop().open(file);
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("无法打开文件: " + e.getMessage(), e);
+			statusLabel.setText("无法打开文件");
+		}
+	}
+
+	private void openContainingFolder(final File file) {
+		final File folder = file != null && file.isDirectory() ? file : file != null ? file.getParentFile() : null;
+		if (folder == null || !folder.isDirectory()) {
+			statusLabel.setText("文件夹不存在");
+			return;
+		}
+		try {
+			if (java.awt.Desktop.isDesktopSupported()) {
+				java.awt.Desktop.getDesktop().open(folder);
+			}
+		}
+		catch (Exception e) {
+			try {
+				Runtime.getRuntime().exec("explorer.exe \"" + folder.getAbsolutePath() + "\"");
+			}
+			catch (Exception ex) {
+				LogUtils.warn("无法打开文件夹: " + ex.getMessage(), ex);
+				statusLabel.setText("无法打开文件夹");
+			}
+		}
+	}
+
+	private void updateSelectAllState() {
+		boolean allSelected = !changes.isEmpty();
+		for (int i = 0; i < changes.size(); i++) {
+			if (!changes.get(i).isSelected()) {
+				allSelected = false;
+				break;
+			}
+		}
+		selectAllCheckBox.setSelected(allSelected);
+	}
+
+	private void updateCommitButtonState() {
+		int selectedCount = 0;
+		for (int i = 0; i < changes.size(); i++) {
+			if (changes.get(i).isSelected()) {
+				selectedCount++;
+			}
+		}
+		commitButton.setEnabled(repoDir != null && selectedCount > 0);
 	}
 
 	private void refreshChanges() {
@@ -112,97 +523,80 @@ public class GitTabPanel extends JPanel {
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
-				final List<GitFileChange> changes = getGitChanges();
-				final File repoDir = findGitRepository();
-
+				final File repository = GitConfig.locateRepository();
+				final List<GitFileChange> loaded = loadGitChanges(repository);
 				SwingUtilities.invokeLater(new Runnable() {
 					@Override
 					public void run() {
-						fileListModel.clear();
-						for (GitFileChange change : changes) {
-							fileListModel.addElement(change);
-						}
-						if (repoDir != null) {
-							statusLabel.setText("仓库: " + repoDir.getName() + " - 发现 " + changes.size() + " 个修改");
+						repoDir = repository;
+						changes.clear();
+						changes.addAll(loaded);
+						((ChangesTableModel) changesTable.getModel()).fireTableDataChanged();
+						if (repository != null) {
+							statusLabel.setText("仓库: " + repository.getAbsolutePath() + " - 发现 " + loaded.size() + " 个修改");
 						} else {
-							statusLabel.setText("未找到 Git 仓库");
+							statusLabel.setText("未找到 Git 仓库，请在 %APPDATA%\\Docear\\git.local.properties 中设置 git.repo.path=E:\\yixiaozi");
 						}
-						commitButton.setEnabled(changes.size() > 0);
+						selectAllCheckBox.setSelected(!loaded.isEmpty());
+						updateCommitButtonState();
+						checkRemoteSync(true);
 					}
 				});
 			}
 		}).start();
 	}
 
-	private List<GitFileChange> getGitChanges() {
-		List<GitFileChange> changes = new ArrayList<GitFileChange>();
-		
-		File workspaceDir = findGitRepository();
-		if (workspaceDir == null) {
-			return changes;
+	private List<GitFileChange> loadGitChanges(final File repository) {
+		final List<GitFileChange> result = new ArrayList<GitFileChange>();
+		if (repository == null) {
+			return result;
 		}
-
-		try {
-			Process process = Runtime.getRuntime().exec(new String[] { "git", "status", "--porcelain" }, null, workspaceDir);
-			BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), "UTF-8"));
-			String line;
-			while ((line = reader.readLine()) != null) {
-				if (line.length() >= 3) {
-					String status = line.substring(0, 2).trim();
-					String fileName = line.substring(3);
-					GitFileChange.Status changeStatus;
-					if (status.startsWith("A")) {
-						changeStatus = GitFileChange.Status.ADDED;
-					} else if (status.startsWith("D")) {
-						changeStatus = GitFileChange.Status.DELETED;
-					} else {
-						changeStatus = GitFileChange.Status.MODIFIED;
-					}
-					changes.add(new GitFileChange(fileName, changeStatus));
-				}
+		final List<GitStatusParser.Entry> entries = GitStatusParser.parsePorcelain(repository);
+		for (int i = 0; i < entries.size(); i++) {
+			final GitStatusParser.Entry entry = entries.get(i);
+			final String status = entry.status;
+			final String relativePath = entry.path;
+			if (relativePath.length() == 0) {
+				continue;
 			}
-			process.waitFor();
-		} catch (Exception e) {
-			LogUtils.warn("Git command failed: " + e.getMessage());
-		}
-
-		return changes;
-	}
-	
-	private File findGitRepository() {
-		File docearDir = new File(System.getProperty("user.dir"));
-		File gitDir = new File(docearDir, ".git");
-		if (gitDir.exists() && gitDir.isDirectory()) {
-			return docearDir;
-		}
-		
-		File parentDir = docearDir.getParentFile();
-		if (parentDir != null) {
-			gitDir = new File(parentDir, ".git");
-			if (gitDir.exists() && gitDir.isDirectory()) {
-				return parentDir;
+			GitFileChange.Status changeStatus;
+			if (status.charAt(0) == 'A' || status.charAt(1) == 'A' || (status.charAt(0) == '?' && status.charAt(1) == '?')) {
+				changeStatus = GitFileChange.Status.ADDED;
+			} else if (status.charAt(0) == 'D' || status.charAt(1) == 'D') {
+				changeStatus = GitFileChange.Status.DELETED;
+			} else {
+				changeStatus = GitFileChange.Status.MODIFIED;
 			}
+			final long size = changeStatus == GitFileChange.Status.DELETED
+			    ? -1L : GitCommand.resolveWorkingTreeSize(repository, relativePath);
+			result.add(new GitFileChange(relativePath, changeStatus, size));
 		}
-		
-		File workspaceDir = new File(System.getProperty("user.home"), "Docear-Desktop");
-		if (workspaceDir.exists()) {
-			gitDir = new File(workspaceDir, ".git");
-			if (gitDir.exists() && gitDir.isDirectory()) {
-				return workspaceDir;
-			}
-		}
-		
-		return docearDir;
+		return result;
 	}
 
 	private void commitChanges() {
-		String summary = summaryField.getText().trim();
+		final String summary = summaryField.getText().trim();
 		if (summary.isEmpty()) {
 			statusLabel.setText("请输入提交摘要");
 			return;
 		}
+		if (repoDir == null) {
+			statusLabel.setText("未找到 Git 仓库");
+			return;
+		}
+		final List<String> selectedPaths = new ArrayList<String>();
+		for (int i = 0; i < changes.size(); i++) {
+			final GitFileChange change = changes.get(i);
+			if (change.isSelected()) {
+				selectedPaths.add(change.getRelativePath());
+			}
+		}
+		if (selectedPaths.isEmpty()) {
+			statusLabel.setText("请至少选择一个文件");
+			return;
+		}
 
-		String description = descriptionArea.getText().trim();
+		final String description = descriptionArea.getText().trim();
 		final String commitMessage = summary + (description.isEmpty() ? "" : "\n\n" + description);
 
 		statusLabel.setText("正在提交...");
@@ -211,22 +605,38 @@ public class GitTabPanel extends JPanel {
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
-				File workspaceDir = new File(System.getProperty("user.dir"));
 				boolean success = false;
-
+				String failureMessage = "提交失败";
 				try {
-					Process addProcess = Runtime.getRuntime().exec(new String[] { "git", "add", "." }, null, workspaceDir);
-					addProcess.waitFor();
-
-					Process commitProcess = Runtime.getRuntime().exec(
-							new String[] { "git", "commit", "-m", commitMessage }, null, workspaceDir);
-					commitProcess.waitFor();
-					success = commitProcess.exitValue() == 0;
-				} catch (Exception e) {
-					LogUtils.warn("Git commit failed: " + e.getMessage());
+					GitCommand.Result resetResult = GitCommand.run(repoDir, "reset", "HEAD");
+					if (resetResult.exitCode != 0) {
+						failureMessage = "取消暂存失败: " + resetResult.errorText();
+					} else {
+						final String[] addArgs = new String[selectedPaths.size() + 2];
+						addArgs[0] = "add";
+						addArgs[1] = "--";
+						for (int i = 0; i < selectedPaths.size(); i++) {
+							addArgs[i + 2] = selectedPaths.get(i);
+						}
+						final GitCommand.Result addResult = GitCommand.run(repoDir, addArgs);
+						if (addResult.exitCode != 0) {
+							failureMessage = "git add 失败: " + addResult.errorText();
+						} else {
+							final GitCommand.Result commitResult = GitCommand.run(repoDir, "commit", "-m", commitMessage);
+							success = commitResult.exitCode == 0;
+							if (!success) {
+								failureMessage = commitResult.errors.isEmpty() ? "没有可提交的更改" : commitResult.errorText();
+							}
+						}
+					}
+				}
+				catch (Exception e) {
+					LogUtils.warn("Git commit failed: " + e.getMessage(), e);
+					failureMessage = "Git 命令执行失败: " + e.getMessage();
 				}
 
 				final boolean finalSuccess = success;
+				final String finalFailureMessage = failureMessage;
 				SwingUtilities.invokeLater(new Runnable() {
 					@Override
 					public void run() {
@@ -236,8 +646,8 @@ public class GitTabPanel extends JPanel {
 							descriptionArea.setText("");
 							refreshChanges();
 						} else {
-							statusLabel.setText("提交失败");
-							commitButton.setEnabled(true);
+							statusLabel.setText(finalFailureMessage);
+							updateCommitButtonState();
 						}
 					}
 				});
@@ -245,69 +655,137 @@ public class GitTabPanel extends JPanel {
 		}).start();
 	}
 
-	public static class GitFileChange {
-		public enum Status {
-			ADDED, MODIFIED, DELETED
+	private void setStatusMessage(final String message) {
+		statusLabel.setText(message);
+		statusLabel.setToolTipText(message != null && message.length() > 0 ? message : null);
+	}
+
+	private void runRemoteAction(final String actionLabel, final String[] gitArgs, final boolean automatic) {
+		if (repoDir == null) {
+			setStatusMessage("未找到 Git 仓库");
+			return;
+		}
+		if (remoteActionRunning) {
+			return;
+		}
+		remoteActionRunning = true;
+		if (automatic) {
+			autoSyncRunning = true;
+		}
+		setStatusMessage((automatic ? "自动" : "正在") + actionLabel + "...");
+		pullButton.setEnabled(false);
+		pushButton.setEnabled(false);
+		refreshButton.setEnabled(false);
+
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				final GitCommand.Result result = GitCommand.runRemote(repoDir, gitArgs);
+				final boolean success = result.exitCode == 0;
+				final String message;
+				if (success) {
+					final String detail = result.messageText();
+					message = (automatic ? "自动" : "") + actionLabel + "成功"
+					    + (detail.length() > 0 ? ": " + detail : "");
+				} else {
+					message = result.failureMessage(actionLabel);
+				}
+				SwingUtilities.invokeLater(new Runnable() {
+					@Override
+					public void run() {
+						remoteActionRunning = false;
+						autoSyncRunning = false;
+						setStatusMessage(message);
+						pullButton.setEnabled(true);
+						pushButton.setEnabled(true);
+						refreshButton.setEnabled(true);
+						if (success) {
+							refreshChanges();
+							historyPanel.refresh(repoDir);
+						} else {
+							checkRemoteSync(false);
+						}
+					}
+				});
+			}
+		}).start();
+	}
+
+	private class ChangesTableModel extends AbstractTableModel {
+		private static final long serialVersionUID = 1L;
+		private final String[] columns = { "", "状态", "文件名", "大小" };
+
+		public int getRowCount() {
+			return changes.size();
 		}
 
-		private final String fileName;
-		private final Status status;
-		private boolean selected = true;
-
-		public GitFileChange(String fileName, Status status) {
-			this.fileName = fileName;
-			this.status = status;
+		public int getColumnCount() {
+			return columns.length;
 		}
 
-		public String getFileName() {
-			return fileName;
+		public String getColumnName(final int column) {
+			return columns[column];
 		}
 
-		public Status getStatus() {
-			return status;
+		public Class<?> getColumnClass(final int columnIndex) {
+			if (columnIndex == 0) {
+				return Boolean.class;
+			}
+			return String.class;
 		}
 
-		public boolean isSelected() {
-			return selected;
+		public boolean isCellEditable(final int rowIndex, final int columnIndex) {
+			return columnIndex == 0;
 		}
 
-		public void setSelected(boolean selected) {
-			this.selected = selected;
+		public Object getValueAt(final int rowIndex, final int columnIndex) {
+			final GitFileChange change = changes.get(rowIndex);
+			switch (columnIndex) {
+			case 0:
+				return Boolean.valueOf(change.isSelected());
+			case 1:
+				return GitCommand.statusLabel(change.getStatus());
+			case 2:
+				return change.getDisplayName();
+			default:
+				return change.getFormattedSize();
+			}
+		}
+
+		public void setValueAt(final Object value, final int rowIndex, final int columnIndex) {
+			if (columnIndex == 0 && value instanceof Boolean) {
+				changes.get(rowIndex).setSelected(((Boolean) value).booleanValue());
+				updateSelectAllState();
+				updateCommitButtonState();
+			}
 		}
 	}
 
-	private class GitFileCellRenderer extends DefaultListCellRenderer {
+	private class ChangesCellRenderer extends DefaultTableCellRenderer {
 		private static final long serialVersionUID = 1L;
-		private final Border noFocusBorder = BorderFactory.createEmptyBorder(2, 2, 2, 2);
 
 		@Override
-		public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected,
-				boolean cellHasFocus) {
-			super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-
-			if (value instanceof GitFileChange) {
-				GitFileChange change = (GitFileChange) value;
-				String iconText = "";
-
-				switch (change.getStatus()) {
+		public Component getTableCellRendererComponent(final JTable table, final Object value, final boolean isSelected,
+		    final boolean hasFocus, final int row, final int column) {
+			super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+			if (column == 1 && row < changes.size()) {
+				switch (changes.get(row).getStatus()) {
 				case ADDED:
-					iconText = ADD_ICON;
 					setForeground(new Color(0, 128, 0));
 					break;
-				case MODIFIED:
-					iconText = MODIFY_ICON;
-					setForeground(new Color(192, 128, 0));
-					break;
 				case DELETED:
-					iconText = DELETE_ICON;
 					setForeground(Color.RED);
 					break;
+				default:
+					setForeground(new Color(192, 128, 0));
+					break;
 				}
-
-				setText(iconText + " " + change.getFileName());
-				setBorder(noFocusBorder);
+			} else if (!isSelected) {
+				setForeground(table.getForeground());
 			}
-
+			if (column == 2) {
+				setToolTipText(changes.get(row).getRelativePath());
+			}
 			return this;
 		}
 	}

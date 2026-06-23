@@ -1,0 +1,11 @@
+# Copy to your Docear/Freeplane user folder as git.local.properties
+# Windows example: %APPDATA%\Docear\git.local.properties
+#
+# Path to the Git repository shown in the left Git panel:
+git.repo.path=E:\\yixiaozi
+
+# Check remote sync every N seconds (default 120, min 30):
+git.sync.interval.seconds=120
+
+# Auto pull/push when in sync is needed (default false; only when working tree is clean):
+# git.auto.sync=true
