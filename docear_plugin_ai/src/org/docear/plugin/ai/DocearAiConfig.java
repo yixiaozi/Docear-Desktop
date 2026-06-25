@@ -75,19 +75,11 @@ public class DocearAiConfig {
     }
 
     public String getDefaultPromptTemplateFile() {
-        String home = System.getProperty("user.home");
-        if (home == null || home.trim().length() == 0) {
-            home = ".";
-        }
-        return home + File.separator + AI_HOME_DIR_NAME + File.separator + PROMPT_FILE_NAME;
+        return "E:\\yixiaozi\\00\u7edf\u9886\u5168\u5c40\\AI\u63d0\u793a\u8bcd.mm";
     }
 
     public String getDefaultInteractionLogDirectory() {
-        String home = System.getProperty("user.home");
-        if (home == null || home.trim().length() == 0) {
-            home = ".";
-        }
-        return home + File.separator + AI_HOME_DIR_NAME + File.separator + "ai_logs";
+        return DEFAULT_FULL_HISTORY_DIR;
     }
 
     public String getDefaultLocalLogDirectory() {
