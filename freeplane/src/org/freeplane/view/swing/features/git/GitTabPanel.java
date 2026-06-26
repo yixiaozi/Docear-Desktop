@@ -644,6 +644,7 @@ public class GitTabPanel extends JPanel {
 							statusLabel.setText("提交成功");
 							summaryField.setText("");
 							descriptionArea.setText("");
+							GitPostCommitScriptRunner.scheduleAfterSuccessfulCommit();
 							refreshChanges();
 						} else {
 							statusLabel.setText(finalFailureMessage);

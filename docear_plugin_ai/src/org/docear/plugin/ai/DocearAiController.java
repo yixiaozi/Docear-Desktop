@@ -24,6 +24,7 @@ import org.docear.plugin.ai.prompt.AiSelectedNodeExtractor;
 import org.docear.plugin.ai.ui.AiChatContextInfo;
 import org.docear.plugin.ai.ui.AiChatSidebar;
 import org.docear.plugin.ai.ui.AiChatTabInstaller;
+import org.docear.plugin.ai.snapshot.AiWorkspaceSnapshotAutoSync;
 import org.docear.plugin.ai.ui.AiMarkdownRenderer;
 import org.docear.plugin.ai.usage.AiUsageCounter;
 import org.freeplane.core.ui.AFreeplaneAction;
@@ -72,6 +73,7 @@ public class DocearAiController {
         registerActions();
         registerMenus();
         installAiChatTab();
+        AiWorkspaceSnapshotAutoSync.install(modeController);
     }
 
     private void scheduleWorkspaceScanPreload() {

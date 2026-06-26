@@ -42,6 +42,11 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_WORKSPACE_FILE_INDEX_CACHE_SECONDS = "ai.workspace_file_index_cache_seconds";
     private static final String PROPERTY_AI_MONTHLY_QUOTA = "ai.monthly_quota";
     private static final String PROPERTY_AI_USAGE_WARNING_COOLDOWN_MINUTES = "ai.usage_warning_cooldown_minutes";
+    private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_EXPORT_ENABLED = "ai.workspace_snapshot_export_enabled";
+    private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_DIR = "ai.workspace_snapshot_directory";
+    private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_DEBOUNCE_MS = "ai.workspace_snapshot_debounce_ms";
+    private static final String DEFAULT_WORKSPACE_SNAPSHOT_DIR =
+            "E:\\yixiaozi\\00\u7edf\u9886\u5168\u5c40\\.AI\u8bf7\u67e5\u770b\u8fd9\u91cc";
 
     public DocearAiConfig() {
     }
@@ -274,6 +279,27 @@ public class DocearAiConfig {
             return (long) minutes * 60L * 1000L;
         } catch (NumberFormatException e) {
             return 360L * 60L * 1000L;
+        }
+    }
+
+    public boolean isWorkspaceSnapshotExportEnabled() {
+        String value = ResourceController.getResourceController().getProperty(
+                PROPERTY_AI_WORKSPACE_SNAPSHOT_EXPORT_ENABLED, "true");
+        return !"false".equalsIgnoreCase(value) && !"0".equals(value);
+    }
+
+    public String getWorkspaceSnapshotDirectory() {
+        return ResourceController.getResourceController().getProperty(
+                PROPERTY_AI_WORKSPACE_SNAPSHOT_DIR, DEFAULT_WORKSPACE_SNAPSHOT_DIR);
+    }
+
+    public int getWorkspaceSnapshotDebounceMs() {
+        try {
+            int ms = Integer.parseInt(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_WORKSPACE_SNAPSHOT_DEBOUNCE_MS, "8000"));
+            return ms < 2000 ? 8000 : ms;
+        } catch (NumberFormatException e) {
+            return 8000;
         }
     }
 

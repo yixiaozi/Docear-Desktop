@@ -18,7 +18,7 @@ import java.util.Enumeration;
 import java.util.UUID;
 
 public class DeviceIdentifier {
-    private static final String DEVICE_ID_FILE = ".docear_stats/.device.id";
+    private static final String DEVICE_ID_FILE = ".device.id";
     private static String cachedDeviceId = null;
     
     public static synchronized String getDeviceId() {
@@ -26,9 +26,9 @@ public class DeviceIdentifier {
             return cachedDeviceId;
         }
         
-        File dataDir = UsageStatsManager.getStatsDataDir();
-        if (dataDir != null) {
-            File idFile = new File(dataDir, DEVICE_ID_FILE);
+        File statsRoot = UsageStatsManager.getStatsRootDir();
+        if (statsRoot != null) {
+            File idFile = new File(statsRoot, DEVICE_ID_FILE);
             if (idFile.exists()) {
                 cachedDeviceId = readDeviceIdFromFile(idFile);
                 if (cachedDeviceId != null) {

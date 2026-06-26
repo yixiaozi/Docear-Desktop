@@ -3,6 +3,7 @@ package org.freeplane.view.swing.features.time.mindmapmode;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Graphics;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -40,6 +42,10 @@ import javax.xml.parsers.SAXParserFactory;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.features.icon.IconNotFound;
+import org.freeplane.features.icon.IconStore;
+import org.freeplane.features.icon.MindIcon;
+import org.freeplane.features.icon.factory.IconStoreFactory;
 import org.freeplane.core.util.WorkspaceSideTabSnapshot;
 import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
 import org.freeplane.features.map.MapModel;
@@ -57,12 +63,50 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		private final String nodeId;
 		private final String nodeText;
 		private final String mapName;
+		private final String todoParentId;
+		private final List extraIconNames;
 
-		private ItemRecord(File file, String nodeId, String nodeText, String mapName) {
+		private ItemRecord(File file, String nodeId, String nodeText, String mapName, String todoParentId,
+				List extraIconNames) {
 			this.file = file;
 			this.nodeId = nodeId;
 			this.nodeText = nodeText;
 			this.mapName = mapName;
+			this.todoParentId = todoParentId;
+			this.extraIconNames = extraIconNames == null ? Collections.EMPTY_LIST : extraIconNames;
+		}
+	}
+
+	protected static final class NodeScanInfo {
+		private final String id;
+		private final String parentId;
+		private final String text;
+		private final List iconNames = new ArrayList();
+
+		private NodeScanInfo(String id, String parentId, String text) {
+			this.id = id;
+			this.parentId = parentId;
+			this.text = text == null ? "" : text;
+		}
+
+		private boolean hasTargetIcon(String iconName) {
+			for (int i = 0; i < iconNames.size(); i++) {
+				if (iconName.equalsIgnoreCase((String) iconNames.get(i))) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		private List getExtraIconNames(String excludeIconName) {
+			final List result = new ArrayList();
+			for (int i = 0; i < iconNames.size(); i++) {
+				String name = (String) iconNames.get(i);
+				if (!excludeIconName.equalsIgnoreCase(name)) {
+					result.add(name);
+				}
+			}
+			return result;
 		}
 	}
 
@@ -130,6 +174,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		tree.setCellRenderer(new DefaultTreeCellRenderer() {
 			private static final long serialVersionUID = 1L;
 			private final Color ITEM_COLOR = new Color(0, 102, 204);
+			private final IconStore iconStore = IconStoreFactory.create();
 
 			public Component getTreeCellRendererComponent(JTree pTree, Object value, boolean sel, boolean expanded,
 					boolean leaf, int row, boolean hasFocus) {
@@ -140,19 +185,39 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				Object user = ((DefaultMutableTreeNode) value).getUserObject();
 				if (user instanceof GroupLabel) {
 					setText(((GroupLabel) user).text);
+					setIcon(null);
 					if (!sel) {
 						setForeground(null);
 					}
 				} else if (user instanceof ItemRecord) {
 					ItemRecord record = (ItemRecord) user;
-					String text = record.nodeText == null ? ""
-							: HtmlUtils.removeHtmlTagsFromString(record.nodeText).replaceAll("\\s+", " ").trim();
-					setText(text);
+					setText(normalizeNodeText(record.nodeText));
+					setIcon(buildCombinedIcon(record.extraIconNames));
 					if (!sel) {
 						setForeground(ITEM_COLOR);
 					}
 				}
 				return this;
+			}
+
+			private Icon buildCombinedIcon(List iconNames) {
+				if (iconNames == null || iconNames.isEmpty()) {
+					return null;
+				}
+				final List icons = new ArrayList();
+				for (int i = 0; i < iconNames.size(); i++) {
+					MindIcon mindIcon = iconStore.getMindIcon((String) iconNames.get(i));
+					if (mindIcon != null && !(mindIcon instanceof IconNotFound) && mindIcon.getIcon() != null) {
+						icons.add(mindIcon.getIcon());
+					}
+				}
+				if (icons.isEmpty()) {
+					return null;
+				}
+				if (icons.size() == 1) {
+					return (Icon) icons.get(0);
+				}
+				return new CombinedIcon((Icon[]) icons.toArray(new Icon[icons.size()]));
 			}
 		});
 
@@ -205,15 +270,18 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		}
 
 		rescanRequested = false;
+		cacheByFile.clear();
 		activeWorker = new SwingWorker() {
 			protected Object doInBackground() throws Exception {
 				List files = collectAllMindmapFiles();
 				Set activeFileKeys = new HashSet();
 				for (int i = 0; i < files.size(); i++) {
-					activeFileKeys.add(((File) files.get(i)).getAbsolutePath());
+					activeFileKeys.add(fileKey((File) files.get(i)));
 				}
 				lastActiveFileKeys = activeFileKeys;
 				purgeStaleItems(activeFileKeys);
+				itemsByKey.clear();
+				itemKeysByFile.clear();
 				for (int i = 0; i < files.size(); i++) {
 					if (rescanRequested) {
 						return null;
@@ -223,7 +291,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 						continue;
 					}
 					List items = getItemsForFile(file);
-					publish(new ScanChunk(file.getAbsolutePath(), items, i + 1, files.size()));
+					publish(new ScanChunk(fileKey(file), items, i + 1, files.size()));
 				}
 				return null;
 			}
@@ -232,7 +300,8 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				for (int i = 0; i < chunks.size(); i++) {
 					ScanChunk chunk = (ScanChunk) chunks.get(i);
 					mergeChunk(chunk);
-					statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size() + " (" + chunk.scanned + "/" + chunk.total + ")");
+					statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size() + " (" + chunk.scanned + "/"
+							+ chunk.total + ")");
 				}
 			}
 
@@ -450,10 +519,8 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				continue;
 			}
 			String key = itemKey(record);
-			if (!itemsByKey.containsKey(key)) {
-				itemsByKey.put(key, record);
-				newKeys.add(key);
-			}
+			itemsByKey.put(key, record);
+			newKeys.add(key);
 		}
 		itemKeysByFile.put(chunk.fileKey, newKeys);
 	}
@@ -510,7 +577,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		}
 		long modified = file.lastModified();
 		long length = file.length();
-		CachedFileResult cached = (CachedFileResult) cacheByFile.get(file.getAbsolutePath());
+		CachedFileResult cached = (CachedFileResult) cacheByFile.get(fileKey(file));
 		if (cached != null && cached.modified == modified && cached.length == length) {
 			return cached.items;
 		}
@@ -527,22 +594,29 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 					if ("node".equals(qName)) {
 						String id = attributes.getValue("ID");
 						String text = attributes.getValue("TEXT");
-						nodeStack.add(new String[] { id, text == null ? "" : text });
+						String parentId = null;
+						if (!nodeStack.isEmpty()) {
+							parentId = ((NodeScanInfo) nodeStack.get(nodeStack.size() - 1)).id;
+						}
+						nodeStack.add(new NodeScanInfo(id, parentId, text));
 					} else if ("icon".equals(qName) && !nodeStack.isEmpty()) {
 						String iconName = attributes.getValue("BUILTIN");
-						if (iconName != null && getIconName().equalsIgnoreCase(iconName)) {
-							String[] nodeInfo = (String[]) nodeStack.get(nodeStack.size() - 1);
-							String nodeText = nodeInfo[1] == null ? "" : nodeInfo[1].trim();
-							if (!"bin".equalsIgnoreCase(nodeText)) {
-								items.add(new ItemRecord(file, nodeInfo[0], nodeText, file.getName()));
-							}
+						if (iconName != null) {
+							((NodeScanInfo) nodeStack.get(nodeStack.size() - 1)).iconNames.add(iconName);
 						}
 					}
 				}
 
 				public void endElement(String uri, String localName, String qName) {
 					if ("node".equals(qName) && !nodeStack.isEmpty()) {
-						nodeStack.remove(nodeStack.size() - 1);
+						NodeScanInfo info = (NodeScanInfo) nodeStack.remove(nodeStack.size() - 1);
+						if (info.hasTargetIcon(getIconName())) {
+							String nodeText = info.text == null ? "" : info.text.trim();
+							if (!"bin".equalsIgnoreCase(nodeText)) {
+								items.add(new ItemRecord(file, info.id, nodeText, file.getName(),
+										findNearestTodoParentOnStack(nodeStack), info.getExtraIconNames(getIconName())));
+							}
+						}
 					}
 				}
 			});
@@ -550,7 +624,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 			LogUtils.warn(e);
 		}
 
-		cacheByFile.put(file.getAbsolutePath(), new CachedFileResult(modified, length, items));
+		cacheByFile.put(fileKey(file), new CachedFileResult(modified, length, items));
 		return items;
 	}
 
@@ -576,9 +650,10 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 			}
 		});
 
-		Set<String> addedKeys = new HashSet();
 		DefaultMutableTreeNode root = new DefaultMutableTreeNode(getRootLabel());
-		Map<String, DefaultMutableTreeNode> pathNodes = new HashMap();
+		Map pathNodes = new HashMap();
+		Map fileNodesByPath = new HashMap();
+		Map recordsByFile = new HashMap();
 		Map itemNodesByKey = new HashMap();
 
 		for (int i = 0; i < records.size(); i++) {
@@ -586,18 +661,25 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 			if (!isValidMindmapFile(record.file)) {
 				continue;
 			}
-			String recordKey = record.nodeText + "|" + record.mapName;
 
-			if (addedKeys.contains(recordKey)) {
+			String filePath = fileKey(record.file);
+			List fileRecords = (List) recordsByFile.get(filePath);
+			if (fileRecords == null) {
+				fileRecords = new ArrayList();
+				recordsByFile.put(filePath, fileRecords);
+			}
+			fileRecords.add(record);
+
+			if (fileNodesByPath.containsKey(filePath)) {
 				continue;
 			}
-			addedKeys.add(recordKey);
 
 			String parentPath = record.file.getParent();
 			DefaultMutableTreeNode parentNode = root;
 
 			if (parentPath != null) {
-				final String relativePath = MindMapDataRootResolver.getRelativePathWithinScanRoots(record.file.getParentFile());
+				final String relativePath = MindMapDataRootResolver.getRelativePathWithinScanRoots(record.file
+						.getParentFile());
 				if (relativePath != null && relativePath.length() > 0) {
 					final String[] pathParts = relativePath.split("/");
 					String currentPath = "";
@@ -607,7 +689,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 							continue;
 						}
 						currentPath += "/" + part;
-						DefaultMutableTreeNode pathNode = pathNodes.get(currentPath);
+						DefaultMutableTreeNode pathNode = (DefaultMutableTreeNode) pathNodes.get(currentPath);
 						if (pathNode == null) {
 							pathNode = new DefaultMutableTreeNode(new GroupLabel(part), true);
 							pathNodes.put(currentPath, pathNode);
@@ -618,16 +700,18 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				}
 			}
 
-			DefaultMutableTreeNode fileNode = pathNodes.get(record.file.getAbsolutePath());
-			if (fileNode == null) {
-				fileNode = new DefaultMutableTreeNode(new GroupLabel(record.mapName), true);
-				pathNodes.put(record.file.getAbsolutePath(), fileNode);
-				parentNode.add(fileNode);
-			}
+			DefaultMutableTreeNode fileNode = new DefaultMutableTreeNode(new GroupLabel(record.mapName), true);
+			pathNodes.put(filePath, fileNode);
+			parentNode.add(fileNode);
+			fileNodesByPath.put(filePath, fileNode);
+		}
 
-			DefaultMutableTreeNode itemNode = new DefaultMutableTreeNode(record, false);
-			fileNode.add(itemNode);
-			itemNodesByKey.put(itemKey(record), itemNode);
+		for (Object filePathObj : recordsByFile.keySet()) {
+			String filePath = (String) filePathObj;
+			DefaultMutableTreeNode fileNode = (DefaultMutableTreeNode) fileNodesByPath.get(filePath);
+			if (fileNode != null) {
+				attachTodosByParentId(fileNode, (List) recordsByFile.get(filePath), itemNodesByKey);
+			}
 		}
 
 		tree.setModel(new DefaultTreeModel(root));
@@ -647,21 +731,93 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		onSideTabCacheRefreshed(records);
 	}
 
-	protected void onSideTabCacheRefreshed(List records) {
-		if (!"\u5168\u90e8\u5f85\u529e".equals(getRootLabel())) {
-			return;
+	private void attachTodosByParentId(DefaultMutableTreeNode fileNode, List fileRecords, Map itemNodesByKey) {
+		for (int i = 0; i < fileRecords.size(); i++) {
+			ItemRecord record = (ItemRecord) fileRecords.get(i);
+			String key = itemKey(record);
+			itemNodesByKey.put(key, new DefaultMutableTreeNode(record, true));
 		}
-		List entries = new ArrayList();
-		for (int i = 0; i < records.size(); i++) {
-			ItemRecord record = (ItemRecord) records.get(i);
-			if (!isValidMindmapFile(record.file)) {
+
+		for (int i = 0; i < fileRecords.size(); i++) {
+			ItemRecord record = (ItemRecord) fileRecords.get(i);
+			String key = itemKey(record);
+			DefaultMutableTreeNode itemNode = (DefaultMutableTreeNode) itemNodesByKey.get(key);
+			if (itemNode == null) {
 				continue;
 			}
-			String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText)
-					.replaceAll("\\s+", " ").trim();
-			entries.add(new WorkspaceSideTabSnapshot.TodoEntry(record.file, record.nodeId, text));
+
+			DefaultMutableTreeNode attachParent = fileNode;
+			if (record.todoParentId != null && record.todoParentId.length() > 0) {
+				String parentKey = fileKey(record.file) + "|" + record.todoParentId;
+				DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) itemNodesByKey.get(parentKey);
+				if (parentNode != null) {
+					attachParent = parentNode;
+				}
+			}
+			attachParent.add(itemNode);
 		}
-		WorkspaceSideTabSnapshotRegistry.updateTodos(entries);
+	}
+
+	private String fileKey(File file) {
+		if (file == null) {
+			return "";
+		}
+		try {
+			return file.getCanonicalPath();
+		} catch (Exception e) {
+			return file.getAbsolutePath();
+		}
+	}
+
+	private String findNearestTodoParentOnStack(List nodeStack) {
+		for (int i = nodeStack.size() - 1; i >= 0; i--) {
+			NodeScanInfo ancestor = (NodeScanInfo) nodeStack.get(i);
+			if (!ancestor.hasTargetIcon(getIconName())) {
+				continue;
+			}
+			String label = ancestor.text == null ? "" : ancestor.text.trim();
+			if (!"bin".equalsIgnoreCase(label)) {
+				return ancestor.id;
+			}
+		}
+		return null;
+	}
+
+	private String normalizeNodeText(String text) {
+		if (text == null) {
+			return "";
+		}
+		return HtmlUtils.removeHtmlTagsFromString(text).replaceAll("\\s+", " ").trim();
+	}
+
+	protected void onSideTabCacheRefreshed(List records) {
+		if ("\u5168\u90e8\u5f85\u529e".equals(getRootLabel())) {
+			List entries = new ArrayList();
+			for (int i = 0; i < records.size(); i++) {
+				ItemRecord record = (ItemRecord) records.get(i);
+				if (!isValidMindmapFile(record.file)) {
+					continue;
+				}
+				String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText)
+						.replaceAll("\\s+", " ").trim();
+				entries.add(new WorkspaceSideTabSnapshot.TodoEntry(record.file, record.nodeId, text));
+			}
+			WorkspaceSideTabSnapshotRegistry.updateTodos(entries);
+			return;
+		}
+		if ("\u5168\u90e8\u53d1\u5e03".equals(getRootLabel())) {
+			List entries = new ArrayList();
+			for (int i = 0; i < records.size(); i++) {
+				ItemRecord record = (ItemRecord) records.get(i);
+				if (!isValidMindmapFile(record.file)) {
+					continue;
+				}
+				String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText)
+						.replaceAll("\\s+", " ").trim();
+				entries.add(new WorkspaceSideTabSnapshot.ItemEntry(record.file, record.nodeId, text));
+			}
+			WorkspaceSideTabSnapshotRegistry.updatePublishedEntries(entries);
+		}
 	}
 
 	private String getSelectedItemKey() {
@@ -677,6 +833,41 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	}
 
 	private String itemKey(ItemRecord record) {
-		return record.file.getAbsolutePath() + "|" + record.nodeId;
+		return fileKey(record.file) + "|" + record.nodeId;
+	}
+
+	private static final class CombinedIcon implements Icon {
+		private final Icon[] icons;
+
+		private CombinedIcon(Icon[] icons) {
+			this.icons = icons;
+		}
+
+		public int getIconWidth() {
+			int width = 0;
+			for (int i = 0; i < icons.length; i++) {
+				width += icons[i].getIconWidth();
+				if (i > 0) {
+					width += 1;
+				}
+			}
+			return width;
+		}
+
+		public int getIconHeight() {
+			int height = 0;
+			for (int i = 0; i < icons.length; i++) {
+				height = Math.max(height, icons[i].getIconHeight());
+			}
+			return height;
+		}
+
+		public void paintIcon(Component c, Graphics g, int x, int y) {
+			int offsetX = x;
+			for (int i = 0; i < icons.length; i++) {
+				icons[i].paintIcon(c, g, offsetX, y);
+				offsetX += icons[i].getIconWidth() + 1;
+			}
+		}
 	}
 }

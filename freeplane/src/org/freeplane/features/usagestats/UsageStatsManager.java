@@ -59,9 +59,9 @@ public class UsageStatsManager {
         return instance;
     }
     
-    public static File getStatsDataDir() {
+    public static File getStatsRootDir() {
         try {
-            File baseDir = org.freeplane.core.util.MindMapDataRootResolver.getPrimaryScanRoot();
+            File baseDir = org.freeplane.core.util.MindMapDataRootResolver.getProjectDataDirectory();
             if (baseDir == null) {
                 baseDir = new File(org.freeplane.core.util.Compat.getApplicationUserDirectory());
             }
@@ -71,6 +71,18 @@ public class UsageStatsManager {
             File docearStatsDir = new File(baseDir, STATS_ROOT_DIR);
             if (!docearStatsDir.exists()) {
                 docearStatsDir.mkdirs();
+            }
+            return docearStatsDir;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public static File getStatsDataDir() {
+        try {
+            File docearStatsDir = getStatsRootDir();
+            if (docearStatsDir == null) {
+                return null;
             }
             File dataDir = new File(docearStatsDir, DATA_DIR);
             if (!dataDir.exists()) {

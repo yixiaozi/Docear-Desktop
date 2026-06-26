@@ -52,13 +52,43 @@ public final class MindMapWorkspaceContextScanner {
 		}
 	}
 
+	public static final class IconItem {
+		public final File mapFile;
+		public final String nodeId;
+		public final String nodeText;
+
+		public IconItem(File mapFile, String nodeId, String nodeText) {
+			this.mapFile = mapFile;
+			this.nodeId = nodeId;
+			this.nodeText = nodeText;
+		}
+	}
+
+	public static final class ModifiedItem {
+		public final File mapFile;
+		public final String nodeId;
+		public final String nodeText;
+		public final long modifiedAt;
+
+		public ModifiedItem(File mapFile, String nodeId, String nodeText, long modifiedAt) {
+			this.mapFile = mapFile;
+			this.nodeId = nodeId;
+			this.nodeText = nodeText;
+			this.modifiedAt = modifiedAt;
+		}
+	}
+
 	public static final class FileScanResult {
 		public final List reminders;
 		public final List todos;
+		public final List published;
+		public final List modifiedNodes;
 
-		private FileScanResult(List reminders, List todos) {
+		private FileScanResult(List reminders, List todos, List published, List modifiedNodes) {
 			this.reminders = reminders;
 			this.todos = todos;
+			this.published = published;
+			this.modifiedNodes = modifiedNodes;
 		}
 	}
 
@@ -87,6 +117,7 @@ public final class MindMapWorkspaceContextScanner {
 	}
 
 	private static final String TODO_ICON_NAME = "hourglass";
+	private static final String PUBLISH_ICON_NAME = "internet";
 	private static final Map fileCache = new HashMap();
 
 	private MindMapWorkspaceContextScanner() {
@@ -160,6 +191,53 @@ public final class MindMapWorkspaceContextScanner {
 		return todos;
 	}
 
+	public static List scanPublishedItems() {
+		final List files = collectMindmapFiles();
+		final List published = new ArrayList();
+		final Set seenKeys = new HashSet();
+		for (int i = 0; i < files.size(); i++) {
+			File file = (File) files.get(i);
+			FileScanResult result = scanFile(file);
+			for (int j = 0; j < result.published.size(); j++) {
+				IconItem item = (IconItem) result.published.get(j);
+				String key = iconItemKey(item);
+				if (seenKeys.add(key)) {
+					published.add(item);
+				}
+			}
+		}
+		sortIconItems(published);
+		return published;
+	}
+
+	public static List scanRecentlyModified(final int limit) {
+		final List files = collectMindmapFiles();
+		final List modified = new ArrayList();
+		final Set seenKeys = new HashSet();
+		for (int i = 0; i < files.size(); i++) {
+			File file = (File) files.get(i);
+			FileScanResult result = scanFile(file);
+			for (int j = 0; j < result.modifiedNodes.size(); j++) {
+				ModifiedItem item = (ModifiedItem) result.modifiedNodes.get(j);
+				String key = modifiedItemKey(item);
+				if (seenKeys.add(key)) {
+					modified.add(item);
+				}
+			}
+		}
+		Collections.sort(modified, new Comparator() {
+			public int compare(Object o1, Object o2) {
+				ModifiedItem a = (ModifiedItem) o1;
+				ModifiedItem b = (ModifiedItem) o2;
+				return a.modifiedAt < b.modifiedAt ? 1 : (a.modifiedAt == b.modifiedAt ? 0 : -1);
+			}
+		});
+		if (limit > 0 && modified.size() > limit) {
+			return new ArrayList(modified.subList(0, limit));
+		}
+		return modified;
+	}
+
 	private static List scanReminders(final boolean oneTimeOnly, final boolean recurringOnly) {
 		final List files = collectMindmapFiles();
 		final List reminders = new ArrayList();
@@ -191,6 +269,26 @@ public final class MindMapWorkspaceContextScanner {
 
 	private static String itemKey(TodoItem item) {
 		return canonicalPath(item.mapFile) + "|" + item.nodeId;
+	}
+
+	private static String iconItemKey(IconItem item) {
+		return canonicalPath(item.mapFile) + "|" + item.nodeId;
+	}
+
+	private static String modifiedItemKey(ModifiedItem item) {
+		return canonicalPath(item.mapFile) + "|" + item.nodeId + "|" + item.modifiedAt;
+	}
+
+	private static boolean isNumericOnlyText(final String text) {
+		if (text == null || text.length() == 0) {
+			return false;
+		}
+		for (int i = 0; i < text.length(); i++) {
+			if (!Character.isDigit(text.charAt(i))) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private static String canonicalPath(File file) {
@@ -231,6 +329,22 @@ public final class MindMapWorkspaceContextScanner {
 		});
 	}
 
+	private static void sortIconItems(List items) {
+		Collections.sort(items, new Comparator() {
+			public int compare(Object o1, Object o2) {
+				IconItem a = (IconItem) o1;
+				IconItem b = (IconItem) o2;
+				int pathCompare = canonicalPath(a.mapFile).compareTo(canonicalPath(b.mapFile));
+				if (pathCompare != 0) {
+					return pathCompare;
+				}
+				String textA = a.nodeText == null ? "" : a.nodeText;
+				String textB = b.nodeText == null ? "" : b.nodeText;
+				return textA.compareTo(textB);
+			}
+		});
+	}
+
 	private static List collectMindmapFiles() {
 		final List files = new ArrayList();
 		MindMapDataRootResolver.collectMindmapFiles(files);
@@ -255,7 +369,8 @@ public final class MindMapWorkspaceContextScanner {
 
 	private static FileScanResult scanFile(final File file) {
 		if (!isValidMindmapFile(file)) {
-			return new FileScanResult(Collections.EMPTY_LIST, Collections.EMPTY_LIST);
+			return new FileScanResult(Collections.EMPTY_LIST, Collections.EMPTY_LIST, Collections.EMPTY_LIST,
+					Collections.EMPTY_LIST);
 		}
 		long modified = file.lastModified();
 		long length = file.length();
@@ -269,6 +384,8 @@ public final class MindMapWorkspaceContextScanner {
 
 		final List reminders = new ArrayList();
 		final List todos = new ArrayList();
+		final List published = new ArrayList();
+		final List modifiedNodes = new ArrayList();
 		try {
 			SAXParserFactory factory = SAXParserFactory.newInstance();
 			factory.setNamespaceAware(false);
@@ -282,14 +399,32 @@ public final class MindMapWorkspaceContextScanner {
 						String text = attributes.getValue("TEXT");
 						String remindType = attributes.getValue("REMINDERTYPE");
 						nodeStack.add(new String[] { id, text == null ? "" : text, remindType });
+						String modifiedStr = attributes.getValue("MODIFIED");
+						if (id != null && modifiedStr != null && text != null) {
+							try {
+								long modifiedAt = Long.parseLong(modifiedStr);
+								String nodeText = normalizeNodeText(text);
+								if (nodeText.length() > 0 && !"bin".equalsIgnoreCase(nodeText)
+										&& !isNumericOnlyText(nodeText)) {
+									modifiedNodes.add(new ModifiedItem(file, id, nodeText, modifiedAt));
+								}
+							}
+							catch (Exception e) {
+							}
+						}
 					}
 					else if ("icon".equals(qName) && !nodeStack.isEmpty()) {
 						String iconName = attributes.getValue("BUILTIN");
-						if (iconName != null && TODO_ICON_NAME.equalsIgnoreCase(iconName)) {
+						if (iconName != null) {
 							String[] nodeInfo = (String[]) nodeStack.get(nodeStack.size() - 1);
 							String nodeText = normalizeNodeText(nodeInfo[1]);
 							if (nodeText.length() > 0 && !"bin".equalsIgnoreCase(nodeText)) {
-								todos.add(new TodoItem(file, nodeInfo[0], nodeText));
+								if (TODO_ICON_NAME.equalsIgnoreCase(iconName)) {
+									todos.add(new TodoItem(file, nodeInfo[0], nodeText));
+								}
+								else if (PUBLISH_ICON_NAME.equalsIgnoreCase(iconName)) {
+									published.add(new IconItem(file, nodeInfo[0], nodeText));
+								}
 							}
 						}
 					}
@@ -328,7 +463,7 @@ public final class MindMapWorkspaceContextScanner {
 					+ e.getMessage());
 		}
 
-		FileScanResult result = new FileScanResult(reminders, todos);
+		FileScanResult result = new FileScanResult(reminders, todos, published, modifiedNodes);
 		synchronized (fileCache) {
 			fileCache.put(cacheKey, new CachedFileScan(modified, length, result));
 		}

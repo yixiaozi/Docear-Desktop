@@ -48,6 +48,23 @@ public final class MindMapDataRootResolver {
 		return root.isDirectory() ? root : null;
 	}
 
+	/** Project settings directory: {@code {dataRoot}/_data/{projectId}}. */
+	public static File getProjectDataDirectory() {
+		final File dataRoot = getFixedDataRoot();
+		if (dataRoot != null) {
+			final String projectId = resolveProjectIdForDataRoot(dataRoot);
+			return new File(new File(dataRoot, "_data"), projectId);
+		}
+		final File selectedProject = getSelectedProjectRoot();
+		if (selectedProject != null) {
+			final File projectData = new File(new File(selectedProject, "_data"), selectedProject.getName());
+			if (projectData.isDirectory()) {
+				return projectData;
+			}
+		}
+		return getPrimaryScanRoot();
+	}
+
 	/** Finds project id from dataRoot/_data/settings.xml; falls back to FIXED_PROJECT_ID. */
 	public static String resolveProjectIdForDataRoot(final File dataRoot) {
 		if (dataRoot == null || !dataRoot.isDirectory()) {

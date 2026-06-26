@@ -9,3 +9,6 @@ git.sync.interval.seconds=120
 
 # Auto pull/push when in sync is needed (default false; only when working tree is clean):
 # git.auto.sync=true
+
+# Run after a successful commit from the Git panel (background PowerShell; skipped if missing):
+# git.post_commit.script=E:\\Develop\\BlogSystemFromMindMap\\scripts\\publish-blog.ps1
