@@ -71,6 +71,7 @@ import org.freeplane.features.icon.IStateIconProvider;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.UIIcon;
 import org.freeplane.features.icon.mindmapmode.IconSelectionPlugin;
+import org.freeplane.features.hashphotos.mindmapmode.HashPhotosEventsAutoSync;
 import org.freeplane.features.icon.mindmapmode.ToggleCheckmarkIconAction;
 import org.freeplane.features.icon.mindmapmode.ToggleFunnelIconAction;
 import org.freeplane.features.icon.mindmapmode.TogglePublishIconAction;
@@ -189,6 +190,7 @@ public class MModeControllerFactory {
 		AlwaysUnfoldedNode.install();
 		FreeNode.install();
 		new CreationModificationPlugin();
+		HashPhotosEventsAutoSync.install(modeController);
 		modeController.addExtension(ReminderHook.class, new ReminderHook(modeController));
 		new AutomaticEdgeColorHook();
 		new ViewerController();
