@@ -3,19 +3,22 @@ package org.freeplane.view.swing.features.time.mindmapmode;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Graphics;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
+import javax.swing.AbstractAction;
+import javax.swing.Icon;
+import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
-import javax.swing.AbstractAction;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
@@ -23,7 +26,10 @@ import javax.swing.tree.TreePath;
 
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.icon.IconController;
+import org.freeplane.features.icon.IconNotFound;
+import org.freeplane.features.icon.IconStore;
 import org.freeplane.features.icon.MindIcon;
+import org.freeplane.features.icon.factory.IconStoreFactory;
 import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.INodeChangeListener;
@@ -42,11 +48,17 @@ public class TodoTabPanel extends JPanel {
 
 	private static final class TodoRecord {
 		private final NodeModel node;
+		private final String nodeId;
 		private final String nodeText;
+		private final String todoParentId;
+		private final List extraIconNames;
 
-		private TodoRecord(NodeModel node, String nodeText) {
+		private TodoRecord(NodeModel node, String nodeId, String nodeText, String todoParentId, List extraIconNames) {
 			this.node = node;
+			this.nodeId = nodeId;
 			this.nodeText = nodeText;
+			this.todoParentId = todoParentId;
+			this.extraIconNames = extraIconNames;
 		}
 	}
 
@@ -72,6 +84,7 @@ public class TodoTabPanel extends JPanel {
 		tree.setCellRenderer(new DefaultTreeCellRenderer() {
 			private static final long serialVersionUID = 1L;
 			private final Color TODO_COLOR = new Color(0, 102, 204);
+			private final IconStore iconStore = IconStoreFactory.create();
 
 			public Component getTreeCellRendererComponent(JTree pTree, Object value, boolean sel, boolean expanded,
 					boolean leaf, int row, boolean hasFocus) {
@@ -82,19 +95,39 @@ public class TodoTabPanel extends JPanel {
 				Object user = ((DefaultMutableTreeNode) value).getUserObject();
 				if (user instanceof GroupLabel) {
 					setText(((GroupLabel) user).text);
+					setIcon(null);
 					if (!sel) {
 						setForeground(null);
 					}
 				} else if (user instanceof TodoRecord) {
 					TodoRecord record = (TodoRecord) user;
-					String text = record.nodeText == null ? ""
-							: HtmlUtils.removeHtmlTagsFromString(record.nodeText).replaceAll("\\s+", " ").trim();
-					setText(text);
+					setText(normalizeNodeText(record.nodeText));
+					setIcon(buildCombinedIcon(record.extraIconNames));
 					if (!sel) {
 						setForeground(TODO_COLOR);
 					}
 				}
 				return this;
+			}
+
+			private Icon buildCombinedIcon(List iconNames) {
+				if (iconNames == null || iconNames.isEmpty()) {
+					return null;
+				}
+				final List icons = new ArrayList();
+				for (int i = 0; i < iconNames.size(); i++) {
+					MindIcon mindIcon = iconStore.getMindIcon((String) iconNames.get(i));
+					if (mindIcon != null && !(mindIcon instanceof IconNotFound) && mindIcon.getIcon() != null) {
+						icons.add(mindIcon.getIcon());
+					}
+				}
+				if (icons.isEmpty()) {
+					return null;
+				}
+				if (icons.size() == 1) {
+					return (Icon) icons.get(0);
+				}
+				return new CombinedIcon((Icon[]) icons.toArray(new Icon[icons.size()]));
 			}
 		});
 
@@ -171,10 +204,14 @@ public class TodoTabPanel extends JPanel {
 	}
 
 	private void installArrowKeyNavigation() {
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_UP, 0), "todo.up");
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_DOWN, 0), "todo.down");
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_LEFT, 0), "todo.left");
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_RIGHT, 0), "todo.right");
+		tree.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_UP, 0),
+				"todo.up");
+		tree.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_DOWN, 0),
+				"todo.down");
+		tree.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_LEFT, 0),
+				"todo.left");
+		tree.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_RIGHT, 0),
+				"todo.right");
 
 		tree.getActionMap().put("todo.up", new AbstractAction() {
 			private static final long serialVersionUID = 1L;
@@ -243,8 +280,10 @@ public class TodoTabPanel extends JPanel {
 		}
 
 		DefaultMutableTreeNode root = new DefaultMutableTreeNode("\u5F85\u529E");
-		Set<NodeModel> addedNodes = new HashSet();
-		collectTodoNodes(map.getRootNode(), root, addedNodes);
+		List records = new ArrayList();
+		collectTodoRecords(map.getRootNode(), records);
+		attachTodosByParentId(root, records);
+
 		tree.setModel(new DefaultTreeModel(root));
 
 		for (int i = 0; i < tree.getRowCount(); i++) {
@@ -252,58 +291,122 @@ public class TodoTabPanel extends JPanel {
 		}
 	}
 
-	private void collectTodoNodes(NodeModel node, DefaultMutableTreeNode parentTreeNode, Set<NodeModel> addedNodes) {
-		List<NodeModel> children = node.getChildren();
-		for (NodeModel child : children) {
-			boolean childHasTodo = hasHourglassIcon(child);
-			boolean childHasTodoDescendant = hasTodoDescendant(child);
-			
-			if (!childHasTodo && !childHasTodoDescendant) {
-				continue;
-			}
-			
-			String childText = child.getText();
-			String childLabel = childText == null ? "" : HtmlUtils.removeHtmlTagsFromString(childText).replaceAll("\\s+", " ").trim();
-			
-			if (childHasTodo && !"bin".equalsIgnoreCase(childLabel)) {
-				if (addedNodes.contains(child)) {
-					continue;
-				}
-				addedNodes.add(child);
-				
-				TodoRecord record = new TodoRecord(child, childLabel);
-				DefaultMutableTreeNode todoNode = new DefaultMutableTreeNode(record, false);
-				parentTreeNode.add(todoNode);
-			} else if (childHasTodoDescendant) {
-				DefaultMutableTreeNode childTreeNode = new DefaultMutableTreeNode(new GroupLabel(childLabel), true);
-				collectTodoNodes(child, childTreeNode, addedNodes);
-				
-				if (childTreeNode.getChildCount() > 0) {
-					parentTreeNode.add(childTreeNode);
-				}
-			}
-		}
-	}
-	
-	private boolean hasTodoDescendant(NodeModel node) {
+	private void collectTodoRecords(NodeModel node, List records) {
 		if (hasHourglassIcon(node)) {
-			return true;
+			String nodeText = node.getText();
+			String label = nodeText == null ? "" : normalizeNodeText(nodeText);
+			if (!"bin".equalsIgnoreCase(label)) {
+				records.add(new TodoRecord(node, node.getID(), label, findNearestTodoParentId(node),
+						getExtraIconNames(node)));
+			}
 		}
 		for (NodeModel child : node.getChildren()) {
-			if (hasTodoDescendant(child)) {
+			collectTodoRecords(child, records);
+		}
+	}
+
+	private void attachTodosByParentId(DefaultMutableTreeNode mapNode, List records) {
+		Map itemNodesByKey = new HashMap();
+
+		for (int i = 0; i < records.size(); i++) {
+			TodoRecord record = (TodoRecord) records.get(i);
+			itemNodesByKey.put(record.nodeId, new DefaultMutableTreeNode(record, true));
+		}
+
+		for (int i = 0; i < records.size(); i++) {
+			TodoRecord record = (TodoRecord) records.get(i);
+			DefaultMutableTreeNode itemNode = (DefaultMutableTreeNode) itemNodesByKey.get(record.nodeId);
+			if (itemNode == null) {
+				continue;
+			}
+
+			DefaultMutableTreeNode attachParent = mapNode;
+			if (record.todoParentId != null && record.todoParentId.length() > 0) {
+				DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) itemNodesByKey.get(record.todoParentId);
+				if (parentNode != null) {
+					attachParent = parentNode;
+				}
+			}
+			attachParent.add(itemNode);
+		}
+	}
+
+	private String findNearestTodoParentId(NodeModel node) {
+		NodeModel parent = node.getParentNode();
+		while (parent != null) {
+			if (hasHourglassIcon(parent)) {
+				String label = normalizeNodeText(parent.getText());
+				if (!"bin".equalsIgnoreCase(label)) {
+					return parent.getID();
+				}
+			}
+			parent = parent.getParentNode();
+		}
+		return null;
+	}
+
+	private List getExtraIconNames(NodeModel node) {
+		final List result = new ArrayList();
+		Collection icons = IconController.getController().getIcons(node);
+		for (Object iconObj : icons) {
+			MindIcon icon = (MindIcon) iconObj;
+			if (!TODO_ICON_NAME.equalsIgnoreCase(icon.getName())) {
+				result.add(icon.getName());
+			}
+		}
+		return result;
+	}
+
+	private boolean hasHourglassIcon(NodeModel node) {
+		Collection icons = IconController.getController().getIcons(node);
+		for (Object iconObj : icons) {
+			MindIcon icon = (MindIcon) iconObj;
+			if (TODO_ICON_NAME.equalsIgnoreCase(icon.getName())) {
 				return true;
 			}
 		}
 		return false;
 	}
 
-	private boolean hasHourglassIcon(NodeModel node) {
-		Collection<MindIcon> icons = IconController.getController().getIcons(node);
-		for (MindIcon icon : icons) {
-			if (TODO_ICON_NAME.equalsIgnoreCase(icon.getName())) {
-				return true;
+	private String normalizeNodeText(String text) {
+		if (text == null) {
+			return "";
+		}
+		return HtmlUtils.removeHtmlTagsFromString(text).replaceAll("\\s+", " ").trim();
+	}
+
+	private static final class CombinedIcon implements Icon {
+		private final Icon[] icons;
+
+		private CombinedIcon(Icon[] icons) {
+			this.icons = icons;
+		}
+
+		public int getIconWidth() {
+			int width = 0;
+			for (int i = 0; i < icons.length; i++) {
+				width += icons[i].getIconWidth();
+				if (i > 0) {
+					width += 1;
+				}
+			}
+			return width;
+		}
+
+		public int getIconHeight() {
+			int height = 0;
+			for (int i = 0; i < icons.length; i++) {
+				height = Math.max(height, icons[i].getIconHeight());
+			}
+			return height;
+		}
+
+		public void paintIcon(Component c, Graphics g, int x, int y) {
+			int offsetX = x;
+			for (int i = 0; i < icons.length; i++) {
+				icons[i].paintIcon(c, g, offsetX, y);
+				offsetX += icons[i].getIconWidth() + 1;
 			}
 		}
-		return false;
 	}
 }
