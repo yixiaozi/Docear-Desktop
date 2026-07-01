@@ -125,14 +125,6 @@ final class ReminderWorkspaceScanHelper {
 		return result;
 	}
 
-	static long timelineRangeStart() {
-		return ReminderCycleScheduler.addDays(ReminderCycleScheduler.startOfDay(System.currentTimeMillis()), -90);
-	}
-
-	static long timelineRangeEnd() {
-		return ReminderCycleScheduler.addDays(ReminderCycleScheduler.startOfDay(System.currentTimeMillis()), 366);
-	}
-
 	private static List normalizeRoots(final Set roots) {
 		final List normalizedRoots = new ArrayList();
 		for (final Object root : roots) {
