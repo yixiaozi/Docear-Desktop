@@ -1,7 +1,6 @@
 package org.freeplane.view.swing.features.time.mindmapmode;
 
 import java.awt.BorderLayout;
-import java.awt.Component;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
@@ -29,15 +28,11 @@ import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JTree;
+import javax.swing.JTable;
+import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
-import javax.swing.KeyStroke;
-import javax.swing.AbstractAction;
-import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeCellRenderer;
-import javax.swing.tree.DefaultTreeModel;
-import javax.swing.tree.TreePath;
+import javax.swing.table.DefaultTableModel;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 
@@ -63,12 +58,15 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		private final String nodeId;
 		private final String nodeText;
 		private final long remindAt;
+		private final ReminderCycleAttributes.CycleConfig cycleConfig;
 
-		private ReminderRecord(File file, String nodeId, String nodeText, long remindAt) {
+		private ReminderRecord(File file, String nodeId, String nodeText, long remindAt,
+				ReminderCycleAttributes.CycleConfig cycleConfig) {
 			this.file = file;
 			this.nodeId = nodeId;
 			this.nodeText = nodeText;
 			this.remindAt = remindAt;
+			this.cycleConfig = cycleConfig;
 		}
 	}
 
@@ -91,6 +89,8 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		}
 	}
 
+	private static final String[] TABLE_COLUMNS = { "\u5206\u7ec4", "\u65f6\u95f4", "\u5468\u671f", "\u4efb\u52a1", "\u5bfc\u56fe" };
+
 	private static final class ScanChunk {
 		private final String fileKey;
 		private final List reminders;
@@ -107,7 +107,14 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 
 	private final JButton refreshButton = new JButton("\u5237\u65b0");
 	private final JLabel statusLabel = new JLabel("\u5468\u671f\u63d0\u9192\u603b\u6570: 0");
-	private final JTree tree = new JTree(new DefaultMutableTreeNode("\u5468\u671f\u63d0\u9192"));
+	private final DefaultTableModel tableModel = new DefaultTableModel(TABLE_COLUMNS, 0) {
+		private static final long serialVersionUID = 1L;
+		public boolean isCellEditable(int row, int column) {
+			return false;
+		}
+	};
+	private final List tableRowRecords = new ArrayList();
+	private final JTable table = new JTable(tableModel);
 	private final DateFormat dayFormat = new SimpleDateFormat("ddE", Locale.CHINA);
 	private final DateFormat monthFormat = new SimpleDateFormat("MM", Locale.CHINA);
 	private final DateFormat yearFormat = new SimpleDateFormat("yyyy", Locale.CHINA);
@@ -127,30 +134,14 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		top.add(refreshButton, BorderLayout.EAST);
 		add(top, BorderLayout.NORTH);
 
-		tree.setRootVisible(false);
-		tree.setShowsRootHandles(true);
-		installArrowKeyNavigation();
-		tree.setCellRenderer(new DefaultTreeCellRenderer() {
-			private static final long serialVersionUID = 1L;
-			public Component getTreeCellRendererComponent(JTree pTree, Object value, boolean sel, boolean expanded,
-					boolean leaf, int row, boolean hasFocus) {
-				super.getTreeCellRendererComponent(pTree, value, sel, expanded, leaf, row, hasFocus);
-				setOpenIcon(null);
-				setClosedIcon(null);
-				setLeafIcon(null);
-				Object user = ((DefaultMutableTreeNode) value).getUserObject();
-				if (user instanceof GroupLabel) {
-					setText(((GroupLabel) user).text);
-				}
-				else if (user instanceof ReminderRecord) {
-					ReminderRecord record = (ReminderRecord) user;
-					String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText).replaceAll("\\s+", " ").trim();
-					setText(timeFormat.format(new Date(record.remindAt)) + " " + text.trim() + " (" + record.file.getName() + ")");
-				}
-				return this;
-			}
-		});
-		tree.addMouseListener(new MouseAdapter() {
+		table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		table.setAutoCreateRowSorter(false);
+		table.getColumnModel().getColumn(0).setPreferredWidth(72);
+		table.getColumnModel().getColumn(1).setPreferredWidth(56);
+		table.getColumnModel().getColumn(2).setPreferredWidth(120);
+		table.getColumnModel().getColumn(3).setPreferredWidth(220);
+		table.getColumnModel().getColumn(4).setPreferredWidth(100);
+		table.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
@@ -176,7 +167,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 				}
 			}
 		});
-		add(new JScrollPane(tree), BorderLayout.CENTER);
+		add(new JScrollPane(table), BorderLayout.CENTER);
 
 		refreshButton.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent e) {
@@ -232,7 +223,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 					ScanChunk chunk = (ScanChunk) chunks.get(i);
 					mergeChunk(chunk);
 				}
-				rebuildTreeFromCache();
+				rebuildTableFromCache();
 			}
 
 			protected void done() {
@@ -369,8 +360,9 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 					if ("node".equals(qName)) {
 						String id = attributes.getValue("ID");
 						String text = attributes.getValue("TEXT");
-						String remindType = attributes.getValue("REMINDERTYPE");
-						nodeStack.add(new String[] { id, text == null ? "" : text, remindType });
+						final ReminderCycleAttributes.CycleConfig cycleConfig = ReminderCycleAttributes
+								.readFromSaxAttributes(attributes);
+						nodeStack.add(new Object[] { id, text == null ? "" : text, cycleConfig });
 					}
 					else if ("Parameters".equals(qName) && !nodeStack.isEmpty()) {
 						String remindAt = attributes.getValue("REMINDUSERAT");
@@ -378,12 +370,12 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 							try {
 								long remindTs = Long.parseLong(remindAt);
 								if (remindTs > 0) {
-									String[] nodeInfo = (String[]) nodeStack.get(nodeStack.size() - 1);
-									String nodeText = nodeInfo[1] == null ? "" : nodeInfo[1].trim();
-									String remindType = nodeInfo.length > 2 ? nodeInfo[2] : null;
-									boolean isRecurring = (remindType != null && !"onetime".equalsIgnoreCase(remindType));
-									if (!"bin".equalsIgnoreCase(nodeText) && isRecurring) {
-										reminders.add(new ReminderRecord(file, nodeInfo[0], nodeText, remindTs));
+									Object[] nodeInfo = (Object[]) nodeStack.get(nodeStack.size() - 1);
+									String nodeText = nodeInfo[1] == null ? "" : ((String) nodeInfo[1]).trim();
+									final ReminderCycleAttributes.CycleConfig cycleConfig = (ReminderCycleAttributes.CycleConfig) nodeInfo[2];
+									if (!"bin".equalsIgnoreCase(nodeText) && cycleConfig.isRecurring()) {
+										reminders.add(new ReminderRecord(file, (String) nodeInfo[0], nodeText,
+												remindTs, cycleConfig));
 									}
 								}
 							}
@@ -407,9 +399,10 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		return reminders;
 	}
 
-	private void rebuildTreeFromCache() {
+	private void rebuildTableFromCache() {
 		String selectedKey = getSelectedReminderKey();
 		List records = new ArrayList(remindersByKey.values());
+		mergeOpenMapReminders(records);
 		Collections.sort(records, new Comparator() {
 			public int compare(Object o1, Object o2) {
 				ReminderRecord a = (ReminderRecord) o1;
@@ -418,65 +411,103 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 			}
 		});
 
-		DefaultMutableTreeNode root = new DefaultMutableTreeNode("\u5468\u671f\u63d0\u9192");
-		Map dateNodes = new HashMap();
-		Map reminderNodesByKey = new HashMap();
+		while (tableModel.getRowCount() > 0) {
+			tableModel.removeRow(0);
+		}
+		tableRowRecords.clear();
+		Map rowIndexByKey = new HashMap();
 
+		for (int i = 0; i < records.size(); i++) {
+			ReminderRecord record = (ReminderRecord) records.get(i);
+			final GroupLabel group = buildGroupLabel(record.remindAt);
+			final String taskText = normalizeTaskText(record.nodeText);
+			final String cycleLabel = ReminderCycleTypeFormatter.format(record.cycleConfig);
+			tableModel.addRow(new Object[] { group.text, timeFormat.format(new Date(record.remindAt)), cycleLabel,
+					taskText, record.file.getName() });
+			tableRowRecords.add(record);
+			rowIndexByKey.put(reminderKey(record), Integer.valueOf(tableRowRecords.size() - 1));
+		}
+
+		if (selectedKey != null) {
+			Integer rowIndex = (Integer) rowIndexByKey.get(selectedKey);
+			if (rowIndex != null) {
+				final int row = rowIndex.intValue();
+				table.setRowSelectionInterval(row, row);
+				table.scrollRectToVisible(table.getCellRect(row, 0, true));
+			}
+		}
+		publishRecurringReminderSnapshot(records);
+	}
+
+	private GroupLabel buildGroupLabel(final long remindAt) {
 		Calendar cal = Calendar.getInstance();
-		long now = cal.getTimeInMillis();
 		cal.set(Calendar.HOUR_OF_DAY, 0);
 		cal.set(Calendar.MINUTE, 0);
 		cal.set(Calendar.SECOND, 0);
 		cal.set(Calendar.MILLISECOND, 0);
 		long today = cal.getTimeInMillis();
+		if (remindAt < today) {
+			return new GroupLabel("\u8fc7\u671f");
+		}
+		if (remindAt < today + 24 * 60 * 60 * 1000) {
+			return new GroupLabel("\u4eca\u5929");
+		}
+		if (remindAt < today + 2 * 24 * 60 * 60 * 1000) {
+			return new GroupLabel("\u660e\u5929");
+		}
+		cal.setTimeInMillis(remindAt);
+		return new GroupLabel(monthFormat.format(cal.getTime()) + "\u6708" + dayFormat.format(cal.getTime()));
+	}
 
+	private void mergeOpenMapReminders(final List records) {
+		final Set existingKeys = new HashSet();
 		for (int i = 0; i < records.size(); i++) {
-			ReminderRecord record = (ReminderRecord) records.get(i);
-
-			long remindAt = record.remindAt;
-			String groupLabel;
-
-			if (remindAt < today) {
-				groupLabel = "\u8fc7\u671f";
-			}
-			else if (remindAt < today + 24 * 60 * 60 * 1000) {
-				groupLabel = "\u4eca\u5929";
-			}
-			else if (remindAt < today + 2 * 24 * 60 * 60 * 1000) {
-				groupLabel = "\u660e\u5929";
-			}
-			else {
-				cal.setTimeInMillis(remindAt);
-				groupLabel = monthFormat.format(cal.getTime()) + "\u6708" + dayFormat.format(cal.getTime());
-			}
-
-			DefaultMutableTreeNode dateNode = (DefaultMutableTreeNode) dateNodes.get(groupLabel);
-			if (dateNode == null) {
-				dateNode = new DefaultMutableTreeNode(new GroupLabel(groupLabel), true);
-				dateNodes.put(groupLabel, dateNode);
-				root.add(dateNode);
-			}
-
-			DefaultMutableTreeNode reminderNode = new DefaultMutableTreeNode(record, false);
-			dateNode.add(reminderNode);
-			reminderNodesByKey.put(reminderKey(record), reminderNode);
+			existingKeys.add(reminderKey((ReminderRecord) records.get(i)));
 		}
-
-		tree.setModel(new DefaultTreeModel(root));
-
-		for (int i = 0; i < tree.getRowCount(); i++) {
-			tree.expandRow(i);
-		}
-
-		if (selectedKey != null) {
-			DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) reminderNodesByKey.get(selectedKey);
-			if (selectedNode != null) {
-				TreePath selectedPath = new TreePath(selectedNode.getPath());
-				tree.setSelectionPath(selectedPath);
-				tree.scrollPathToVisible(selectedPath);
+		try {
+			final Map maps = Controller.getCurrentController().getMapViewManager().getMaps(MModeController.MODENAME);
+			for (final Object mapObj : maps.values()) {
+				final MapModel map = (MapModel) mapObj;
+				final File mapFile = map.getFile();
+				if (mapFile == null) {
+					continue;
+				}
+				collectRecurringRemindersFromNode(map.getRootNode(), mapFile, records, existingKeys);
 			}
 		}
-		publishRecurringReminderSnapshot(records);
+		catch (Exception e) {
+			LogUtils.warn(e);
+		}
+	}
+
+	private void collectRecurringRemindersFromNode(final NodeModel node, final File file, final List records,
+			final Set existingKeys) {
+		if (node == null) {
+			return;
+		}
+		final ReminderExtension reminder = ReminderExtension.getExtension(node);
+		if (reminder != null) {
+			final ReminderCycleAttributes.CycleConfig cycleConfig = ReminderCycleAttributes.readFromNode(node);
+			if (cycleConfig.isRecurring()) {
+				final String nodeText = node.getText() == null ? "" : node.getText().trim();
+				if (nodeText.length() > 0 && !"bin".equalsIgnoreCase(nodeText)) {
+					final ReminderRecord record = new ReminderRecord(file, node.getID(), nodeText,
+							reminder.getRemindUserAt(), cycleConfig);
+					final String key = reminderKey(record);
+					if (!existingKeys.contains(key)) {
+						records.add(record);
+						existingKeys.add(key);
+						remindersByKey.put(key, record);
+					}
+					else {
+						remindersByKey.put(key, record);
+					}
+				}
+			}
+		}
+		for (final NodeModel child : node.getChildren()) {
+			collectRecurringRemindersFromNode(child, file, records, existingKeys);
+		}
 	}
 
 	private void publishRecurringReminderSnapshot(List records) {
@@ -486,21 +517,25 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 			String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText)
 					.replaceAll("\\s+", " ").trim();
 			entries.add(new WorkspaceSideTabSnapshot.ReminderEntry(record.file, record.nodeId, text, record.remindAt,
-					true, null));
+					true, record.cycleConfig.remindType));
 		}
 		WorkspaceSideTabSnapshotRegistry.updateRecurringReminders(entries);
 	}
 
 	private String getSelectedReminderKey() {
-		TreePath path = tree.getSelectionPath();
-		if (path == null) {
+		final int row = table.getSelectedRow();
+		if (row < 0 || row >= tableRowRecords.size()) {
 			return null;
 		}
-		Object nodeObj = ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
-		if (!(nodeObj instanceof ReminderRecord)) {
+		return reminderKey((ReminderRecord) tableRowRecords.get(row));
+	}
+
+	private ReminderRecord getSelectedReminderRecord() {
+		final int row = table.getSelectedRow();
+		if (row < 0 || row >= tableRowRecords.size()) {
 			return null;
 		}
-		return reminderKey((ReminderRecord) nodeObj);
+		return (ReminderRecord) tableRowRecords.get(row);
 	}
 
 	private String reminderKey(ReminderRecord record) {
@@ -523,17 +558,15 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 	}
 
 	private void showContextMenu(MouseEvent e) {
-		TreePath path = tree.getPathForLocation(e.getX(), e.getY());
-		if (path == null) {
+		final int row = table.rowAtPoint(e.getPoint());
+		if (row < 0 || row >= tableRowRecords.size()) {
 			return;
 		}
-		tree.setSelectionPath(path);
-		final DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) path.getLastPathComponent();
-		final Object user = selectedNode.getUserObject();
+		table.setRowSelectionInterval(row, row);
+		final ReminderRecord record = (ReminderRecord) tableRowRecords.get(row);
 		JPopupMenu menu = new JPopupMenu();
 
-		if (user instanceof ReminderRecord) {
-			final ReminderRecord record = (ReminderRecord) user;
+		if (record != null) {
 			JMenuItem openFolderItem = new JMenuItem("\u6253\u5f00\u6587\u4ef6\u5939");
 			openFolderItem.addActionListener(new java.awt.event.ActionListener() {
 				public void actionPerformed(java.awt.event.ActionEvent event) {
@@ -546,11 +579,11 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		JMenuItem copyItem = new JMenuItem("\u590d\u5236");
 		copyItem.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent event) {
-				copyNodeContent(selectedNode, user);
+				copyNodeContent(record);
 			}
 		});
 		menu.add(copyItem);
-		menu.show(tree, e.getX(), e.getY());
+		menu.show(table, e.getX(), e.getY());
 	}
 
 	private void openContainingFolder(File file) {
@@ -574,11 +607,8 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		}
 	}
 
-	private void copyNodeContent(DefaultMutableTreeNode selectedNode, Object user) {
-		String text = "";
-		if (user instanceof ReminderRecord) {
-			text = ((ReminderRecord) user).nodeText;
-		}
+	private void copyNodeContent(final ReminderRecord record) {
+		String text = record == null ? "" : record.nodeText;
 		text = normalizeTaskText(text);
 		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
 	}
@@ -591,15 +621,10 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 	}
 
 	private void openSelectedReminder() {
-		TreePath path = tree.getSelectionPath();
-		if (path == null) {
+		final ReminderRecord record = getSelectedReminderRecord();
+		if (record == null) {
 			return;
 		}
-		Object nodeObj = ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
-		if (!(nodeObj instanceof ReminderRecord)) {
-			return;
-		}
-		ReminderRecord record = (ReminderRecord) nodeObj;
 		try {
 			IMapViewManager mapViewManager = Controller.getCurrentController().getMapViewManager();
 			URL url = record.file.toURI().toURL();
@@ -629,7 +654,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 					if (node != null) {
 						Controller.getCurrentController().getSelection().selectAsTheOnlyOneSelected(node);
 						Controller.getCurrentModeController().getMapController().centerNode(node);
-						tree.requestFocusInWindow();
+						table.requestFocusInWindow();
 						return;
 					}
 				}
@@ -657,64 +682,5 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		catch (Exception e) {
 			return file1.getAbsolutePath().equals(file2.getAbsolutePath());
 		}
-	}
-
-	private void installArrowKeyNavigation() {
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_UP, 0), "all.recurring.up");
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_DOWN, 0), "all.recurring.down");
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_LEFT, 0), "all.recurring.left");
-		tree.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_RIGHT, 0), "all.recurring.right");
-		tree.getActionMap().put("all.recurring.up", new AbstractAction() {
-			private static final long serialVersionUID = 1L;
-			public void actionPerformed(java.awt.event.ActionEvent e) {
-				int row = tree.getLeadSelectionRow();
-				if (row <= 0) {
-					return;
-				}
-				tree.setSelectionRow(row - 1);
-				tree.scrollRowToVisible(row - 1);
-			}
-		});
-		tree.getActionMap().put("all.recurring.down", new AbstractAction() {
-			private static final long serialVersionUID = 1L;
-			public void actionPerformed(java.awt.event.ActionEvent e) {
-				int row = tree.getLeadSelectionRow();
-				if (row < 0) {
-					row = 0;
-				}
-				if (row >= tree.getRowCount() - 1) {
-					return;
-				}
-				tree.setSelectionRow(row + 1);
-				tree.scrollRowToVisible(row + 1);
-			}
-		});
-		tree.getActionMap().put("all.recurring.left", new AbstractAction() {
-			private static final long serialVersionUID = 1L;
-			public void actionPerformed(java.awt.event.ActionEvent e) {
-				TreePath path = tree.getSelectionPath();
-				if (path == null) {
-					return;
-				}
-				if (tree.isExpanded(path)) {
-					tree.collapsePath(path);
-				}
-				else if (path.getParentPath() != null) {
-					tree.setSelectionPath(path.getParentPath());
-				}
-			}
-		});
-		tree.getActionMap().put("all.recurring.right", new AbstractAction() {
-			private static final long serialVersionUID = 1L;
-			public void actionPerformed(java.awt.event.ActionEvent e) {
-				TreePath path = tree.getSelectionPath();
-				if (path == null) {
-					return;
-				}
-				if (!tree.isExpanded(path)) {
-					tree.expandPath(path);
-				}
-			}
-		});
 	}
 }

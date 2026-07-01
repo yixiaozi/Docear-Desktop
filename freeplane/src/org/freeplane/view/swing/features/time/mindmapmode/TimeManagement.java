@@ -22,12 +22,15 @@ package org.freeplane.view.swing.features.time.mindmapmode;
 import java.awt.Component;
 import java.awt.Dialog;
 import java.awt.Dimension;
+import java.awt.Dimension;
 import java.awt.KeyboardFocusManager;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
@@ -377,11 +380,18 @@ class TimeManagement implements PropertyChangeListener, IMapSelectionListener {
 		}
 		TimeManagement.sCurrentlyOpenTimeManagement = this;
 		dialog = new JDialog(Controller.getCurrentController().getViewController().getFrame(), true);
+		final Runnable repackDialog = new Runnable() {
+			public void run() {
+				if (dialog != null) {
+					dialog.pack();
+				}
+			}
+		};
 		simpleReminderPanel = new SimpleReminderDialogPanel(reminderHook, new Runnable() {
 			public void run() {
 				disposeDialog();
 			}
-		});
+		}, repackDialog);
 		nodeSelectionListener = new INodeSelectionListener() {
 			public void onSelect(final NodeModel node) {
 				simpleReminderPanel.loadFromSelectedNode();
@@ -394,7 +404,8 @@ class TimeManagement implements PropertyChangeListener, IMapSelectionListener {
 		nodeChangeListener = new INodeChangeListener() {
 			public void nodeChanged(final NodeChangeEvent event) {
 				final NodeModel node = event.getNode();
-				if (event.getProperty().equals(ReminderExtension.class)
+				if ((event.getProperty().equals(ReminderExtension.class)
+						|| event.getProperty().equals(ReminderCycleExtension.class))
 						&& node.equals(getMindMapController().getMapController().getSelectedNode())) {
 					simpleReminderPanel.loadFromSelectedNode();
 				}
@@ -418,8 +429,14 @@ class TimeManagement implements PropertyChangeListener, IMapSelectionListener {
 			}
 		};
 		UITools.addEscapeActionToDialog(dialog, action);
+		dialog.getRootPane().addKeyListener(new KeyAdapter() {
+			public void keyPressed(final KeyEvent e) {
+				simpleReminderPanel.handleArrowKey(e);
+			}
+		});
 		dialog.setContentPane(simpleReminderPanel);
 		dialog.getRootPane().setDefaultButton(simpleReminderPanel.getOkButton());
+		dialog.setMinimumSize(new Dimension(500, 0));
 		dialog.pack();
 		UITools.setBounds(dialog, -1, -1, dialog.getWidth(), dialog.getHeight());
 		dialog.setVisible(true);

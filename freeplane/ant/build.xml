@@ -59,8 +59,13 @@
 		<echo file="${build}/translations/locales.txt">${locales}</echo>
 	</target>
 	
-	<target name="build" depends="prepare_jortho,localelist">
+	<target name="ensure-translation">
+		<antcall target="format-translation" />
 		<antcall target="check-translation" />
+	</target>
+
+	<target name="build" depends="prepare_jortho,localelist">
+		<antcall target="ensure-translation" />
 		<mkdir dir="${build}" />
 		<javac srcdir="${src}" destdir="${build}" classpath="${classpath}" debug="${debug}" 
 			source="${java_source_version}" target="${java_target_version}" encoding="utf8">

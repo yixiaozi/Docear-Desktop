@@ -21,7 +21,6 @@ package org.freeplane.view.swing.features.time.mindmapmode;
 
 import java.awt.Component;
 import java.awt.event.ActionEvent;
-import java.text.MessageFormat;
 import java.util.Date;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -53,6 +52,7 @@ import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.NodeHookDescriptor;
 import org.freeplane.features.mode.PersistentNodeHook;
 import org.freeplane.features.script.IScriptStarter;
+import org.freeplane.features.text.TextController;
 import org.freeplane.n3.nanoxml.XMLElement;
 import org.freeplane.view.swing.features.time.mindmapmode.TimeManagement.JTimePanel;
 import org.freeplane.view.swing.map.attribute.AttributePanelManager;
@@ -139,6 +139,7 @@ public class ReminderHook extends PersistentNodeHook implements IExtension {
 	public ReminderHook(ModeController modeController){
 		super();
 		this.modeController = modeController;
+		ReminderCycleIO.install(modeController);
 		modeController.addMenuContributor(new IMenuContributor() {
 			public void updateMenus(ModeController modeController, MenuBuilder builder) {
 				createTimePanel();
@@ -150,6 +151,7 @@ public class ReminderHook extends PersistentNodeHook implements IExtension {
 		registerAction(new AllMapsNodeListAction());
 		registerTooltipProvider();
 		registerStateIconProvider();
+		TextController.getController(modeController).addTextTransformer(new ReminderTextTransformer());
 
 		FilterController.getCurrentFilterController().getConditionFactory().addConditionController(9,
 			new ReminderConditionController());
@@ -210,11 +212,8 @@ public class ReminderHook extends PersistentNodeHook implements IExtension {
 				if(model == null)
 					return null;
 				final Date date = new Date(model.getRemindUserAt());
-				final Object[] messageArguments = { date };
-				final MessageFormat formatter = new MessageFormat(TextUtils
-					.getText("plugins/TimeManagement.xml_reminderNode_tooltip"));
-				final String message = formatter.format(messageArguments);
-				return message;
+				return ReminderDateTimeFormatter.formatCurrentReminderLine(date) + "  "
+						+ ReminderDateTimeFormatter.formatCyclePreviewLine(ReminderCycleAttributes.readFromNode(node));
 			}
 		});
 

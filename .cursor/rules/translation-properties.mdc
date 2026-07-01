@@ -1,0 +1,26 @@
+---
+description: Keep Freeplane/Docear translation .properties files build-safe
+globs: freeplane/**/translations/*.properties
+alwaysApply: false
+---
+
+# Translation properties formatting
+
+After editing any file under `freeplane/resources/translations/` or `freeplane/viewer-resources/translations/`:
+
+1. Do **not** rely on manual key order. New keys can be appended anywhere.
+2. Run formatting before finishing:
+
+```powershell
+tools\apache-ant-1.10.14\bin\ant.bat -f freeplane\ant\build.xml format-translation
+```
+
+The build also auto-runs `format-translation` before `check-translation`, but formatting locally keeps git diffs clean and avoids surprise file reordering during CI/build.
+
+Rules enforced by `FormatTranslation`:
+- Keys sorted case-insensitively
+- Duplicate keys removed (manual translation preferred over `[auto]` / `[translate me]`)
+- Unix line endings (`\n`)
+- Use `{0}`, `{1}` placeholders (not `$1`, `$2`)
+
+Chinese text may stay as `\uXXXX` escapes or UTF-8; formatting preserves meaning.
