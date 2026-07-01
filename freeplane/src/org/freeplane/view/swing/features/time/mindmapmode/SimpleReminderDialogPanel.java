@@ -34,6 +34,7 @@ class SimpleReminderDialogPanel extends JPanel {
 	private final JButton okButton;
 	private final JButton removeButton;
 	private final RecurringReminderSettingsPanel cycleSettingsPanel;
+	private final ReminderTaskSettingsPanel taskSettingsPanel;
 
 	SimpleReminderDialogPanel(final ReminderHook reminderHook, final Runnable onClose, final Runnable onLayoutChange) {
 		super(new BorderLayout(0, 8));
@@ -60,6 +61,12 @@ class SimpleReminderDialogPanel extends JPanel {
 			}
 		});
 		body.add(cycleSettingsPanel);
+		body.add(Box.createVerticalStrut(8));
+
+		final ReminderTaskSettingsPanel taskSettingsPanel = new ReminderTaskSettingsPanel();
+		taskSettingsPanel.setAlignmentX(LEFT_ALIGNMENT);
+		body.add(taskSettingsPanel);
+		this.taskSettingsPanel = taskSettingsPanel;
 
 		add(body, BorderLayout.CENTER);
 
@@ -113,6 +120,7 @@ class SimpleReminderDialogPanel extends JPanel {
 		if (node == null) {
 			dateTimeEditor.setDate(null);
 			cycleSettingsPanel.loadFromConfig(ReminderCycleAttributes.CycleConfig.oneTime());
+			taskSettingsPanel.loadFromConfig(ReminderTaskAttributes.TaskConfig.empty());
 			okButton.setEnabled(false);
 			removeButton.setEnabled(false);
 			return;
@@ -121,6 +129,7 @@ class SimpleReminderDialogPanel extends JPanel {
 		final ReminderExtension reminder = ReminderExtension.getExtension(node);
 		final ReminderCycleAttributes.CycleConfig cycleConfig = ReminderCycleAttributes.readFromNode(node);
 		cycleSettingsPanel.loadFromConfig(cycleConfig);
+		taskSettingsPanel.loadFromConfig(ReminderTaskAttributes.readFromNode(node));
 		if (reminder != null) {
 			dateTimeEditor.setDate(new Date(reminder.getRemindUserAt()));
 			removeButton.setEnabled(true);
@@ -140,6 +149,7 @@ class SimpleReminderDialogPanel extends JPanel {
 			return;
 		}
 		final ReminderCycleAttributes.CycleConfig cycleConfig = cycleSettingsPanel.getConfig();
+		final ReminderTaskAttributes.TaskConfig taskConfig = taskSettingsPanel.getConfig();
 		final Collection nodes = Controller.getCurrentModeController().getMapController().getSelectedNodes();
 		if (nodes.isEmpty()) {
 			return;
@@ -157,6 +167,7 @@ class SimpleReminderDialogPanel extends JPanel {
 			reminderExtension.setScript(null);
 			reminderHook.undoableActivateHook(node, reminderExtension);
 			ReminderCycleAttributes.writeToNode(node, cycleConfig);
+			ReminderTaskAttributes.writeToNode(node, taskConfig);
 		}
 		if (onClose != null) {
 			onClose.run();
@@ -171,6 +182,7 @@ class SimpleReminderDialogPanel extends JPanel {
 				reminderHook.undoableToggleHook(node);
 			}
 			ReminderCycleAttributes.clearFromNode(node);
+			ReminderTaskAttributes.clearFromNode(node);
 		}
 	}
 

@@ -25,8 +25,9 @@ final class ReminderTextTransformer extends AbstractContentTransformer {
 		if (reminder == null) {
 			return content;
 		}
-		final String prefix = ReminderDateTimeFormatter.formatInlineNodePrefix(new Date(reminder
-				.getRemindUserAt()), ReminderCycleAttributes.readFromNode(node));
+		final String prefix = ReminderTaskFormatter.appendInlineDuration(ReminderDateTimeFormatter.formatInlineNodePrefix(
+				new Date(reminder.getRemindUserAt()), ReminderCycleAttributes.readFromNode(node)), ReminderTaskAttributes
+				.readFromNode(node));
 		if (prefix.length() == 0) {
 			return content;
 		}

@@ -140,6 +140,7 @@ public class ReminderHook extends PersistentNodeHook implements IExtension {
 		super();
 		this.modeController = modeController;
 		ReminderCycleIO.install(modeController);
+		ReminderTaskIO.install(modeController);
 		modeController.addMenuContributor(new IMenuContributor() {
 			public void updateMenus(ModeController modeController, MenuBuilder builder) {
 				createTimePanel();
@@ -212,8 +213,13 @@ public class ReminderHook extends PersistentNodeHook implements IExtension {
 				if(model == null)
 					return null;
 				final Date date = new Date(model.getRemindUserAt());
-				return ReminderDateTimeFormatter.formatCurrentReminderLine(date) + "  "
+				final String taskLine = ReminderTaskFormatter.formatTooltipLines(ReminderTaskAttributes.readFromNode(node));
+				final String base = ReminderDateTimeFormatter.formatCurrentReminderLine(date) + "  "
 						+ ReminderDateTimeFormatter.formatCyclePreviewLine(ReminderCycleAttributes.readFromNode(node));
+				if (taskLine.length() == 0) {
+					return base;
+				}
+				return base + "\n" + taskLine;
 			}
 		});
 

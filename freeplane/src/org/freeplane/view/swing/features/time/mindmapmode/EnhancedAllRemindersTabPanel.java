@@ -64,13 +64,20 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		private final String nodeText;
 		private final long remindAt;
 		private final boolean isRecurring;
+		private final int taskTime;
+		private final int taskLevel;
+		private final int jinji;
 
-		private ReminderRecord(File file, String nodeId, String nodeText, long remindAt, boolean isRecurring) {
+		private ReminderRecord(File file, String nodeId, String nodeText, long remindAt, boolean isRecurring,
+				int taskTime, int taskLevel, int jinji) {
 			this.file = file;
 			this.nodeId = nodeId;
 			this.nodeText = nodeText;
 			this.remindAt = remindAt;
 			this.isRecurring = isRecurring;
+			this.taskTime = taskTime;
+			this.taskLevel = taskLevel;
+			this.jinji = jinji;
 		}
 	}
 
@@ -148,7 +155,9 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 				else if (user instanceof ReminderRecord) {
 					ReminderRecord record = (ReminderRecord) user;
 					String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText).replaceAll("\\s+", " ").trim();
-					setText(timeFormat.format(new Date(record.remindAt)) + " " + text.trim() + " (" + record.file.getName() + ")");
+					final String duration = ReminderTaskFormatter.formatDurationPadding(record.taskTime, 4);
+					setText(timeFormat.format(new Date(record.remindAt)) + duration + " " + text.trim() + " ("
+							+ record.file.getName() + ")");
 				}
 				return this;
 			}
@@ -453,7 +462,9 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 						String id = attributes.getValue("ID");
 						String text = attributes.getValue("TEXT");
 						String remindType = attributes.getValue("REMINDERTYPE");
-						nodeStack.add(new String[] { id, text == null ? "" : text, remindType });
+						final ReminderTaskAttributes.TaskConfig taskConfig = ReminderTaskAttributes
+								.readFromSaxAttributes(attributes);
+						nodeStack.add(new Object[] { id, text == null ? "" : text, remindType, taskConfig });
 					}
 					else if ("Parameters".equals(qName) && !nodeStack.isEmpty()) {
 						String remindAt = attributes.getValue("REMINDUSERAT");
@@ -461,12 +472,15 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 							try {
 								long remindTs = Long.parseLong(remindAt);
 								if (remindTs > 0) {
-									String[] nodeInfo = (String[]) nodeStack.get(nodeStack.size() - 1);
-									String nodeText = nodeInfo[1] == null ? "" : nodeInfo[1].trim();
-									String remindType = nodeInfo.length > 2 ? nodeInfo[2] : null;
+									Object[] nodeInfo = (Object[]) nodeStack.get(nodeStack.size() - 1);
+									String nodeText = nodeInfo[1] == null ? "" : ((String) nodeInfo[1]).trim();
+									String remindType = nodeInfo.length > 2 ? (String) nodeInfo[2] : null;
+									final ReminderTaskAttributes.TaskConfig taskConfig = nodeInfo.length > 3 ? (ReminderTaskAttributes.TaskConfig) nodeInfo[3]
+											: ReminderTaskAttributes.TaskConfig.empty();
 									boolean isRecurring = (remindType != null && !"onetime".equalsIgnoreCase(remindType));
 									if (!"bin".equalsIgnoreCase(nodeText) && !isRecurring) {
-										reminders.add(new ReminderRecord(file, nodeInfo[0], nodeText, remindTs, false));
+										reminders.add(new ReminderRecord(file, (String) nodeInfo[0], nodeText, remindTs,
+												false, taskConfig.taskTime, taskConfig.taskLevel, taskConfig.jinji));
 									}
 								}
 							}

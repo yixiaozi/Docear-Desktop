@@ -75,7 +75,8 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		}
 	}
 
-	private static final String[] TABLE_COLUMNS = { "\u5206\u7ec4", "\u65f6\u95f4", "\u5468\u671f", "\u4efb\u52a1", "\u5bfc\u56fe" };
+	private static final String[] TABLE_COLUMNS = { "\u5206\u7ec4", "\u65f6\u95f4", "\u65f6\u957f", "\u7b49\u7ea7",
+			"\u7d27\u6025", "\u5468\u671f", "\u4efb\u52a1", "\u5bfc\u56fe" };
 
 	private static final class ScanChunk {
 		private final String fileKey;
@@ -129,9 +130,12 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		table.setAutoCreateRowSorter(false);
 		table.getColumnModel().getColumn(0).setPreferredWidth(72);
 		table.getColumnModel().getColumn(1).setPreferredWidth(56);
-		table.getColumnModel().getColumn(2).setPreferredWidth(120);
-		table.getColumnModel().getColumn(3).setPreferredWidth(220);
-		table.getColumnModel().getColumn(4).setPreferredWidth(100);
+		table.getColumnModel().getColumn(2).setPreferredWidth(44);
+		table.getColumnModel().getColumn(3).setPreferredWidth(40);
+		table.getColumnModel().getColumn(4).setPreferredWidth(40);
+		table.getColumnModel().getColumn(5).setPreferredWidth(120);
+		table.getColumnModel().getColumn(6).setPreferredWidth(200);
+		table.getColumnModel().getColumn(7).setPreferredWidth(100);
 		table.addMouseListener(new MouseAdapter() {
 			private static final int COL_TIME = 1;
 
@@ -460,7 +464,9 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 						String text = attributes.getValue("TEXT");
 						final ReminderCycleAttributes.CycleConfig cycleConfig = ReminderCycleAttributes
 								.readFromSaxAttributes(attributes);
-						nodeStack.add(new Object[] { id, text == null ? "" : text, cycleConfig });
+						final ReminderTaskAttributes.TaskConfig taskConfig = ReminderTaskAttributes
+								.readFromSaxAttributes(attributes);
+						nodeStack.add(new Object[] { id, text == null ? "" : text, cycleConfig, taskConfig });
 					}
 					else if ("Parameters".equals(qName) && !nodeStack.isEmpty()) {
 						String remindAt = attributes.getValue("REMINDUSERAT");
@@ -471,9 +477,11 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 									Object[] nodeInfo = (Object[]) nodeStack.get(nodeStack.size() - 1);
 									String nodeText = nodeInfo[1] == null ? "" : ((String) nodeInfo[1]).trim();
 									final ReminderCycleAttributes.CycleConfig cycleConfig = (ReminderCycleAttributes.CycleConfig) nodeInfo[2];
+									final ReminderTaskAttributes.TaskConfig taskConfig = (ReminderTaskAttributes.TaskConfig) nodeInfo[3];
 									if (!"bin".equalsIgnoreCase(nodeText) && cycleConfig.isRecurring()) {
 										reminders.add(new RecurringReminderEntry(file, (String) nodeInfo[0], nodeText,
-												remindTs, cycleConfig));
+												remindTs, cycleConfig, taskConfig.taskTime, taskConfig.taskLevel,
+												taskConfig.jinji));
 									}
 								}
 							}
@@ -520,8 +528,10 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 			final GroupLabel group = buildGroupLabel(record.remindAt);
 			final String taskText = normalizeTaskText(record.nodeText);
 			final String cycleLabel = ReminderCycleTypeFormatter.format(record.cycleConfig);
-			tableModel.addRow(new Object[] { group.text, timeFormat.format(new Date(record.remindAt)), cycleLabel,
-					taskText, record.file.getName() });
+			tableModel.addRow(new Object[] { group.text, timeFormat.format(new Date(record.remindAt)),
+					ReminderTaskFormatter.formatDurationMinutes(record.taskTime),
+					ReminderTaskFormatter.formatLevel(record.taskLevel),
+					ReminderTaskFormatter.formatUrgency(record.jinji), cycleLabel, taskText, record.file.getName() });
 			tableRowRecords.add(record);
 			rowIndexByKey.put(reminderKey(record), Integer.valueOf(tableRowRecords.size() - 1));
 		}
@@ -590,8 +600,10 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 			if (cycleConfig.isRecurring()) {
 				final String nodeText = node.getText() == null ? "" : node.getText().trim();
 				if (nodeText.length() > 0 && !"bin".equalsIgnoreCase(nodeText)) {
+					final ReminderTaskAttributes.TaskConfig taskConfig = ReminderTaskAttributes.readFromNode(node);
 					final RecurringReminderEntry record = new RecurringReminderEntry(file, node.getID(), nodeText,
-							reminder.getRemindUserAt(), cycleConfig);
+							reminder.getRemindUserAt(), cycleConfig, taskConfig.taskTime, taskConfig.taskLevel,
+							taskConfig.jinji);
 					final String key = reminderKey(record);
 					if (!existingKeys.contains(key)) {
 						records.add(record);
