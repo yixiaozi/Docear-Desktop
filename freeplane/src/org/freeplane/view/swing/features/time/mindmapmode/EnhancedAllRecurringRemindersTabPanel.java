@@ -95,7 +95,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 	private final JButton refreshButton = new JButton("\u5237\u65b0");
 	private final JButton postponeAllButton = new JButton("\u5ef6\u671f\u6240\u6709");
 	private final JLabel statusLabel = new JLabel("\u5468\u671f\u63d0\u9192\u603b\u6570: 0");
-	private final RecurringReminderCalendarPanel calendarPanel = new RecurringReminderCalendarPanel();
+	private final ReminderCalendarPanel calendarPanel = new ReminderCalendarPanel();
 	private final DefaultTableModel tableModel = new DefaultTableModel(TABLE_COLUMNS, 0) {
 		private static final long serialVersionUID = 1L;
 		public boolean isCellEditable(int row, int column) {
@@ -201,14 +201,15 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		autoRefreshTimer.start();
 
 		addListeners();
-		calendarPanel.setNavigationHandler(new RecurringReminderCalendarPanel.NavigationHandler() {
-			public void openEntry(final RecurringReminderEntry entry) {
-				openReminderEntry(entry);
+		calendarPanel.setNavigationHandler(new ReminderCalendarPanel.NavigationHandler() {
+			public void openEntry(final ReminderCalendarEntry entry) {
+				ReminderTabNavigation.openEntry(entry);
 			}
 		});
-		calendarPanel.setCheckInHandler(new RecurringReminderCalendarPanel.CheckInHandler() {
-			public void checkInEntry(final RecurringReminderEntry entry, final long occurrenceAt) {
-				if (RecurringReminderCheckInService.openCheckInForEntry(entry, occurrenceAt)) {
+		calendarPanel.setCheckInHandler(new ReminderCalendarPanel.CheckInHandler() {
+			public void checkInEntry(final ReminderCalendarEntry entry, final long occurrenceAt) {
+				final RecurringReminderEntry recurring = entry == null ? null : entry.toRecurringEntry();
+				if (recurring != null && RecurringReminderCheckInService.openCheckInForEntry(recurring, occurrenceAt)) {
 					refreshInBackground();
 				}
 			}

@@ -135,6 +135,7 @@ import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllRecurringRe
 import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllRecentlyModified;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTabPanel;
+import org.freeplane.view.swing.features.time.mindmapmode.ReminderTimelineTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.TodoTabPanel;
 import org.freeplane.view.swing.map.ShowNotesInMapAction;
 import org.freeplane.features.usagestats.UsageStatsManager;
@@ -177,6 +178,7 @@ public class MModeControllerFactory {
 		tabs.add("\u63d0\u9192", new ReminderTabPanel(modeController));
 		tabs.add("\u5168\u90e8\u63d0\u9192", new EnhancedAllRemindersTabPanel());
 		tabs.add("\u5468\u671f\u63d0\u9192", new EnhancedAllRecurringRemindersTabPanel());
+		tabs.add("\u65f6\u95f4\u8f74", new ReminderTimelineTabPanel());
 		tabs.add("\u5f85\u529e", new TodoTabPanel(modeController));
 		tabs.add("\u5168\u90e8\u5f85\u529e", new EnhancedAllTodosTabPanel());
 		installWorkspacePinnedNodesTab(modeController, tabs);

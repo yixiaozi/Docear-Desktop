@@ -25,6 +25,7 @@ import java.util.Locale;
 import java.util.Map;
 
 import javax.swing.BorderFactory;
+import javax.swing.ButtonGroup;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
@@ -38,20 +39,24 @@ import javax.swing.ListSelectionModel;
 import org.freeplane.core.util.HtmlUtils;
 
 /**
- * Month and week calendar for recurring reminder tasks.
+ * Month, week and day calendar for reminder tasks.
  */
-final class RecurringReminderCalendarPanel extends JPanel {
+final class ReminderCalendarPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 	private static final String VIEW_MONTH = "month";
 	private static final String VIEW_WEEK = "week";
+	private static final String VIEW_DAY = "day";
+	private static final int MODE_MONTH = 0;
+	private static final int MODE_WEEK = 1;
+	private static final int MODE_DAY = 2;
 	private static final String[] WEEK_HEADERS = { "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d", "\u5468\u65e5" };
 
 	interface NavigationHandler {
-		void openEntry(RecurringReminderEntry entry);
+		void openEntry(ReminderCalendarEntry entry);
 	}
 
 	interface CheckInHandler {
-		void checkInEntry(RecurringReminderEntry entry, long occurrenceAt);
+		void checkInEntry(ReminderCalendarEntry entry, long occurrenceAt);
 	}
 
 	private final SimpleDateFormat monthTitleFormat = new SimpleDateFormat("yyyy\u5e74M\u6708", Locale.CHINA);
@@ -64,18 +69,25 @@ final class RecurringReminderCalendarPanel extends JPanel {
 	private final JList detailList = new JList(detailModel);
 	private final JPanel monthGrid = new JPanel(new GridLayout(0, 7, 2, 2));
 	private final JPanel weekGrid = new JPanel(new GridLayout(1, 7, 4, 0));
+	private final JPanel dayPanel = new JPanel(new BorderLayout(4, 4));
 	private final CardLayout cardLayout = new CardLayout();
 	private final JPanel calendarCard = new JPanel(cardLayout);
+	private final JPanel detailPanel = new JPanel(new BorderLayout(2, 2));
 	private final List entries = new ArrayList();
-	private long visibleMonthStart;
+	private long visibleRangeStart;
 	private long selectedDayStart = ReminderCycleScheduler.startOfDay(System.currentTimeMillis());
-	private boolean weekView;
+	private int viewMode = MODE_MONTH;
 	private NavigationHandler navigationHandler;
 	private CheckInHandler checkInHandler;
+	private boolean checkInEnabled = true;
 
-	RecurringReminderCalendarPanel() {
+	ReminderCalendarPanel() {
+		this("\u4efb\u52a1\u65e5\u5386");
+	}
+
+	ReminderCalendarPanel(final String borderTitle) {
 		super(new BorderLayout(4, 4));
-		setBorder(BorderFactory.createTitledBorder("\u4efb\u52a1\u65e5\u5386"));
+		setBorder(BorderFactory.createTitledBorder(borderTitle));
 
 		final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
 		final JButton prevButton = new JButton("\u25C0");
@@ -83,12 +95,18 @@ final class RecurringReminderCalendarPanel extends JPanel {
 		final JButton todayButton = new JButton("\u4eca\u5929");
 		final JToggleButton monthButton = new JToggleButton("\u6708\u89c6\u56fe", true);
 		final JToggleButton weekButton = new JToggleButton("\u5468\u89c6\u56fe");
+		final JToggleButton dayButton = new JToggleButton("\u65e5\u89c6\u56fe");
+		final ButtonGroup viewGroup = new ButtonGroup();
+		viewGroup.add(monthButton);
+		viewGroup.add(weekButton);
+		viewGroup.add(dayButton);
 		toolbar.add(prevButton);
 		toolbar.add(nextButton);
 		toolbar.add(todayButton);
 		toolbar.add(titleLabel);
 		toolbar.add(monthButton);
 		toolbar.add(weekButton);
+		toolbar.add(dayButton);
 		add(toolbar, BorderLayout.NORTH);
 
 		for (int i = 0; i < 7; i++) {
@@ -96,13 +114,13 @@ final class RecurringReminderCalendarPanel extends JPanel {
 		}
 		calendarCard.add(new JScrollPane(monthGrid), VIEW_MONTH);
 		calendarCard.add(new JScrollPane(weekGrid), VIEW_WEEK);
+		calendarCard.add(dayPanel, VIEW_DAY);
 		add(calendarCard, BorderLayout.CENTER);
 
 		detailList.setVisibleRowCount(4);
 		detailList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		detailList.setCellRenderer(createOccurrenceRenderer());
 		installOpenOnClick(detailList);
-		final JPanel detailPanel = new JPanel(new BorderLayout(2, 2));
 		detailPanel.add(detailLabel, BorderLayout.NORTH);
 		detailPanel.add(new JScrollPane(detailList), BorderLayout.CENTER);
 		detailPanel.setPreferredSize(new Dimension(0, 110));
@@ -110,63 +128,57 @@ final class RecurringReminderCalendarPanel extends JPanel {
 
 		prevButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
-				if (weekView) {
-					visibleMonthStart = ReminderCycleScheduler.addDays(visibleMonthStart, -7);
-				}
-				else {
-					visibleMonthStart = ReminderCycleScheduler.addMonths(visibleMonthStart, -1);
-				}
-				rebuildCalendar();
+				navigatePrevious();
 			}
 		});
 		nextButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
-				if (weekView) {
-					visibleMonthStart = ReminderCycleScheduler.addDays(visibleMonthStart, 7);
-				}
-				else {
-					visibleMonthStart = ReminderCycleScheduler.addMonths(visibleMonthStart, 1);
-				}
-				rebuildCalendar();
+				navigateNext();
 			}
 		});
 		todayButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				selectedDayStart = ReminderCycleScheduler.startOfDay(System.currentTimeMillis());
-				visibleMonthStart = weekView ? ReminderCycleScheduler.startOfWeek(selectedDayStart)
-						: startOfMonth(selectedDayStart);
+				syncVisibleRangeToSelection();
 				rebuildCalendar();
 			}
 		});
 		monthButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
-				weekView = false;
-				monthButton.setSelected(true);
-				weekButton.setSelected(false);
-				visibleMonthStart = startOfMonth(selectedDayStart);
-				cardLayout.show(calendarCard, VIEW_MONTH);
-				rebuildCalendar();
+				switchView(MODE_MONTH, VIEW_MONTH, monthButton, weekButton, dayButton);
 			}
 		});
 		weekButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
-				weekView = true;
-				weekButton.setSelected(true);
-				monthButton.setSelected(false);
-				visibleMonthStart = ReminderCycleScheduler.startOfWeek(selectedDayStart);
-				cardLayout.show(calendarCard, VIEW_WEEK);
-				rebuildCalendar();
+				switchView(MODE_WEEK, VIEW_WEEK, weekButton, monthButton, dayButton);
+			}
+		});
+		dayButton.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				switchView(MODE_DAY, VIEW_DAY, dayButton, monthButton, weekButton);
 			}
 		});
 
-		visibleMonthStart = startOfMonth(System.currentTimeMillis());
+		visibleRangeStart = startOfMonth(System.currentTimeMillis());
 		rebuildCalendar();
+	}
+
+	void setCheckInEnabled(final boolean checkInEnabled) {
+		this.checkInEnabled = checkInEnabled;
 	}
 
 	void setEntries(final List newEntries) {
 		entries.clear();
 		if (newEntries != null) {
-			entries.addAll(newEntries);
+			for (int i = 0; i < newEntries.size(); i++) {
+				final Object item = newEntries.get(i);
+				if (item instanceof ReminderCalendarEntry) {
+					entries.add(item);
+				}
+				else if (item instanceof RecurringReminderEntry) {
+					entries.add(ReminderCalendarEntry.fromRecurring((RecurringReminderEntry) item));
+				}
+			}
 		}
 		rebuildCalendar();
 	}
@@ -177,6 +189,58 @@ final class RecurringReminderCalendarPanel extends JPanel {
 
 	void setCheckInHandler(final CheckInHandler checkInHandler) {
 		this.checkInHandler = checkInHandler;
+	}
+
+	private void switchView(final int mode, final String card, final JToggleButton selected,
+			final JToggleButton other1, final JToggleButton other2) {
+		viewMode = mode;
+		selected.setSelected(true);
+		other1.setSelected(false);
+		other2.setSelected(false);
+		syncVisibleRangeToSelection();
+		cardLayout.show(calendarCard, card);
+		detailPanel.setVisible(mode != MODE_DAY);
+		rebuildCalendar();
+	}
+
+	private void navigatePrevious() {
+		if (viewMode == MODE_WEEK) {
+			visibleRangeStart = ReminderCycleScheduler.addDays(visibleRangeStart, -7);
+		}
+		else if (viewMode == MODE_DAY) {
+			selectedDayStart = ReminderCycleScheduler.addDays(selectedDayStart, -1);
+			visibleRangeStart = selectedDayStart;
+		}
+		else {
+			visibleRangeStart = ReminderCycleScheduler.addMonths(visibleRangeStart, -1);
+		}
+		rebuildCalendar();
+	}
+
+	private void navigateNext() {
+		if (viewMode == MODE_WEEK) {
+			visibleRangeStart = ReminderCycleScheduler.addDays(visibleRangeStart, 7);
+		}
+		else if (viewMode == MODE_DAY) {
+			selectedDayStart = ReminderCycleScheduler.addDays(selectedDayStart, 1);
+			visibleRangeStart = selectedDayStart;
+		}
+		else {
+			visibleRangeStart = ReminderCycleScheduler.addMonths(visibleRangeStart, 1);
+		}
+		rebuildCalendar();
+	}
+
+	private void syncVisibleRangeToSelection() {
+		if (viewMode == MODE_WEEK) {
+			visibleRangeStart = ReminderCycleScheduler.startOfWeek(selectedDayStart);
+		}
+		else if (viewMode == MODE_DAY) {
+			visibleRangeStart = selectedDayStart;
+		}
+		else {
+			visibleRangeStart = startOfMonth(selectedDayStart);
+		}
 	}
 
 	private DefaultListCellRenderer createOccurrenceRenderer() {
@@ -211,7 +275,7 @@ final class RecurringReminderCalendarPanel extends JPanel {
 				}
 				list.setSelectedIndex(index);
 				final OccurrenceItem item = (OccurrenceItem) value;
-				if (e.getClickCount() >= 2) {
+				if (e.getClickCount() >= 2 && checkInEnabled && item.entry.recurring) {
 					checkInEntry(item.entry, item.occurrenceAt);
 				}
 				else if (e.getClickCount() == 1) {
@@ -221,13 +285,13 @@ final class RecurringReminderCalendarPanel extends JPanel {
 		});
 	}
 
-	private void checkInEntry(final RecurringReminderEntry entry, final long occurrenceAt) {
+	private void checkInEntry(final ReminderCalendarEntry entry, final long occurrenceAt) {
 		if (checkInHandler != null && entry != null) {
 			checkInHandler.checkInEntry(entry, occurrenceAt);
 		}
 	}
 
-	private void openEntry(final RecurringReminderEntry entry) {
+	private void openEntry(final ReminderCalendarEntry entry) {
 		if (navigationHandler != null && entry != null) {
 			navigationHandler.openEntry(entry);
 		}
@@ -235,35 +299,43 @@ final class RecurringReminderCalendarPanel extends JPanel {
 
 	private void selectDay(final long dayStart) {
 		selectedDayStart = dayStart;
+		if (viewMode == MODE_DAY) {
+			visibleRangeStart = dayStart;
+		}
 		rebuildCalendar();
 	}
 
 	private void rebuildCalendar() {
-		if (weekView) {
+		if (viewMode == MODE_WEEK) {
 			rebuildWeekView();
+		}
+		else if (viewMode == MODE_DAY) {
+			rebuildDayView();
 		}
 		else {
 			rebuildMonthView();
 		}
-		updateDetailList();
+		if (viewMode != MODE_DAY) {
+			updateDetailList();
+		}
 	}
 
 	private void rebuildMonthView() {
-		titleLabel.setText(monthTitleFormat.format(new Date(visibleMonthStart)));
+		titleLabel.setText(monthTitleFormat.format(new Date(visibleRangeStart)));
 		monthGrid.removeAll();
 		for (int i = 0; i < 7; i++) {
 			monthGrid.add(createHeaderLabel(WEEK_HEADERS[i]));
 		}
-		final long monthEnd = ReminderCycleScheduler.addMonths(visibleMonthStart, 1);
-		final Map dayMap = buildOccurrenceMap(visibleMonthStart, monthEnd);
+		final long monthEnd = ReminderCycleScheduler.addMonths(visibleRangeStart, 1);
+		final Map dayMap = buildOccurrenceMap(visibleRangeStart, monthEnd);
 		final Calendar cal = Calendar.getInstance(Locale.CHINA);
-		cal.setTimeInMillis(visibleMonthStart);
+		cal.setTimeInMillis(visibleRangeStart);
 		cal.setFirstDayOfWeek(Calendar.MONDAY);
 		int leading = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7;
 		for (int i = 0; i < leading; i++) {
 			monthGrid.add(createEmptyCell());
 		}
-		cal.setTimeInMillis(visibleMonthStart);
+		cal.setTimeInMillis(visibleRangeStart);
 		while (cal.getTimeInMillis() < monthEnd) {
 			final long dayStart = ReminderCycleScheduler.startOfDay(cal.getTimeInMillis());
 			final List dayEntries = (List) dayMap.get(Long.valueOf(dayStart));
@@ -278,21 +350,32 @@ final class RecurringReminderCalendarPanel extends JPanel {
 	}
 
 	private void rebuildWeekView() {
-		final long weekEnd = ReminderCycleScheduler.addDays(visibleMonthStart, 7);
-		titleLabel.setText(dayTitleFormat.format(new Date(visibleMonthStart)) + " - "
-				+ dayTitleFormat.format(new Date(ReminderCycleScheduler.addDays(visibleMonthStart, 6))));
+		final long weekEnd = ReminderCycleScheduler.addDays(visibleRangeStart, 7);
+		titleLabel.setText(dayTitleFormat.format(new Date(visibleRangeStart)) + " - "
+				+ dayTitleFormat.format(new Date(ReminderCycleScheduler.addDays(visibleRangeStart, 6))));
 		weekGrid.removeAll();
-		final Map dayMap = buildOccurrenceMap(visibleMonthStart, weekEnd);
+		final Map dayMap = buildOccurrenceMap(visibleRangeStart, weekEnd);
 		for (int i = 0; i < 7; i++) {
-			final long dayStart = ReminderCycleScheduler.addDays(visibleMonthStart, i);
+			final long dayStart = ReminderCycleScheduler.addDays(visibleRangeStart, i);
 			final List dayEntries = (List) dayMap.get(Long.valueOf(dayStart));
-			weekGrid.add(createWeekColumn(dayStart, dayEntries));
+			weekGrid.add(createDayColumn(dayStart, dayEntries));
 		}
 		weekGrid.revalidate();
 		weekGrid.repaint();
 	}
 
-	private JPanel createWeekColumn(final long dayStart, final List dayEntries) {
+	private void rebuildDayView() {
+		titleLabel.setText(dayTitleFormat.format(new Date(selectedDayStart)));
+		dayPanel.removeAll();
+		final long dayEnd = ReminderCycleScheduler.addDays(selectedDayStart, 1);
+		final Map dayMap = buildOccurrenceMap(selectedDayStart, dayEnd);
+		final List dayEntries = (List) dayMap.get(Long.valueOf(selectedDayStart));
+		dayPanel.add(createDayColumn(selectedDayStart, dayEntries), BorderLayout.CENTER);
+		dayPanel.revalidate();
+		dayPanel.repaint();
+	}
+
+	private JPanel createDayColumn(final long dayStart, final List dayEntries) {
 		final JPanel column = new JPanel(new BorderLayout(2, 2));
 		column.setBorder(BorderFactory.createEtchedBorder());
 		final Calendar cal = Calendar.getInstance(Locale.CHINA);
@@ -300,13 +383,15 @@ final class RecurringReminderCalendarPanel extends JPanel {
 		final JLabel header = new JLabel(WEEK_HEADERS[(cal.get(Calendar.DAY_OF_WEEK) + 5) % 7] + " "
 				+ cal.get(Calendar.DAY_OF_MONTH), JLabel.CENTER);
 		header.setFont(header.getFont().deriveFont(Font.BOLD));
-		header.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-		header.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mouseClicked(final MouseEvent e) {
-				selectDay(dayStart);
-			}
-		});
+		if (viewMode != MODE_DAY) {
+			header.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+			header.addMouseListener(new MouseAdapter() {
+				@Override
+				public void mouseClicked(final MouseEvent e) {
+					selectDay(dayStart);
+				}
+			});
+		}
 		column.add(header, BorderLayout.NORTH);
 		final DefaultListModel model = new DefaultListModel();
 		if (dayEntries != null) {
@@ -319,16 +404,21 @@ final class RecurringReminderCalendarPanel extends JPanel {
 		list.setCellRenderer(createOccurrenceRenderer());
 		installOpenOnClick(list);
 		column.add(new JScrollPane(list), BorderLayout.CENTER);
-		column.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mouseClicked(final MouseEvent e) {
-				if (e.getSource() == column) {
-					selectDay(dayStart);
+		if (viewMode != MODE_DAY) {
+			column.addMouseListener(new MouseAdapter() {
+				@Override
+				public void mouseClicked(final MouseEvent e) {
+					if (e.getSource() == column) {
+						selectDay(dayStart);
+					}
 				}
-			}
-		});
-		if (dayStart == selectedDayStart) {
+			});
+		}
+		if (dayStart == selectedDayStart && viewMode != MODE_DAY) {
 			column.setBackground(new Color(220, 235, 255));
+		}
+		if (dayStart == ReminderCycleScheduler.startOfDay(System.currentTimeMillis())) {
+			column.setBorder(BorderFactory.createLineBorder(new Color(0, 120, 215), 2));
 		}
 		return column;
 	}
@@ -362,7 +452,7 @@ final class RecurringReminderCalendarPanel extends JPanel {
 		detailModel.clear();
 		detailLabel.setText(dayTitleFormat.format(new Date(selectedDayStart)) + "\u7684\u4efb\u52a1");
 		if (dayEntries == null || dayEntries.isEmpty()) {
-			detailModel.addElement("\u6682\u65e0\u5468\u671f\u4efb\u52a1");
+			detailModel.addElement("\u6682\u65e0\u4efb\u52a1");
 			return;
 		}
 		for (int i = 0; i < dayEntries.size(); i++) {
@@ -371,16 +461,16 @@ final class RecurringReminderCalendarPanel extends JPanel {
 	}
 
 	private String formatOccurrence(final OccurrenceItem item) {
-		return timeFormat.format(new Date(item.occurrenceAt)) + "  "
+		final String duration = ReminderTaskFormatter.formatDurationPadding(item.entry.taskTime, 4);
+		return timeFormat.format(new Date(item.occurrenceAt)) + duration + "  "
 				+ normalizeTaskText(item.entry.nodeText) + "  [" + item.entry.file.getName() + "]";
 	}
 
 	private Map buildOccurrenceMap(final long rangeStart, final long rangeEnd) {
 		final Map map = new HashMap();
 		for (int i = 0; i < entries.size(); i++) {
-			final RecurringReminderEntry entry = (RecurringReminderEntry) entries.get(i);
-			final List occurrences = ReminderCycleScheduler.enumerateOccurrencesInRange(entry.remindAt,
-					entry.cycleConfig, rangeStart, rangeEnd);
+			final ReminderCalendarEntry entry = (ReminderCalendarEntry) entries.get(i);
+			final List occurrences = enumerateOccurrences(entry, rangeStart, rangeEnd);
 			for (int j = 0; j < occurrences.size(); j++) {
 				final long occurrenceAt = ((Long) occurrences.get(j)).longValue();
 				final long dayStart = ReminderCycleScheduler.startOfDay(occurrenceAt);
@@ -403,6 +493,22 @@ final class RecurringReminderCalendarPanel extends JPanel {
 			});
 		}
 		return map;
+	}
+
+	static List enumerateOccurrences(final ReminderCalendarEntry entry, final long rangeStart, final long rangeEnd) {
+		if (entry == null || rangeEnd <= rangeStart) {
+			return Collections.emptyList();
+		}
+		if (entry.recurring && entry.cycleConfig != null && entry.cycleConfig.isRecurring()) {
+			return ReminderCycleScheduler.enumerateOccurrencesInRange(entry.remindAt, entry.cycleConfig, rangeStart,
+					rangeEnd);
+		}
+		if (entry.remindAt >= rangeStart && entry.remindAt < rangeEnd) {
+			final List single = new ArrayList(1);
+			single.add(Long.valueOf(entry.remindAt));
+			return single;
+		}
+		return Collections.emptyList();
 	}
 
 	private static JLabel createHeaderLabel(final String text) {
@@ -432,10 +538,10 @@ final class RecurringReminderCalendarPanel extends JPanel {
 	}
 
 	private static final class OccurrenceItem {
-		private final RecurringReminderEntry entry;
+		private final ReminderCalendarEntry entry;
 		private final long occurrenceAt;
 
-		private OccurrenceItem(final RecurringReminderEntry entry, final long occurrenceAt) {
+		private OccurrenceItem(final ReminderCalendarEntry entry, final long occurrenceAt) {
 			this.entry = entry;
 			this.occurrenceAt = occurrenceAt;
 		}

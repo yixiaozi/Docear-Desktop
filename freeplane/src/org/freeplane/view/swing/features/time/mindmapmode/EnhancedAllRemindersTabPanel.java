@@ -29,6 +29,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTree;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
@@ -116,6 +117,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 
 	private final JButton refreshButton = new JButton("\u5237\u65b0");
 	private final JLabel statusLabel = new JLabel("\u63d0\u9192\u603b\u6570: 0");
+	private final ReminderCalendarPanel calendarPanel = new ReminderCalendarPanel();
 	private final JTree tree = new JTree(new DefaultMutableTreeNode("\u5168\u90e8\u63d0\u9192"));
 	private final DateFormat dayFormat = new SimpleDateFormat("ddE", Locale.CHINA);
 	private final DateFormat monthFormat = new SimpleDateFormat("MM", Locale.CHINA);
@@ -188,7 +190,17 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 				}
 			}
 		});
-		add(new JScrollPane(tree), BorderLayout.CENTER);
+		final JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(tree), calendarPanel);
+		split.setResizeWeight(0.55);
+		split.setDividerLocation(260);
+		add(split, BorderLayout.CENTER);
+
+		calendarPanel.setCheckInEnabled(false);
+		calendarPanel.setNavigationHandler(new ReminderCalendarPanel.NavigationHandler() {
+			public void openEntry(final ReminderCalendarEntry entry) {
+				ReminderTabNavigation.openEntry(entry);
+			}
+		});
 
 		refreshButton.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent e) {
@@ -582,6 +594,17 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 			}
 		}
 		publishOneTimeReminderSnapshot(records);
+		updateCalendarPanel(records);
+	}
+
+	private void updateCalendarPanel(final List records) {
+		final List calendarEntries = new ArrayList();
+		for (int i = 0; i < records.size(); i++) {
+			final ReminderRecord record = (ReminderRecord) records.get(i);
+			calendarEntries.add(new ReminderCalendarEntry(record.file, record.nodeId, record.nodeText, record.remindAt,
+					false, null, record.taskTime, record.taskLevel, record.jinji));
+		}
+		calendarPanel.setEntries(calendarEntries);
 	}
 
 	private void publishOneTimeReminderSnapshot(List records) {
