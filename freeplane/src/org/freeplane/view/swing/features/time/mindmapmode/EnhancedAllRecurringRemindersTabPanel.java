@@ -1,6 +1,7 @@
 package org.freeplane.view.swing.features.time.mindmapmode;
 
 import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
@@ -25,9 +26,11 @@ import java.util.Set;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
@@ -52,23 +55,6 @@ import org.xml.sax.helpers.DefaultHandler;
 
 public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
-
-	private static final class ReminderRecord {
-		private final File file;
-		private final String nodeId;
-		private final String nodeText;
-		private final long remindAt;
-		private final ReminderCycleAttributes.CycleConfig cycleConfig;
-
-		private ReminderRecord(File file, String nodeId, String nodeText, long remindAt,
-				ReminderCycleAttributes.CycleConfig cycleConfig) {
-			this.file = file;
-			this.nodeId = nodeId;
-			this.nodeText = nodeText;
-			this.remindAt = remindAt;
-			this.cycleConfig = cycleConfig;
-		}
-	}
 
 	private static final class CachedFileResult {
 		private final long modified;
@@ -106,7 +92,9 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 	}
 
 	private final JButton refreshButton = new JButton("\u5237\u65b0");
+	private final JButton postponeAllButton = new JButton("\u5ef6\u671f\u6240\u6709");
 	private final JLabel statusLabel = new JLabel("\u5468\u671f\u63d0\u9192\u603b\u6570: 0");
+	private final RecurringReminderCalendarPanel calendarPanel = new RecurringReminderCalendarPanel();
 	private final DefaultTableModel tableModel = new DefaultTableModel(TABLE_COLUMNS, 0) {
 		private static final long serialVersionUID = 1L;
 		public boolean isCellEditable(int row, int column) {
@@ -131,7 +119,10 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		super(new BorderLayout(4, 4));
 		JPanel top = new JPanel(new BorderLayout(4, 0));
 		top.add(statusLabel, BorderLayout.CENTER);
-		top.add(refreshButton, BorderLayout.EAST);
+		JPanel topButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+		topButtons.add(postponeAllButton);
+		topButtons.add(refreshButton);
+		top.add(topButtons, BorderLayout.EAST);
 		add(top, BorderLayout.NORTH);
 
 		table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -167,11 +158,16 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 				}
 			}
 		});
-		add(new JScrollPane(table), BorderLayout.CENTER);
+		add(buildMainSplit(), BorderLayout.CENTER);
 
 		refreshButton.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent e) {
 				refreshInBackground();
+			}
+		});
+		postponeAllButton.addActionListener(new java.awt.event.ActionListener() {
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				postponeAllExpiredReminders();
 			}
 		});
 		autoRefreshTimer = new Timer(12000, new java.awt.event.ActionListener() {
@@ -184,7 +180,85 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		autoRefreshTimer.start();
 
 		addListeners();
+		calendarPanel.setNavigationHandler(new RecurringReminderCalendarPanel.NavigationHandler() {
+			public void openEntry(final RecurringReminderEntry entry) {
+				openReminderEntry(entry);
+			}
+		});
 		refreshInBackground();
+	}
+
+	private JSplitPane buildMainSplit() {
+		final JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(table), calendarPanel);
+		split.setResizeWeight(0.55);
+		split.setDividerLocation(260);
+		return split;
+	}
+
+	private void postponeAllExpiredReminders() {
+		final List expired = collectExpiredEntries();
+		if (expired.isEmpty()) {
+			JOptionPane.showMessageDialog(this, "\u5f53\u524d\u6ca1\u6709\u8fc7\u671f\u7684\u5468\u671f\u4efb\u52a1\u3002", "\u5468\u671f\u63d0\u9192",
+					JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		final int choice = JOptionPane.showConfirmDialog(this, "\u5c06\u628a " + expired.size()
+				+ " \u4e2a\u8fc7\u671f\u4efb\u52a1\u63a8\u8fdb\u5230\u5404\u81ea\u7684\u4e0b\u4e00\u4e2a\u5468\u671f\u65e5\u671f\u3002\n"
+				+ "\u4fee\u6539\u540e\u8bf7\u4fdd\u5b58\u76f8\u5173\u5bfc\u56fe\uff08Ctrl+S\uff09\u3002", "\u5ef6\u671f\u6240\u6709",
+				JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+		if (choice != JOptionPane.OK_OPTION) {
+			return;
+		}
+		postponeAllButton.setEnabled(false);
+		new SwingWorker() {
+			protected Object doInBackground() throws Exception {
+				return Integer.valueOf(RecurringReminderPostponeService.postponeAllExpired(expired));
+			}
+
+			protected void done() {
+				postponeAllButton.setEnabled(true);
+				try {
+					final int updated = ((Integer) get()).intValue();
+					invalidateCacheForEntries(expired);
+					refreshInBackground();
+					JOptionPane.showMessageDialog(EnhancedAllRecurringRemindersTabPanel.this, "\u5df2\u5ef6\u671f "
+							+ updated + " \u4e2a\u4efb\u52a1\u3002", "\u5468\u671f\u63d0\u9192", JOptionPane.INFORMATION_MESSAGE);
+				}
+				catch (Exception e) {
+					LogUtils.warn(e);
+				}
+			}
+		}.execute();
+	}
+
+	private List collectExpiredEntries() {
+		final List expired = new ArrayList();
+		final long todayStart = startOfToday();
+		for (final Object keyObj : remindersByKey.keySet()) {
+			final RecurringReminderEntry entry = (RecurringReminderEntry) remindersByKey.get(keyObj);
+			if (entry != null && entry.remindAt < todayStart) {
+				expired.add(entry);
+			}
+		}
+		return expired;
+	}
+
+	private long startOfToday() {
+		final Calendar cal = Calendar.getInstance();
+		cal.set(Calendar.HOUR_OF_DAY, 0);
+		cal.set(Calendar.MINUTE, 0);
+		cal.set(Calendar.SECOND, 0);
+		cal.set(Calendar.MILLISECOND, 0);
+		return cal.getTimeInMillis();
+	}
+
+	private void invalidateCacheForEntries(final List entries) {
+		for (int i = 0; i < entries.size(); i++) {
+			final RecurringReminderEntry entry = (RecurringReminderEntry) entries.get(i);
+			if (entry != null && entry.file != null) {
+				cacheByFile.remove(entry.file.getAbsolutePath());
+			}
+		}
 	}
 
 	private void addListeners() {
@@ -246,7 +320,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		}
 		List newKeys = new ArrayList();
 		for (int i = 0; i < chunk.reminders.size(); i++) {
-			ReminderRecord record = (ReminderRecord) chunk.reminders.get(i);
+			RecurringReminderEntry record = (RecurringReminderEntry) chunk.reminders.get(i);
 			String key = reminderKey(record);
 			if (!remindersByKey.containsKey(key)) {
 				remindersByKey.put(key, record);
@@ -374,7 +448,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 									String nodeText = nodeInfo[1] == null ? "" : ((String) nodeInfo[1]).trim();
 									final ReminderCycleAttributes.CycleConfig cycleConfig = (ReminderCycleAttributes.CycleConfig) nodeInfo[2];
 									if (!"bin".equalsIgnoreCase(nodeText) && cycleConfig.isRecurring()) {
-										reminders.add(new ReminderRecord(file, (String) nodeInfo[0], nodeText,
+										reminders.add(new RecurringReminderEntry(file, (String) nodeInfo[0], nodeText,
 												remindTs, cycleConfig));
 									}
 								}
@@ -405,8 +479,8 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		mergeOpenMapReminders(records);
 		Collections.sort(records, new Comparator() {
 			public int compare(Object o1, Object o2) {
-				ReminderRecord a = (ReminderRecord) o1;
-				ReminderRecord b = (ReminderRecord) o2;
+				RecurringReminderEntry a = (RecurringReminderEntry) o1;
+				RecurringReminderEntry b = (RecurringReminderEntry) o2;
 				return Long.compare(a.remindAt, b.remindAt);
 			}
 		});
@@ -418,7 +492,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		Map rowIndexByKey = new HashMap();
 
 		for (int i = 0; i < records.size(); i++) {
-			ReminderRecord record = (ReminderRecord) records.get(i);
+			RecurringReminderEntry record = (RecurringReminderEntry) records.get(i);
 			final GroupLabel group = buildGroupLabel(record.remindAt);
 			final String taskText = normalizeTaskText(record.nodeText);
 			final String cycleLabel = ReminderCycleTypeFormatter.format(record.cycleConfig);
@@ -437,6 +511,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 			}
 		}
 		publishRecurringReminderSnapshot(records);
+		calendarPanel.setEntries(records);
 	}
 
 	private GroupLabel buildGroupLabel(final long remindAt) {
@@ -462,7 +537,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 	private void mergeOpenMapReminders(final List records) {
 		final Set existingKeys = new HashSet();
 		for (int i = 0; i < records.size(); i++) {
-			existingKeys.add(reminderKey((ReminderRecord) records.get(i)));
+			existingKeys.add(reminderKey((RecurringReminderEntry) records.get(i)));
 		}
 		try {
 			final Map maps = Controller.getCurrentController().getMapViewManager().getMaps(MModeController.MODENAME);
@@ -491,7 +566,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 			if (cycleConfig.isRecurring()) {
 				final String nodeText = node.getText() == null ? "" : node.getText().trim();
 				if (nodeText.length() > 0 && !"bin".equalsIgnoreCase(nodeText)) {
-					final ReminderRecord record = new ReminderRecord(file, node.getID(), nodeText,
+					final RecurringReminderEntry record = new RecurringReminderEntry(file, node.getID(), nodeText,
 							reminder.getRemindUserAt(), cycleConfig);
 					final String key = reminderKey(record);
 					if (!existingKeys.contains(key)) {
@@ -513,7 +588,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 	private void publishRecurringReminderSnapshot(List records) {
 		List entries = new ArrayList();
 		for (int i = 0; i < records.size(); i++) {
-			ReminderRecord record = (ReminderRecord) records.get(i);
+			RecurringReminderEntry record = (RecurringReminderEntry) records.get(i);
 			String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText)
 					.replaceAll("\\s+", " ").trim();
 			entries.add(new WorkspaceSideTabSnapshot.ReminderEntry(record.file, record.nodeId, text, record.remindAt,
@@ -527,18 +602,18 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		if (row < 0 || row >= tableRowRecords.size()) {
 			return null;
 		}
-		return reminderKey((ReminderRecord) tableRowRecords.get(row));
+		return reminderKey((RecurringReminderEntry) tableRowRecords.get(row));
 	}
 
-	private ReminderRecord getSelectedReminderRecord() {
+	private RecurringReminderEntry getSelectedRecurringReminderEntry() {
 		final int row = table.getSelectedRow();
 		if (row < 0 || row >= tableRowRecords.size()) {
 			return null;
 		}
-		return (ReminderRecord) tableRowRecords.get(row);
+		return (RecurringReminderEntry) tableRowRecords.get(row);
 	}
 
-	private String reminderKey(ReminderRecord record) {
+	private String reminderKey(RecurringReminderEntry record) {
 		if (record == null || record.nodeId == null) {
 			return "";
 		}
@@ -563,7 +638,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 			return;
 		}
 		table.setRowSelectionInterval(row, row);
-		final ReminderRecord record = (ReminderRecord) tableRowRecords.get(row);
+		final RecurringReminderEntry record = (RecurringReminderEntry) tableRowRecords.get(row);
 		JPopupMenu menu = new JPopupMenu();
 
 		if (record != null) {
@@ -607,7 +682,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		}
 	}
 
-	private void copyNodeContent(final ReminderRecord record) {
+	private void copyNodeContent(final RecurringReminderEntry record) {
 		String text = record == null ? "" : record.nodeText;
 		text = normalizeTaskText(text);
 		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
@@ -621,7 +696,10 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 	}
 
 	private void openSelectedReminder() {
-		final ReminderRecord record = getSelectedReminderRecord();
+		openReminderEntry(getSelectedRecurringReminderEntry());
+	}
+
+	private void openReminderEntry(final RecurringReminderEntry record) {
 		if (record == null) {
 			return;
 		}
@@ -638,7 +716,7 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		}
 	}
 
-	private void selectReminderNodeWithRetry(final ReminderRecord record, final int attempt) {
+	private void selectReminderNodeWithRetry(final RecurringReminderEntry record, final int attempt) {
 		final int maxAttempts = 12;
 		if (record == null || attempt > maxAttempts) {
 			return;

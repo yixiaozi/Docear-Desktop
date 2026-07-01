@@ -287,6 +287,10 @@ public class ReminderHook extends PersistentNodeHook implements IExtension {
 		element.addChild(parameters);
 	}
 
+	void rescheduleReminder(final ReminderExtension reminderExtension) {
+		scheduleTimer(reminderExtension);
+	}
+
 	private void scheduleTimer(final ReminderExtension model) {
 		final Date date = new Date(model.getRemindUserAt());
 		scheduleTimer(model, new TimerBlinkTask(this, model, false, System.currentTimeMillis() < date.getTime() + ReminderExtension.BLINKING_PERIOD));
