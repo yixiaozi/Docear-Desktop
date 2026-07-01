@@ -50,12 +50,16 @@ final class RecurringReminderCalendarPanel extends JPanel {
 		void openEntry(RecurringReminderEntry entry);
 	}
 
+	interface CheckInHandler {
+		void checkInEntry(RecurringReminderEntry entry, long occurrenceAt);
+	}
+
 	private final SimpleDateFormat monthTitleFormat = new SimpleDateFormat("yyyy\u5e74M\u6708", Locale.CHINA);
 	private final SimpleDateFormat dayTitleFormat = new SimpleDateFormat("M\u6708d\u65e5 EEEE", Locale.CHINA);
 	private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.CHINA);
 
 	private final JLabel titleLabel = new JLabel(" ");
-	private final JLabel detailLabel = new JLabel("\u9009\u4e2d\u65e5\u671f\u7684\u4efb\u52a1\u5c06\u663e\u793a\u5728\u6b64\u5904");
+	private final JLabel detailLabel = new JLabel("\u9009\u4e2d\u65e5\u671f\u7684\u4efb\u52a1\uff1a\u5355\u51fb\u8df3\u8f6c\u8282\u70b9\uff0c\u53cc\u51fb\u6253\u5361");
 	private final DefaultListModel detailModel = new DefaultListModel();
 	private final JList detailList = new JList(detailModel);
 	private final JPanel monthGrid = new JPanel(new GridLayout(0, 7, 2, 2));
@@ -67,6 +71,7 @@ final class RecurringReminderCalendarPanel extends JPanel {
 	private long selectedDayStart = ReminderCycleScheduler.startOfDay(System.currentTimeMillis());
 	private boolean weekView;
 	private NavigationHandler navigationHandler;
+	private CheckInHandler checkInHandler;
 
 	RecurringReminderCalendarPanel() {
 		super(new BorderLayout(4, 4));
@@ -170,6 +175,10 @@ final class RecurringReminderCalendarPanel extends JPanel {
 		this.navigationHandler = navigationHandler;
 	}
 
+	void setCheckInHandler(final CheckInHandler checkInHandler) {
+		this.checkInHandler = checkInHandler;
+	}
+
 	private DefaultListCellRenderer createOccurrenceRenderer() {
 		return new DefaultListCellRenderer() {
 			private static final long serialVersionUID = 1L;
@@ -197,12 +206,25 @@ final class RecurringReminderCalendarPanel extends JPanel {
 					return;
 				}
 				final Object value = list.getModel().getElementAt(index);
-				if (value instanceof OccurrenceItem) {
-					list.setSelectedIndex(index);
-					openEntry(((OccurrenceItem) value).entry);
+				if (!(value instanceof OccurrenceItem)) {
+					return;
+				}
+				list.setSelectedIndex(index);
+				final OccurrenceItem item = (OccurrenceItem) value;
+				if (e.getClickCount() >= 2) {
+					checkInEntry(item.entry, item.occurrenceAt);
+				}
+				else if (e.getClickCount() == 1) {
+					openEntry(item.entry);
 				}
 			}
 		});
+	}
+
+	private void checkInEntry(final RecurringReminderEntry entry, final long occurrenceAt) {
+		if (checkInHandler != null && entry != null) {
+			checkInHandler.checkInEntry(entry, occurrenceAt);
+		}
 	}
 
 	private void openEntry(final RecurringReminderEntry entry) {

@@ -133,14 +133,31 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		table.getColumnModel().getColumn(3).setPreferredWidth(220);
 		table.getColumnModel().getColumn(4).setPreferredWidth(100);
 		table.addMouseListener(new MouseAdapter() {
+			private static final int COL_TIME = 1;
+
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
 					showContextMenu(e);
 					return;
 				}
-				if (e.getClickCount() >= 1) {
-					openSelectedReminder();
+				if (e.getButton() != MouseEvent.BUTTON1 || e.getClickCount() < 2) {
+					return;
+				}
+				final int row = table.rowAtPoint(e.getPoint());
+				if (row < 0 || row >= tableRowRecords.size()) {
+					return;
+				}
+				table.setRowSelectionInterval(row, row);
+				final int column = table.columnAtPoint(e.getPoint());
+				final RecurringReminderEntry record = (RecurringReminderEntry) tableRowRecords.get(row);
+				if (column == COL_TIME) {
+					if (RecurringReminderCheckInService.openCheckInForEntry(record, record.remindAt)) {
+						refreshInBackground();
+					}
+				}
+				else {
+					openReminderEntry(record);
 				}
 			}
 
@@ -183,6 +200,13 @@ public class EnhancedAllRecurringRemindersTabPanel extends JPanel {
 		calendarPanel.setNavigationHandler(new RecurringReminderCalendarPanel.NavigationHandler() {
 			public void openEntry(final RecurringReminderEntry entry) {
 				openReminderEntry(entry);
+			}
+		});
+		calendarPanel.setCheckInHandler(new RecurringReminderCalendarPanel.CheckInHandler() {
+			public void checkInEntry(final RecurringReminderEntry entry, final long occurrenceAt) {
+				if (RecurringReminderCheckInService.openCheckInForEntry(entry, occurrenceAt)) {
+					refreshInBackground();
+				}
 			}
 		});
 		refreshInBackground();

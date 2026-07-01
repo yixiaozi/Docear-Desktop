@@ -40,6 +40,27 @@ final class ReminderCycleScheduler {
 		return computeNextAfter(remindAt, config, System.currentTimeMillis());
 	}
 
+	/**
+	 * Next occurrence after completing a check-in. Always advances at least one period from {@code remindAt};
+	 * if that is still in the past, advances to the next future occurrence (same as postpone).
+	 */
+	static long computeNextAfterCheckIn(final long remindAt, final ReminderCycleAttributes.CycleConfig config) {
+		if (config == null || !config.isRecurring()) {
+			return remindAt;
+		}
+		long next = advanceOnePeriod(remindAt, config);
+		if (next <= remindAt) {
+			return next;
+		}
+		if (next <= System.currentTimeMillis()) {
+			final long future = computeNextAfter(remindAt, config, System.currentTimeMillis());
+			if (future > remindAt) {
+				return future;
+			}
+		}
+		return next;
+	}
+
 	static List enumerateOccurrencesInRange(final long remindAt, final ReminderCycleAttributes.CycleConfig config,
 			final long rangeStartInclusive, final long rangeEndExclusive) {
 		final List result = new ArrayList();

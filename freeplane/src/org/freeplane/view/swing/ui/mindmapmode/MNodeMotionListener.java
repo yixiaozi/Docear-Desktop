@@ -45,6 +45,7 @@ import org.freeplane.features.nodelocation.LocationController;
 import org.freeplane.features.nodelocation.LocationModel;
 import org.freeplane.features.nodelocation.mindmapmode.MLocationController;
 import org.freeplane.features.text.mindmapmode.MTextController;
+import org.freeplane.view.swing.features.time.mindmapmode.RecurringReminderCheckInService;
 import org.freeplane.view.swing.map.MainView;
 import org.freeplane.view.swing.map.MapView;
 import org.freeplane.view.swing.map.MouseArea;
@@ -110,6 +111,15 @@ public class MNodeMotionListener extends DefaultNodeMouseMotionListener implemen
 
 	@Override
 	public void mouseClicked(final MouseEvent e) {
+		if (e.getButton() == MouseEvent.BUTTON1 && Compat.isPlainEvent(e)) {
+			final MainView mainView = (MainView) e.getComponent();
+			final NodeView nodeV = getNodeView(e);
+			if (nodeV != null && RecurringReminderCheckInService.handleReminderIconClick(mainView, e,
+					nodeV.getModel(), doubleClickTimer, Controller.getCurrentModeController())) {
+				e.consume();
+				return;
+			}
+		}
 		if (e.getButton() == MouseEvent.BUTTON1 && e.getClickCount() == 2
 				&& doubleClickTimer.getDelay() > 0) {
 			final MainView mainView = (MainView) e.getComponent();
