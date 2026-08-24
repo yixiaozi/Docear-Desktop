@@ -9,7 +9,7 @@ import org.freeplane.core.util.TextUtils;
  */
 final class QuickCommandCandidate {
 	enum Kind {
-		MAP, ICON_NODE, FILE, LAUNCH, COMMAND, HINT
+		MAP, ICON_NODE, FILE, LAUNCH, COMMAND, HINT, TODO
 	}
 
 	final Kind kind;
@@ -70,6 +70,12 @@ final class QuickCommandCandidate {
 		return new QuickCommandCandidate(Kind.HINT, label, detail, null, null, null, null, false, -1, 0L);
 	}
 
+	static QuickCommandCandidate todo(final String nodeText, final String mapName, final File mapFile,
+	        final String nodeId, final long modifiedAt) {
+		return new QuickCommandCandidate(Kind.TODO, nodeText, mapName == null ? "" : mapName, mapFile, nodeId, null,
+		        null, false, -1, modifiedAt);
+	}
+
 	String kindBadge() {
 		switch (kind) {
 			case MAP:
@@ -82,6 +88,8 @@ final class QuickCommandCandidate {
 				return TextUtils.getText("QuickCommand.kind.launch");
 			case COMMAND:
 				return TextUtils.getText("QuickCommand.kind.command");
+			case TODO:
+				return TextUtils.getText("QuickCommand.kind.task");
 			default:
 				return "";
 		}
