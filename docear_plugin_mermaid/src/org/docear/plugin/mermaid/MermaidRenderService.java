@@ -257,11 +257,7 @@ public final class MermaidRenderService {
 		}
 		catch (Throwable t) {
 			LogUtils.warn("Mermaid: render pump failed", t);
-			finishRequest(req.key, RichPreviewIcon.error("mermaid",
-					t.getMessage() != null ? t.getMessage() : "render failed"));
-			busy.set(false);
-			currentRequest = null;
-			schedulePump();
+			degradeToCliAndRetry(req, t.getMessage() != null ? t.getMessage() : "render failed");
 		}
 	}
 
@@ -326,11 +322,55 @@ public final class MermaidRenderService {
 		final Class<?> jsObjectClass = Class.forName("netscape.javascript.JSObject");
 		final Object window = webEngine.getClass().getMethod("executeScript", String.class).invoke(webEngine,
 				"window");
-		final Bridge bridge = new Bridge(req);
+		final MermaidJsBridge bridge = new MermaidJsBridge(req.source, req.zoom, req.gantt,
+				new MermaidJsBridge.Callback() {
+					@Override
+					public void onSuccess(final String source, final float zoom, final boolean gantt,
+							final int width, final int height) {
+						try {
+							final BufferedImage png = snapshotRaw(width, height, zoom, gantt);
+							completeCurrent(mermaidImage(source, png, zoom), png);
+						}
+						catch (Throwable t) {
+							LogUtils.warn("Mermaid: snapshot failed", t);
+							degradeToCliAndRetry(req, t.getMessage());
+						}
+					}
+
+					@Override
+					public void onError(final String source, final String message) {
+						degradeToCliAndRetry(req, message);
+					}
+				});
 		jsObjectClass.getMethod("setMember", String.class, Object.class).invoke(window, "javaBridge", bridge);
 		webEngine.getClass().getMethod("executeScript", String.class).invoke(webEngine,
 				"renderMermaid(String(javaBridge.getSource()))");
-		// Completion via Bridge.onSuccess / onError (FX thread) — do not wait here.
+	}
+
+	private void degradeToCliAndRetry(final RenderRequest req, final String reason) {
+		LogUtils.warn("Mermaid: JavaFX render failed"
+				+ (reason != null && reason.length() > 0 ? " — " + reason : "") + ", trying CLI/ink");
+		webView = null;
+		webEngine = null;
+		shellReady.set(false);
+		busy.set(false);
+		currentRequest = null;
+		if (MermaidCliRenderer.ensureAvailable()) {
+			backend = Backend.CLI;
+			unavailable = false;
+			queue.offer(req);
+			schedulePump();
+			return;
+		}
+		try {
+			final BufferedImage img = MermaidInkRenderer.render(req.source);
+			savePngCache(req.key, img, req.zoom);
+			finishRequest(req.key, mermaidImage(req.source, img, req.zoom));
+		}
+		catch (Throwable inkErr) {
+			finishRequest(req.key, RichPreviewIcon.error("mermaid",
+					reason != null && reason.length() > 0 ? reason : inkErr.getMessage()));
+		}
 	}
 
 	private BufferedImage snapshotRaw(final int contentW, final int contentH, final float zoom,
@@ -542,47 +582,4 @@ public final class MermaidRenderService {
 		}
 	}
 
-	/** Called from JavaScript inside the WebView. Methods must be public. */
-	public final class Bridge {
-		private final RenderRequest request;
-
-		Bridge(final RenderRequest request) {
-			this.request = request;
-		}
-
-		public String getSource() {
-			return request.source;
-		}
-
-		public void onSuccess(final Object w, final Object h) {
-			try {
-				final int width = toInt(w, 400);
-				final int height = toInt(h, 300);
-				final BufferedImage png = snapshotRaw(width, height, request.zoom, request.gantt);
-				completeCurrent(mermaidImage(request.source, png, request.zoom), png);
-			}
-			catch (Throwable t) {
-				LogUtils.warn("Mermaid: snapshot failed", t);
-				completeCurrent(RichPreviewIcon.error("mermaid", t.getMessage()), null);
-			}
-		}
-
-		public void onError(final Object message) {
-			completeCurrent(
-					RichPreviewIcon.error("mermaid", message != null ? String.valueOf(message) : "render error"),
-					null);
-		}
-
-		private int toInt(final Object o, final int fallback) {
-			if (o instanceof Number) {
-				return ((Number) o).intValue();
-			}
-			try {
-				return Integer.parseInt(String.valueOf(o));
-			}
-			catch (Exception e) {
-				return fallback;
-			}
-		}
-	}
 }

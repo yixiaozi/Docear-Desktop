@@ -31,7 +31,7 @@ final class ExcalidrawCliRenderer {
 		if (available != null) {
 			return available.booleanValue();
 		}
-		nodePath = findNode();
+		nodePath = NodeToolchainPaths.findNode();
 		if (nodePath == null) {
 			lastError = "node not found on PATH";
 			available = Boolean.FALSE;
@@ -149,7 +149,7 @@ final class ExcalidrawCliRenderer {
 		if (utils.isFile()) {
 			return;
 		}
-		final String npm = findNpm();
+		final String npm = NodeToolchainPaths.findNpm();
 		if (npm == null) {
 			throw new IllegalStateException("npm not found (needed once for Excalidraw export deps)");
 		}
@@ -216,59 +216,28 @@ final class ExcalidrawCliRenderer {
 		}
 	}
 
-	private static String findNode() {
-		final String[] extras = new String[] { "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin" };
-		for (int i = 0; i < extras.length; i++) {
-			final File f = new File(extras[i], "node");
-			if (f.isFile() && f.canExecute()) {
-				return f.getAbsolutePath();
-			}
-		}
-		final String pathEnv = System.getenv("PATH");
-		if (pathEnv == null) {
-			return null;
-		}
-		for (final String part : pathEnv.split(File.pathSeparator)) {
-			final File f = new File(part, "node");
-			if (f.isFile() && f.canExecute()) {
-				return f.getAbsolutePath();
-			}
-		}
-		return null;
-	}
-
-	private static String findNpm() {
-		final String[] extras = new String[] { "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin" };
-		for (int i = 0; i < extras.length; i++) {
-			final File f = new File(extras[i], "npm");
-			if (f.isFile() && f.canExecute()) {
-				return f.getAbsolutePath();
-			}
-		}
-		final String pathEnv = System.getenv("PATH");
-		if (pathEnv == null) {
-			return null;
-		}
-		for (final String part : pathEnv.split(File.pathSeparator)) {
-			final File f = new File(part, "npm");
-			if (f.isFile() && f.canExecute()) {
-				return f.getAbsolutePath();
-			}
-		}
-		return null;
-	}
-
 	private static String findChromeExecutable() {
 		final String env = System.getenv("PUPPETEER_EXECUTABLE_PATH");
 		if (env != null && new File(env).isFile()) {
 			return env;
 		}
-		final String[] candidates = isMac()
-				? new String[] {
-						"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-						"/Applications/Chromium.app/Contents/MacOS/Chromium"
-				}
-				: new String[] { "/usr/bin/google-chrome", "/usr/bin/chromium" };
+		final String[] candidates;
+		if (NodeToolchainPaths.isWindows()) {
+			candidates = new String[] {
+					"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+					"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+					"C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
+			};
+		}
+		else if (System.getProperty("os.name", "").toLowerCase().indexOf("mac") >= 0) {
+			candidates = new String[] {
+					"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+					"/Applications/Chromium.app/Contents/MacOS/Chromium"
+			};
+		}
+		else {
+			candidates = new String[] { "/usr/bin/google-chrome", "/usr/bin/chromium" };
+		}
 		for (int i = 0; i < candidates.length; i++) {
 			final File f = new File(candidates[i]);
 			if (f.isFile()) {

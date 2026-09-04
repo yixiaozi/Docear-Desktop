@@ -195,14 +195,17 @@ final class RichPreviewController {
 			point = SwingUtilities.convertPoint(e.getComponent(), point, mainView);
 		}
 		if (previewIcon(mainView) == null) {
+			forwardMapWheel(mainView, e);
 			return;
 		}
 		final Rectangle previewR = getPreviewR(mainView);
 		if (previewR == null || !previewR.contains(point)) {
+			forwardMapWheel(mainView, e);
 			return;
 		}
 		final NodeView nodeView = mainView.getNodeView();
 		if (nodeView == null) {
+			forwardMapWheel(mainView, e);
 			return;
 		}
 		final float current = RichPreviewScale.get(nodeView.getModel());
@@ -214,6 +217,29 @@ final class RichPreviewController {
 		}
 		RichPreviewScale.setInterim(nodeView.getModel(), next);
 		e.consume();
+	}
+
+	/** MainView receives wheel events before MapView; forward when not zooming a rich preview. */
+	private static void forwardMapWheel(final Component source, final MouseWheelEvent e) {
+		MapView mapView = null;
+		for (Component c = source; c != null; c = c.getParent()) {
+			if (c instanceof MapView) {
+				mapView = (MapView) c;
+				break;
+			}
+		}
+		if (mapView == null) {
+			return;
+		}
+		final Point p = SwingUtilities.convertPoint(source, e.getPoint(), mapView);
+		final MouseWheelEvent mapEvent = new MouseWheelEvent(mapView, e.getID(), e.getWhen(), e.getModifiers(),
+		        p.x, p.y, e.getClickCount(), e.isPopupTrigger(), e.getScrollType(), e.getScrollAmount(),
+		        e.getWheelRotation());
+		final MouseWheelListener listener = mapView.getModeController().getUserInputListenerFactory()
+		        .getMapMouseWheelListener();
+		if (listener != null) {
+			listener.mouseWheelMoved(mapEvent);
+		}
 	}
 
 	private static ZoomableRichIcon previewIcon(final MainView mainView) {

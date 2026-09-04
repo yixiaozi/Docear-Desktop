@@ -33,7 +33,7 @@ final class MermaidCliRenderer {
 		if (available != null) {
 			return available.booleanValue();
 		}
-		npxPath = findNpx();
+		npxPath = NodeToolchainPaths.findNpx();
 		if (npxPath == null) {
 			lastError = "npx not found on PATH";
 			available = Boolean.FALSE;
@@ -164,35 +164,6 @@ final class MermaidCliRenderer {
 
 	private static String jsonString(final String s) {
 		return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
-	}
-
-	private static String findNpx() {
-		final String pathEnv = System.getenv("PATH");
-		final String[] extras = new String[] {
-				"/usr/local/bin",
-				"/opt/homebrew/bin",
-				"/usr/bin",
-				System.getProperty("user.home", "") + "/.nvm/current/bin"
-		};
-		final List<String> dirs = new ArrayList<String>();
-		if (pathEnv != null) {
-			for (final String part : pathEnv.split(File.pathSeparator)) {
-				if (part != null && part.length() > 0) {
-					dirs.add(part);
-				}
-			}
-		}
-		for (int i = 0; i < extras.length; i++) {
-			dirs.add(extras[i]);
-		}
-		final String exe = isWindows() ? "npx.cmd" : "npx";
-		for (final String dir : dirs) {
-			final File f = new File(dir, exe);
-			if (f.isFile() && f.canExecute()) {
-				return f.getAbsolutePath();
-			}
-		}
-		return null;
 	}
 
 	private static String findChromeExecutable() {
