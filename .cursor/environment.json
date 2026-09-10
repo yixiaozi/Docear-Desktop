@@ -1,0 +1,4 @@
+{
+  "name": "Twigmark / Docear-Desktop",
+  "install": "bash .cursor/install.sh"
+}
