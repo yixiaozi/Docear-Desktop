@@ -38,6 +38,7 @@ final class PomodoroBackfillDialog extends JDialog {
 	private final NodeModel node;
 	private final DateTimeFieldsPanel startEditor;
 	private final DateTimeFieldsPanel endEditor;
+	private final javax.swing.JTextArea noteEditor;
 	private final JLabel previewLabel;
 
 	static void showForNode(final NodeModel node) {
@@ -80,6 +81,12 @@ final class PomodoroBackfillDialog extends JDialog {
 		form.add(labeledRow(TextUtils.getText("BackfillPomodoroAction.startLabel"), startEditor));
 		form.add(javax.swing.Box.createVerticalStrut(8));
 		form.add(labeledRow(TextUtils.getText("BackfillPomodoroAction.endLabel"), endEditor));
+		form.add(javax.swing.Box.createVerticalStrut(8));
+
+		noteEditor = new javax.swing.JTextArea(3, 24);
+		noteEditor.setLineWrap(true);
+		noteEditor.setWrapStyleWord(true);
+		form.add(labeledRow(TextUtils.getText("BackfillPomodoroAction.noteLabel"), new javax.swing.JScrollPane(noteEditor)));
 		form.add(javax.swing.Box.createVerticalStrut(8));
 
 		previewLabel = new JLabel();
@@ -157,7 +164,7 @@ final class PomodoroBackfillDialog extends JDialog {
 		}
 		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 		if (manager != null) {
-			manager.backfillSession(node, startMs, endMs);
+			manager.backfillSession(node, startMs, endMs, noteEditor.getText());
 		}
 		dispose();
 	}

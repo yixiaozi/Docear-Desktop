@@ -42,6 +42,7 @@ final class PomodoroSessionEditDialog extends JDialog {
 	private final DateTimeFieldsPanel startEditor;
 	private final DateTimeFieldsPanel endEditor;
 	private final JSpinner focusSpinner;
+	private final javax.swing.JTextArea noteEditor;
 	private final JLabel previewLabel;
 	private boolean applied;
 
@@ -81,6 +82,12 @@ final class PomodoroSessionEditDialog extends JDialog {
 		form.add(labeledRow(TextUtils.getText("pomodoro.session_edit.end"), endEditor));
 		form.add(javax.swing.Box.createVerticalStrut(8));
 		form.add(labeledRow(TextUtils.getText("pomodoro.session_edit.focus_min"), focusSpinner));
+		form.add(javax.swing.Box.createVerticalStrut(8));
+		noteEditor = new javax.swing.JTextArea(record.note, 3, 24);
+		noteEditor.setLineWrap(true);
+		noteEditor.setWrapStyleWord(true);
+		final javax.swing.JScrollPane noteScroll = new javax.swing.JScrollPane(noteEditor);
+		form.add(labeledRow(TextUtils.getText("pomodoro.session_edit.note"), noteScroll));
 		form.add(javax.swing.Box.createVerticalStrut(8));
 		previewLabel = new JLabel();
 		previewLabel.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
@@ -179,7 +186,7 @@ final class PomodoroSessionEditDialog extends JDialog {
 		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 		if (manager != null) {
 			manager.updateLogRecord(node, logIndex,
-			        new PomodoroSessionRecord(startMs, endMs, focusMs, originalPauses));
+			        new PomodoroSessionRecord(startMs, endMs, focusMs, originalPauses, noteEditor.getText()));
 		}
 		applied = true;
 		dispose();

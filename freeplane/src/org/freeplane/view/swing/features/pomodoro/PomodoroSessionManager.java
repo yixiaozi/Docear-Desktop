@@ -205,13 +205,19 @@ public final class PomodoroSessionManager {
 
 	/** Append a completed session for a wall-clock range (timer was not running). */
 	public void backfillSession(final NodeModel node, final long startMs, final long endMs) {
+		backfillSession(node, startMs, endMs, null);
+	}
+
+	/** Append a completed session for a wall-clock range, with an optional note. */
+	public void backfillSession(final NodeModel node, final long startMs, final long endMs, final String note) {
 		if (node == null || startMs <= 0 || endMs <= startMs) {
 			return;
 		}
 		final long focusMs = endMs - startMs;
 		final PomodoroExtension next = extensionCopy(node);
 		next.setEnabled(true);
-		final PomodoroSessionRecord record = new PomodoroSessionRecord(startMs, endMs, focusMs);
+		final PomodoroSessionRecord record = new PomodoroSessionRecord(startMs, endMs, focusMs,
+		        java.util.Collections.EMPTY_LIST, note);
 		next.setLog(PomodoroLog.append(next.getLog(), record));
 		next.setTotalMs(next.getTotalMs() + focusMs);
 		PomodoroAttributes.write(node, next);

@@ -17,17 +17,37 @@ public final class PomodoroSessionRecord {
 	public final long focusMs;
 	/** Completed pause intervals inside this session; never null. */
 	public final List pauseIntervals;
+	/** Free-text remark for this session (feelings / misc notes); never null. */
+	public final String note;
 
 	public PomodoroSessionRecord(final long startMs, final long endMs, final long focusMs) {
-		this(startMs, endMs, focusMs, Collections.EMPTY_LIST);
+		this(startMs, endMs, focusMs, Collections.EMPTY_LIST, null);
 	}
 
 	public PomodoroSessionRecord(final long startMs, final long endMs, final long focusMs,
 			final List pauseIntervals) {
+		this(startMs, endMs, focusMs, pauseIntervals, null);
+	}
+
+	public PomodoroSessionRecord(final long startMs, final long endMs, final long focusMs,
+			final List pauseIntervals, final String note) {
 		this.startMs = startMs;
 		this.endMs = endMs;
 		this.focusMs = Math.max(0L, focusMs);
 		this.pauseIntervals = PomodoroPauseInterval.copyOf(pauseIntervals);
+		this.note = normalizeNote(note);
+	}
+
+	public boolean hasNote() {
+		return note.length() > 0;
+	}
+
+	/** Trim and drop control chars; keep inner spacing. Never returns null. */
+	static String normalizeNote(final String raw) {
+		if (raw == null) {
+			return "";
+		}
+		return raw.trim();
 	}
 
 	public long pauseMs() {
@@ -38,13 +58,21 @@ public final class PomodoroSessionRecord {
 		return Math.max(0L, span - focusMs);
 	}
 
-	/** Compact wire format: start-end:focus or start-end:focus@p1s-p1e,p2s-p2e */
+	/**
+	 * Compact wire format: {@code start-end:focus} then optional
+	 * {@code @p1s-p1e,p2s-p2e} pauses and optional {@code #urlEncodedNote}.
+	 * The note is URL-encoded so it can safely hold {@code ; - : @ , #} and newlines.
+	 */
 	String encode() {
-		final String base = startMs + "-" + endMs + ":" + focusMs;
-		if (pauseIntervals.isEmpty()) {
-			return base;
+		final StringBuilder sb = new StringBuilder();
+		sb.append(startMs).append('-').append(endMs).append(':').append(focusMs);
+		if (!pauseIntervals.isEmpty()) {
+			sb.append('@').append(PomodoroPauseInterval.encodeList(pauseIntervals));
 		}
-		return base + "@" + PomodoroPauseInterval.encodeList(pauseIntervals);
+		if (note.length() > 0) {
+			sb.append('#').append(encodeNote(note));
+		}
+		return sb.toString();
 	}
 
 	static PomodoroSessionRecord decode(final String token) {
@@ -52,9 +80,13 @@ public final class PomodoroSessionRecord {
 			return null;
 		}
 		try {
-			final int at = token.indexOf('@');
-			final String head = at >= 0 ? token.substring(0, at) : token;
-			final String pauseRaw = at >= 0 ? token.substring(at + 1) : "";
+			// Note is always the last field, split it off first.
+			final int hash = token.indexOf('#');
+			final String noteRaw = hash >= 0 ? decodeNote(token.substring(hash + 1)) : "";
+			final String body = hash >= 0 ? token.substring(0, hash) : token;
+			final int at = body.indexOf('@');
+			final String head = at >= 0 ? body.substring(0, at) : body;
+			final String pauseRaw = at >= 0 ? body.substring(at + 1) : "";
 			final int dash = head.indexOf('-');
 			final int colon = head.indexOf(':');
 			if (dash <= 0 || colon <= dash) {
@@ -66,10 +98,31 @@ public final class PomodoroSessionRecord {
 			if (start <= 0 || end < start || focus < 0) {
 				return null;
 			}
-			return new PomodoroSessionRecord(start, end, focus, PomodoroPauseInterval.decodeList(pauseRaw));
+			return new PomodoroSessionRecord(start, end, focus, PomodoroPauseInterval.decodeList(pauseRaw), noteRaw);
 		}
 		catch (NumberFormatException e) {
 			return null;
+		}
+	}
+
+	private static String encodeNote(final String raw) {
+		try {
+			return java.net.URLEncoder.encode(raw, "UTF-8");
+		}
+		catch (java.io.UnsupportedEncodingException e) {
+			return "";
+		}
+	}
+
+	private static String decodeNote(final String raw) {
+		if (raw == null || raw.length() == 0) {
+			return "";
+		}
+		try {
+			return java.net.URLDecoder.decode(raw, "UTF-8");
+		}
+		catch (Exception e) {
+			return "";
 		}
 	}
 
@@ -88,6 +141,10 @@ public final class PomodoroSessionRecord {
 				sb.append(' ').append(ranges);
 			}
 			sb.append('（').append(PomodoroFormatter.formatDuration(pause)).append('）');
+		}
+		if (note.length() > 0) {
+			// Notes are single-lined here so the history preview stays one row per session.
+			sb.append("  📝 ").append(note.replace('\n', ' ').replace('\r', ' '));
 		}
 		return sb.toString();
 	}
